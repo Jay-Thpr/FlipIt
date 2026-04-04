@@ -16,7 +16,7 @@ This scaffold gives the team a stable local contract before Browser Use, Gemini,
 ## Current Behavior
 
 - Sessions are stored in memory only.
-- Pipelines run in the background; `vision_agent`, `ebay_sold_comps_agent`, and `pricing_agent` now run deterministic `SELL` pipeline logic, while the remaining agents still return scaffold outputs.
+- Pipelines run in the background; `vision_agent`, `ebay_sold_comps_agent`, `pricing_agent`, and `depop_listing_agent` now run deterministic `SELL` pipeline logic, while the `BUY` agents still return scaffold outputs.
 - Each agent input is validated against a step-specific schema before the orchestrator calls that step.
 - Each agent output is validated against a step-specific schema before it is emitted to SSE or saved in `/result`.
 - `AGENT_EXECUTION_MODE=local_functions` keeps the app runnable without launching separate agent processes.
@@ -25,6 +25,6 @@ This scaffold gives the team a stable local contract before Browser Use, Gemini,
 
 ## Next Backend Tasks
 
-- Replace the remaining stub agent logic with real Browser Use and Gemini logic, starting with `depop_listing_agent`.
+- Replace the remaining stub agent logic with real Browser Use and Gemini logic, starting with the `BUY` search agents.
 - Add actual Fetch.ai uAgent and Chat Protocol registration.
 - Add richer result schemas and retry/error policies.

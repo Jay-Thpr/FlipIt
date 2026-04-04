@@ -103,6 +103,27 @@ def test_sell_pipeline_emits_expected_event_order_and_result(client: TestClient)
     assert result["result"]["outputs"]["depop_listing"]["category_path"] == "Men/Tops/T-Shirts"
 
 
+def test_sell_pipeline_generates_real_listing_outputs(client: TestClient) -> None:
+    _, _, result = start_and_collect_events(
+        client,
+        "/sell/start",
+        {
+            "user_id": "sell-user",
+            "input": {
+                "image_urls": ["https://images.example.com/patagonia-hoodie-excellent.jpg"],
+                "notes": "Patagonia hoodie in excellent condition",
+            },
+            "metadata": {"source": "sell-listing-output-test"},
+        },
+    )
+
+    depop_listing = result["result"]["outputs"]["depop_listing"]
+    assert depop_listing["title"] == "Patagonia hoodie - Excellent Condition"
+    assert depop_listing["suggested_price"] == 78.43
+    assert depop_listing["category_path"] == "Men/Tops/Hoodies"
+    assert "Recent eBay sold range: $55.11-$86.21 across 11 comps." in depop_listing["description"]
+
+
 def test_buy_pipeline_emits_expected_event_order_and_result(client: TestClient) -> None:
     session_id, events, result = start_and_collect_events(
         client,
