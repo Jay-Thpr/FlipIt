@@ -23,9 +23,9 @@ export interface Conversation {
 
 export interface MarketData {
   platform: Platform;
-  price: number;
+  bestBuyPrice: number;
+  bestSellPrice: number;
   volume: number;
-  trend: number;
 }
 
 export interface Item {
@@ -44,10 +44,18 @@ export interface Item {
   quantity: number;
   negotiationStyle: NegotiationStyle;
   replyTone: ReplyTone;
-  autoRelist: boolean;
+  bestOffer?: number;
   marketData: MarketData[];
   conversations: Conversation[];
 }
+
+export const PLATFORM_NAMES: Record<Platform, string> = {
+  ebay: 'eBay',
+  depop: 'Depop',
+  mercari: 'Mercari',
+  offerup: 'OfferUp',
+  facebook: 'Facebook',
+};
 
 export const mockItems: Item[] = [
   {
@@ -66,11 +74,11 @@ export const mockItems: Item[] = [
     quantity: 1,
     negotiationStyle: 'moderate',
     replyTone: 'professional',
-    autoRelist: true,
+    bestOffer: 295,
     marketData: [
-      { platform: 'depop', price: 315, volume: 42, trend: 3.2 },
-      { platform: 'ebay', price: 332, volume: 128, trend: 1.8 },
-      { platform: 'mercari', price: 298, volume: 67, trend: -0.5 },
+      { platform: 'depop', bestBuyPrice: 299, bestSellPrice: 315, volume: 42 },
+      { platform: 'ebay', bestBuyPrice: 310, bestSellPrice: 332, volume: 128 },
+      { platform: 'mercari', bestBuyPrice: 285, bestSellPrice: 298, volume: 67 },
     ],
     conversations: [
       {
@@ -118,11 +126,10 @@ export const mockItems: Item[] = [
     quantity: 1,
     negotiationStyle: 'passive',
     replyTone: 'casual',
-    autoRelist: false,
     marketData: [
-      { platform: 'depop', price: 185, volume: 23, trend: -1.2 },
-      { platform: 'facebook', price: 172, volume: 15, trend: -3.0 },
-      { platform: 'mercari', price: 195, volume: 41, trend: 2.1 },
+      { platform: 'depop', bestBuyPrice: 170, bestSellPrice: 185, volume: 23 },
+      { platform: 'facebook', bestBuyPrice: 160, bestSellPrice: 172, volume: 15 },
+      { platform: 'mercari', bestBuyPrice: 180, bestSellPrice: 195, volume: 41 },
     ],
     conversations: [
       {
@@ -154,10 +161,9 @@ export const mockItems: Item[] = [
     quantity: 1,
     negotiationStyle: 'moderate',
     replyTone: 'casual',
-    autoRelist: false,
     marketData: [
-      { platform: 'depop', price: 142, volume: 19, trend: 5.5 },
-      { platform: 'ebay', price: 158, volume: 34, trend: 4.1 },
+      { platform: 'depop', bestBuyPrice: 130, bestSellPrice: 142, volume: 19 },
+      { platform: 'ebay', bestBuyPrice: 145, bestSellPrice: 158, volume: 34 },
     ],
     conversations: [],
   },
@@ -177,12 +183,12 @@ export const mockItems: Item[] = [
     quantity: 1,
     negotiationStyle: 'aggressive',
     replyTone: 'professional',
-    autoRelist: false,
+    bestOffer: 95,
     marketData: [
-      { platform: 'ebay', price: 98, volume: 87, trend: 2.3 },
-      { platform: 'depop', price: 110, volume: 31, trend: 6.1 },
-      { platform: 'mercari', price: 89, volume: 44, trend: -1.8 },
-      { platform: 'offerup', price: 75, volume: 12, trend: -2.4 },
+      { platform: 'ebay', bestBuyPrice: 85, bestSellPrice: 98, volume: 87 },
+      { platform: 'depop', bestBuyPrice: 95, bestSellPrice: 110, volume: 31 },
+      { platform: 'mercari', bestBuyPrice: 80, bestSellPrice: 89, volume: 44 },
+      { platform: 'offerup', bestBuyPrice: 65, bestSellPrice: 75, volume: 12 },
     ],
     conversations: [
       {
@@ -229,11 +235,10 @@ export const mockItems: Item[] = [
     quantity: 1,
     negotiationStyle: 'moderate',
     replyTone: 'professional',
-    autoRelist: false,
     marketData: [
-      { platform: 'depop', price: 410, volume: 8, trend: -2.1 },
-      { platform: 'ebay', price: 425, volume: 22, trend: -0.8 },
-      { platform: 'mercari', price: 395, volume: 11, trend: -3.2 },
+      { platform: 'depop', bestBuyPrice: 390, bestSellPrice: 410, volume: 8 },
+      { platform: 'ebay', bestBuyPrice: 405, bestSellPrice: 425, volume: 22 },
+      { platform: 'mercari', bestBuyPrice: 375, bestSellPrice: 395, volume: 11 },
     ],
     conversations: [
       {

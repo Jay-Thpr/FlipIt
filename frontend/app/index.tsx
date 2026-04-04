@@ -1,37 +1,46 @@
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
+import React, { useState } from 'react';
+import {
+  View, Text, ScrollView, StyleSheet, TouchableOpacity,
+  Dimensions, Modal, Pressable,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { Settings } from 'lucide-react-native';
+import { Settings, User, LogOut } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { mockItems, Item } from '../data/mockData';
 import ItemCard from '../components/ItemCard';
 import AddNewCard from '../components/AddNewCard';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-// Show ~2.3 cards so it's obvious the row is scrollable
 const CARD_WIDTH = Math.round(SCREEN_WIDTH * 0.44);
+const AGENT_LIMIT = 10;
 
 export default function HomeScreen() {
   const { colors } = useTheme();
+  const [profileMenuVisible, setProfileMenuVisible] = useState(false);
   const sellItems = mockItems.filter(i => i.type === 'sell');
   const buyItems = mockItems.filter(i => i.type === 'buy');
+  const activeCount = mockItems.filter(i => i.status === 'active').length;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <View>
+        <View style={styles.headerLeft}>
           <Text style={[styles.appName, { color: colors.primary }]}>AgentMarket</Text>
-          <Text style={[styles.subtitle, { color: colors.textMuted }]}>
-            Autonomous resale agents
-          </Text>
+          <View style={[styles.agentCounter, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.agentCounterText, { color: colors.textSecondary }]}>
+              {activeCount} / {AGENT_LIMIT} Agents in Use
+            </Text>
+          </View>
         </View>
         <TouchableOpacity
-          style={[styles.settingsBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
-          onPress={() => router.push('/settings')}
+          style={[styles.avatarBtn, { backgroundColor: colors.primary }]}
+          onPress={() => setProfileMenuVisible(true)}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          accessibilityLabel="Open profile menu"
         >
-          <Settings size={18} color={colors.textSecondary} />
+          <Text style={styles.avatarInitials}>SS</Text>
         </TouchableOpacity>
       </View>
 
@@ -43,6 +52,46 @@ export default function HomeScreen() {
         <CarouselSection title="Selling" items={sellItems} />
         <CarouselSection title="Buying" items={buyItems} />
       </ScrollView>
+
+      {/* Profile Menu Modal */}
+      <Modal
+        visible={profileMenuVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setProfileMenuVisible(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setProfileMenuVisible(false)}>
+          <View style={[styles.profileMenu, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={[styles.profileMenuHeader, { borderBottomColor: colors.border }]}>
+              <View style={[styles.profileMenuAvatar, { backgroundColor: colors.primary }]}>
+                <Text style={styles.profileMenuAvatarText}>SS</Text>
+              </View>
+              <View>
+                <Text style={[styles.profileMenuName, { color: colors.textPrimary }]}>Sam S.</Text>
+                <Text style={[styles.profileMenuEmail, { color: colors.textMuted }]}>sam@example.com</Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={styles.profileMenuItem}
+              onPress={() => {
+                setProfileMenuVisible(false);
+                router.push('/settings');
+              }}
+            >
+              <Settings size={16} color={colors.textSecondary} />
+              <Text style={[styles.profileMenuItemText, { color: colors.textPrimary }]}>Settings</Text>
+            </TouchableOpacity>
+            <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
+            <TouchableOpacity
+              style={styles.profileMenuItem}
+              onPress={() => setProfileMenuVisible(false)}
+            >
+              <LogOut size={16} color={colors.destructive} />
+              <Text style={[styles.profileMenuItemText, { color: colors.destructive }]}>Sign Out</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -58,7 +107,6 @@ function CarouselSection({ title, items }: { title: string; items: Item[] }) {
         <View style={styles.sectionLeft}>
           <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>{title}</Text>
           <View style={[styles.countPill, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <View style={[styles.activeDot, { backgroundColor: colors.accent }]} />
             <Text style={[styles.countText, { color: colors.textSecondary }]}>
               {activeCount} active
             </Text>
@@ -86,8 +134,12 @@ function CarouselSection({ title, items }: { title: string; items: Item[] }) {
             onPress={() => router.push(`/item/${item.id}`)}
           />
         ))}
-        <AddNewCard cardWidth={CARD_WIDTH} onPress={() => {}} />
       </ScrollView>
+
+      {/* Add new agent — always visible below carousel */}
+      <View style={styles.addNewRow}>
+        <AddNewCard cardWidth={SCREEN_WIDTH - 40} onPress={() => {}} />
+      </View>
     </View>
   );
 }
@@ -104,22 +156,36 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
     borderBottomWidth: 1,
   },
+  headerLeft: {
+    gap: 6,
+  },
   appName: {
     fontSize: 24,
     fontWeight: '800',
     letterSpacing: -0.5,
   },
-  subtitle: {
-    fontSize: 12,
-    marginTop: 1,
+  agentCounter: {
+    alignSelf: 'flex-start',
+    borderRadius: 20,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
   },
-  settingsBtn: {
+  agentCounterText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  avatarBtn: {
     width: 40,
     height: 40,
-    borderRadius: 12,
-    borderWidth: 1,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  avatarInitials: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 
   scroll: { flex: 1 },
@@ -147,18 +213,10 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
   },
   countPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
     borderRadius: 20,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderWidth: 1,
-  },
-  activeDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 3,
   },
   countText: {
     fontSize: 11,
@@ -172,5 +230,68 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     gap: 10,
     paddingBottom: 4,
+  },
+
+  addNewRow: {
+    paddingHorizontal: 20,
+    marginTop: 10,
+  },
+
+  // Profile menu modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-start',
+    alignItems: 'flex-end',
+    paddingTop: 80,
+    paddingRight: 16,
+  },
+  profileMenu: {
+    width: 220,
+    borderRadius: 14,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  profileMenuHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 14,
+    borderBottomWidth: 1,
+  },
+  profileMenuAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileMenuAvatarText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  profileMenuName: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  profileMenuEmail: {
+    fontSize: 12,
+    marginTop: 1,
+  },
+  profileMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  profileMenuItemText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  menuDivider: {
+    height: 1,
+    marginHorizontal: 14,
   },
 });

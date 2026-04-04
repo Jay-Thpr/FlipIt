@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   Sun, Moon, Smartphone, User, Mail, Camera,
   Bell, BellOff, Activity, Zap, MessageSquare, Tag, Clock,
-  ChevronRight, Check, Wifi, WifiOff,
+  ChevronRight, Check,
 } from 'lucide-react-native';
 import { useTheme, ThemePreference } from '../contexts/ThemeContext';
 
@@ -22,19 +22,18 @@ interface PlatformEntry {
   darkBg: string;
   connected: boolean;
   username?: string;
-  apiStatus?: 'valid' | 'expired' | 'missing';
 }
 
 const PLATFORMS: PlatformEntry[] = [
   {
     id: 'ebay', name: 'eBay', shortLabel: 'eB',
     color: '#E53935', bg: '#FEE2E2', darkColor: '#FC8181', darkBg: '#3D0F0F',
-    connected: true, username: '@reseller_sam', apiStatus: 'valid',
+    connected: true, username: '@reseller_sam',
   },
   {
     id: 'depop', name: 'Depop', shortLabel: 'Dp',
     color: '#D1156B', bg: '#FCE7F3', darkColor: '#F472B6', darkBg: '#3D0A24',
-    connected: true, username: '@sam.flips', apiStatus: 'valid',
+    connected: true, username: '@sam.flips',
   },
   {
     id: 'mercari', name: 'Mercari', shortLabel: 'Mc',
@@ -49,7 +48,7 @@ const PLATFORMS: PlatformEntry[] = [
   {
     id: 'facebook', name: 'Facebook Marketplace', shortLabel: 'Fb',
     color: '#1877F2', bg: '#EFF6FF', darkColor: '#60A5FA', darkBg: '#0F1E3D',
-    connected: true, username: '@sam.s', apiStatus: 'expired',
+    connected: true, username: '@sam.s',
   },
 ];
 
@@ -83,9 +82,8 @@ export default function SettingsScreen() {
       prev.map(p => (p.id === id ? { ...p, connected: !p.connected } : p))
     );
 
-  const activeConnected = isDark
-    ? { bg: '#052E16', text: '#4ADE80', border: '#14532D' }
-    : { bg: '#DCFCE7', text: '#15803D', border: '#BBF7D0' };
+  const connectedGreen = isDark ? '#4ADE80' : '#15803D';
+  const connectedBg = isDark ? '#052E16' : '#DCFCE7';
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['bottom']}>
@@ -162,18 +160,23 @@ export default function SettingsScreen() {
         </SectionCard>
 
         {/* ── Platforms ──────────────────────────────────────────────────────── */}
-        <SectionHeader title="Connected Platforms" />
+        <SectionHeader title="Platforms" />
         <SectionCard>
           {platforms.map((p, idx) => (
             <React.Fragment key={p.id}>
               {idx > 0 && <Divider />}
-              <PlatformRow platform={p} onToggle={() => togglePlatform(p.id)} />
+              <PlatformRow
+                platform={p}
+                onToggle={() => togglePlatform(p.id)}
+                connectedGreen={connectedGreen}
+                connectedBg={connectedBg}
+              />
             </React.Fragment>
           ))}
         </SectionCard>
 
-        {/* ── Agent Behavior ─────────────────────────────────────────────────── */}
-        <SectionHeader title="Agent Behavior" subtitle="Global defaults — overrideable per item" />
+        {/* ── Default Agent Behavior ─────────────────────────────────────────── */}
+        <SectionHeader title="Default Agent Behavior" />
         <SectionCard>
           <SettingToggleRow
             icon={<MessageSquare size={15} color={colors.primary} />}
@@ -189,8 +192,9 @@ export default function SettingsScreen() {
             onPress={() => {}}
           />
           <Divider />
-          <View style={styles.settingRow}>
-            <View style={styles.settingLeft}>
+          {/* Negotiation Style — stacked to prevent overflow */}
+          <View style={styles.negotiationSection}>
+            <View style={styles.negotiationLabelRow}>
               <View style={[styles.iconWrap, { backgroundColor: colors.muted }]}>
                 <Zap size={15} color={colors.primary} />
               </View>
@@ -260,20 +264,19 @@ export default function SettingsScreen() {
 
         {/* ── Usage ──────────────────────────────────────────────────────────── */}
         <SectionHeader title="Usage" />
-        <View style={styles.usageGrid}>
-          {USAGE_STATS.map(stat => (
-            <View
-              key={stat.label}
-              style={[
-                styles.usageTile,
-                { backgroundColor: colors.surface, borderColor: colors.border },
-              ]}
-            >
-              <Text style={[styles.usageValue, { color: colors.primary }]}>{stat.value}</Text>
-              <Text style={[styles.usageLabel, { color: colors.textMuted }]}>{stat.label}</Text>
-            </View>
-          ))}
-        </View>
+        <SectionCard>
+          <View style={styles.usageGrid}>
+            {USAGE_STATS.map(stat => (
+              <View
+                key={stat.label}
+                style={[styles.usageTile, { borderRightColor: colors.border, borderBottomColor: colors.border }]}
+              >
+                <Text style={[styles.usageValue, { color: colors.primary }]}>{stat.value}</Text>
+                <Text style={[styles.usageLabel, { color: colors.textMuted }]}>{stat.label}</Text>
+              </View>
+            ))}
+          </View>
+        </SectionCard>
 
         <View style={{ height: 32 }} />
       </ScrollView>
@@ -283,14 +286,11 @@ export default function SettingsScreen() {
 
 // ─── Reusable sub-components ──────────────────────────────────────────────────
 
-function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
+function SectionHeader({ title }: { title: string }) {
   const { colors } = useTheme();
   return (
     <View style={styles.sectionHeader}>
       <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>{title}</Text>
-      {subtitle && (
-        <Text style={[styles.sectionSubtitle, { color: colors.textMuted }]}>{subtitle}</Text>
-      )}
     </View>
   );
 }
@@ -363,16 +363,16 @@ function SettingToggleRow({
 }
 
 function PlatformRow({
-  platform, onToggle,
+  platform, onToggle, connectedGreen, connectedBg,
 }: {
   platform: PlatformEntry;
   onToggle: () => void;
+  connectedGreen: string;
+  connectedBg: string;
 }) {
   const { colors, isDark } = useTheme();
   const iconColor = isDark ? platform.darkColor : platform.color;
   const iconBg = isDark ? platform.darkBg : platform.bg;
-  const connectedGreen = isDark ? '#4ADE80' : '#15803D';
-  const connectedBg = isDark ? '#052E16' : '#DCFCE7';
 
   return (
     <View style={styles.platformRow}>
@@ -384,22 +384,9 @@ function PlatformRow({
       <View style={styles.platformInfo}>
         <Text style={[styles.platformName, { color: colors.textPrimary }]}>{platform.name}</Text>
         {platform.connected && platform.username ? (
-          <View style={styles.platformMeta}>
-            <Text style={[styles.platformUsername, { color: colors.textMuted }]}>
-              {platform.username}
-            </Text>
-            {platform.apiStatus && (
-              <View
-                style={[
-                  styles.apiDot,
-                  {
-                    backgroundColor:
-                      platform.apiStatus === 'valid' ? colors.accent : colors.destructive,
-                  },
-                ]}
-              />
-            )}
-          </View>
+          <Text style={[styles.platformUsername, { color: colors.textMuted }]}>
+            {platform.username}
+          </Text>
         ) : (
           <Text style={[styles.platformNotConnected, { color: colors.textMuted }]}>
             Not connected
@@ -409,7 +396,6 @@ function PlatformRow({
       <View style={styles.platformRight}>
         {platform.connected ? (
           <View style={[styles.connectedBadge, { backgroundColor: connectedBg }]}>
-            <Wifi size={10} color={connectedGreen} />
             <Text style={[styles.connectedText, { color: connectedGreen }]}>Connected</Text>
           </View>
         ) : (
@@ -419,7 +405,6 @@ function PlatformRow({
               { backgroundColor: colors.muted, borderColor: colors.border },
             ]}
           >
-            <WifiOff size={10} color={colors.textMuted} />
             <Text style={[styles.disconnectedText, { color: colors.textMuted }]}>Connect</Text>
           </View>
         )}
@@ -441,7 +426,6 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.8,
   },
-  sectionSubtitle: { fontSize: 11, marginTop: 2 },
 
   card: {
     borderRadius: 14,
@@ -483,6 +467,17 @@ const styles = StyleSheet.create({
   settingLabel: { fontSize: 15, fontWeight: '500' },
   settingValue: { fontSize: 14 },
 
+  // Negotiation Style — stacked layout to prevent overflow
+  negotiationSection: {
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    gap: 10,
+  },
+  negotiationLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
   segmented: {
     flexDirection: 'row',
     borderRadius: 8,
@@ -490,12 +485,13 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   segmentBtn: {
-    paddingHorizontal: 8,
-    paddingVertical: 5,
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 7,
     borderRadius: 6,
   },
   segmentBtnActive: {},
-  segmentText: { fontSize: 11, fontWeight: '500' },
+  segmentText: { fontSize: 12, fontWeight: '500' },
   segmentTextActive: { fontWeight: '700' },
 
   platformRow: {
@@ -515,24 +511,16 @@ const styles = StyleSheet.create({
   platformIconText: { fontSize: 11, fontWeight: '800' },
   platformInfo: { flex: 1, gap: 2 },
   platformName: { fontSize: 15, fontWeight: '600' },
-  platformMeta: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   platformUsername: { fontSize: 12 },
-  apiDot: { width: 6, height: 6, borderRadius: 3 },
   platformNotConnected: { fontSize: 12 },
   platformRight: {},
   connectedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
     borderRadius: 20,
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
   connectedText: { fontSize: 11, fontWeight: '600' },
   disconnectedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
     borderRadius: 20,
     paddingHorizontal: 8,
     paddingVertical: 4,
@@ -540,17 +528,17 @@ const styles = StyleSheet.create({
   },
   disconnectedText: { fontSize: 11, fontWeight: '600' },
 
+  // Usage — grid inside SectionCard
   usageGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
   },
   usageTile: {
-    width: '47.5%',
-    borderRadius: 14,
-    borderWidth: 1,
+    width: '50%',
     padding: 16,
     gap: 4,
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
   },
   usageValue: {
     fontSize: 28,
