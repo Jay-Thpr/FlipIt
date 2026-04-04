@@ -126,11 +126,28 @@ class EbaySoldCompsOutput(AgentOutputBase):
     browser_use_error: str | None = None
     browser_use: BrowserUseMetadata | None = None
 
+class TrendData(BaseModel):
+    trend: Literal["rising", "falling", "stable", "neutral"]
+    delta_pct: float
+    recent_median: float
+    older_median: float
+    signal: str
+
+
+class VelocityData(BaseModel):
+    velocity: Literal["high", "medium", "low"]
+    label: str
+    detail: str
+    sold_last_30_days: int
+    total_comps: int
+
 
 class PricingOutput(AgentOutputBase):
     recommended_list_price: float
     expected_profit: float
     pricing_confidence: float
+    trend: TrendData | None = None
+    velocity: VelocityData | None = None
 
 
 class DepopListingPreview(BaseModel):
