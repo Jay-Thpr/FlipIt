@@ -122,7 +122,7 @@ class EbaySoldCompsOutput(AgentOutputBase):
     low_sold_price: float
     high_sold_price: float
     sample_size: int
-    execution_mode: Literal["browser_use", "fallback"] = "fallback"
+    execution_mode: Literal["browser_use", "httpx", "fallback"] = "fallback"
     browser_use_error: str | None = None
     browser_use: BrowserUseMetadata | None = None
 
@@ -147,14 +147,14 @@ class DepopListingOutput(AgentOutputBase):
     draft_status: str | None = None
     form_screenshot_url: str | None = None
     listing_preview: DepopListingPreview | None = None
-    execution_mode: Literal["browser_use", "fallback"] = "fallback"
+    execution_mode: Literal["browser_use", "httpx", "fallback"] = "fallback"
     browser_use_error: str | None = None
     browser_use: BrowserUseMetadata | None = None
 
 
 class SearchResultsOutput(AgentOutputBase):
     results: list[SearchListing] = Field(default_factory=list)
-    execution_mode: Literal["browser_use", "fallback"] = "fallback"
+    execution_mode: Literal["browser_use", "httpx", "fallback"] = "fallback"
     browser_use_error: str | None = None
     browser_use: BrowserUseMetadata | None = None
 

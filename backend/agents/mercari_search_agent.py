@@ -8,6 +8,7 @@ from backend.agents.browser_use_support import (
     build_browser_use_metadata,
     classify_browser_use_failure,
 )
+from backend.agents.httpx_clients import search_mercari_httpx
 from backend.agents.search_support import build_platform_results, detect_brand, detect_item
 from backend.schemas import AgentTaskRequest, SearchResultsOutput
 
@@ -30,8 +31,8 @@ class MercariSearchAgent(BaseAgent):
             for listing in output["results"]
         ]
 
-        results, browser_use_error = await self.try_browser_use_search(query=query)
-        result_source = "browser_use"
+        # Priority: httpx → Browser Use → deterministic fallback
+        results, result_source, browser_use_error = await self._resolve_results(query=query)
         if results is None:
             results = build_platform_results(platform="mercari", query=query, budget=budget, previous_prices=previous_prices)
             result_source = "fallback"
@@ -56,13 +57,23 @@ class MercariSearchAgent(BaseAgent):
             ),
         }
 
-    async def try_browser_use_search(self, *, query: str | None) -> tuple[list[dict[str, object]] | None, str | None]:
+    async def _resolve_results(
+        self, *, query: str | None
+    ) -> tuple[list[dict[str, object]] | None, str, str | None]:
         if not query:
-            return None, None
+            return None, "fallback", None
+
+        # 1. Try httpx first (fast, no Chromium)
+        httpx_results = await search_mercari_httpx(query)
+        if httpx_results is not None:
+            return httpx_results, "httpx", None
+
+        # 2. Fall through to Browser Use
         try:
-            return await run_marketplace_search("mercari", query), None
+            bu_results = await run_marketplace_search("mercari", query)
+            return bu_results, "browser_use", None
         except (BrowserUseRuntimeUnavailable, Exception) as exc:
-            return None, classify_browser_use_failure(exc)
+            return None, "fallback", classify_browser_use_failure(exc)
 
     async def emit_listing_found_events(
         self,
