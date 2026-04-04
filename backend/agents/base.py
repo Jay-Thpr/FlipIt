@@ -1,16 +1,17 @@
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
+
 from fastapi import FastAPI
 from pydantic import BaseModel, ValidationError
 
 from backend.schemas import AgentTaskRequest, AgentTaskResponse, validate_agent_task_request
 
 
-class StubAgent:
-    def __init__(self, *, slug: str, display_name: str, default_output: dict, output_model: type[BaseModel]) -> None:
+class BaseAgent(ABC):
+    def __init__(self, *, slug: str, display_name: str, output_model: type[BaseModel]) -> None:
         self.slug = slug
         self.display_name = display_name
-        self.default_output = default_output
         self.output_model = output_model
 
     async def handle_task(self, request: AgentTaskRequest) -> AgentTaskResponse:
@@ -24,12 +25,7 @@ class StubAgent:
                 error=f"Input validation failed for {self.slug}: {exc}",
             )
 
-        output = {
-            "agent": self.slug,
-            "display_name": self.display_name,
-            "summary": f"{self.display_name} completed {request.step}",
-            **self.default_output,
-        }
+        output = await self.build_output(request)
         validated_output = self.output_model.model_validate(output).model_dump()
         return AgentTaskResponse(
             session_id=request.session_id,
@@ -37,6 +33,24 @@ class StubAgent:
             status="completed",
             output=validated_output,
         )
+
+    @abstractmethod
+    async def build_output(self, request: AgentTaskRequest) -> dict:
+        raise NotImplementedError
+
+
+class StubAgent(BaseAgent):
+    def __init__(self, *, slug: str, display_name: str, default_output: dict, output_model: type[BaseModel]) -> None:
+        super().__init__(slug=slug, display_name=display_name, output_model=output_model)
+        self.default_output = default_output
+
+    async def build_output(self, request: AgentTaskRequest) -> dict:
+        return {
+            "agent": self.slug,
+            "display_name": self.display_name,
+            "summary": f"{self.display_name} completed {request.step}",
+            **self.default_output,
+        }
 
 
 def build_agent_app(agent: StubAgent) -> FastAPI:

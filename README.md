@@ -1,7 +1,7 @@
 # DiamondHacks
 
-FastAPI backend scaffold for the DiamondHacks resale-agent demo. The current repo state is a working backend shell with in-memory sessions, SSE streaming, 10 stub agent services, and an automated test suite.
-Agent inputs and outputs are now validated against step-specific schemas so pipeline contracts stay structurally stable as real logic is added.
+FastAPI backend scaffold for the DiamondHacks resale-agent demo. The current repo state is a working backend shell with in-memory sessions, SSE streaming, 10 agent services, and an automated test suite.
+Agent inputs and outputs are now validated against step-specific schemas so pipeline contracts stay structurally stable as real logic is added. `vision_agent` is the first non-stub implementation and now infers item attributes deterministically from sell notes and image URL metadata.
 
 ## Quick Start
 
