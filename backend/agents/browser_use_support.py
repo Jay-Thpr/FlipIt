@@ -1,0 +1,141 @@
+from __future__ import annotations
+
+import os
+from pathlib import Path
+from typing import Any, TypeVar
+
+from pydantic import BaseModel
+
+from backend.config import get_agent_timeout_seconds
+
+OutputModelT = TypeVar("OutputModelT", bound=BaseModel)
+
+
+class BrowserUseRuntimeUnavailable(RuntimeError):
+    pass
+
+
+class BrowserUseTaskExecutionError(RuntimeError):
+    pass
+
+
+def env_flag(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def should_force_browser_fallback() -> bool:
+    return env_flag("BROWSER_USE_FORCE_FALLBACK", default=False)
+
+
+def get_browser_use_model() -> str:
+    return os.getenv("BROWSER_USE_GEMINI_MODEL", "gemini-2.0-flash")
+
+
+def get_browser_profile_root() -> Path:
+    return Path(os.getenv("BROWSER_USE_PROFILE_ROOT", "profiles"))
+
+
+def get_browser_profile_path(profile_name: str) -> str:
+    return str((get_browser_profile_root() / profile_name).resolve())
+
+
+def get_browser_profile_kwargs(
+    *,
+    allowed_domains: list[str] | None = None,
+    user_data_dir: str | None = None,
+    keep_alive: bool = False,
+) -> dict[str, Any]:
+    kwargs: dict[str, Any] = {
+        "headless": False,
+        "stealth": True,
+    }
+    if allowed_domains:
+        kwargs["allowed_domains"] = allowed_domains
+    if user_data_dir:
+        kwargs["user_data_dir"] = user_data_dir
+    if keep_alive:
+        kwargs["keep_alive"] = True
+    return kwargs
+
+
+def get_browser_use_max_steps(default: int = 15) -> int:
+    return int(os.getenv("BROWSER_USE_MAX_STEPS", str(default)))
+
+
+def import_browser_use_dependencies() -> tuple[Any, Any, Any, Any]:
+    from browser_use import Agent, BrowserSession
+    from browser_use.browser import BrowserProfile
+    from langchain_google_genai import ChatGoogleGenerativeAI
+
+    return Agent, BrowserSession, BrowserProfile, ChatGoogleGenerativeAI
+
+
+def browser_use_runtime_ready() -> bool:
+    if should_force_browser_fallback():
+        return False
+    if not os.getenv("GOOGLE_API_KEY"):
+        return False
+    try:
+        import_browser_use_dependencies()
+    except Exception:
+        return False
+    return True
+
+
+async def run_structured_browser_task(
+    *,
+    task: str,
+    output_model: type[OutputModelT],
+    allowed_domains: list[str] | None = None,
+    user_data_dir: str | None = None,
+    keep_alive: bool = False,
+    max_steps: int | None = None,
+    max_failures: int = 3,
+) -> dict[str, Any]:
+    if should_force_browser_fallback():
+        raise BrowserUseRuntimeUnavailable("Browser Use fallback forced by environment")
+    if not os.getenv("GOOGLE_API_KEY"):
+        raise BrowserUseRuntimeUnavailable("GOOGLE_API_KEY is not configured")
+
+    try:
+        Agent, BrowserSession, BrowserProfile, ChatGoogleGenerativeAI = import_browser_use_dependencies()
+    except Exception as exc:
+        raise BrowserUseRuntimeUnavailable("Browser Use dependencies are not installed") from exc
+
+    llm = ChatGoogleGenerativeAI(model=get_browser_use_model())
+    browser_profile = BrowserProfile(
+        **get_browser_profile_kwargs(
+            allowed_domains=allowed_domains,
+            user_data_dir=user_data_dir,
+            keep_alive=keep_alive,
+        )
+    )
+    session = BrowserSession(browser_profile=browser_profile)
+
+    try:
+        agent = Agent(
+            task=task,
+            llm=llm,
+            browser_session=session,
+            output_model_schema=output_model,
+            max_steps=max_steps or get_browser_use_max_steps(),
+            max_failures=max_failures,
+        )
+        history = await agent.run()
+        result = history.final_result(output_model)
+        if result is None:
+            raise BrowserUseTaskExecutionError("Browser Use returned no structured result")
+        if isinstance(result, BaseModel):
+            return result.model_dump()
+        return output_model.model_validate(result).model_dump()
+    finally:
+        stop = getattr(session, "stop", None)
+        if stop is not None:
+            await stop()
+
+
+def get_browser_task_timeout_seconds() -> float:
+    return max(30.0, get_agent_timeout_seconds())

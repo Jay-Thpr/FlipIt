@@ -1,69 +1,31 @@
-# Backend
+# Backend Scaffold
 
-This is the first runnable backend scaffold for the DiamondHacks project.
+This scaffold gives the team a stable local contract before Browser Use, Gemini, and Fetch.ai integration work lands.
 
-What it does now:
+## Current Endpoints
 
-- exposes the planned FastAPI endpoints
-- keeps live SSE queues in memory
-- persists sessions, events, and final results to Supabase when configured
-- runs stub SELL and BUY pipelines so the database wiring can be tested immediately
+- `GET /health`
+- `GET /agents`
+- `GET /pipelines`
+- `POST /sell/start`
+- `POST /buy/start`
+- `GET /stream/{session_id}`
+- `GET /result/{session_id}`
+- `POST /internal/event/{session_id}`
 
-## Files
+## Current Behavior
 
-- [main.py](/Users/derek/.superset/worktrees/Diamond Hacks/helpful-sagittarius/backend/main.py)
-- [session.py](/Users/derek/.superset/worktrees/Diamond Hacks/helpful-sagittarius/backend/session.py)
-- [supabase_repo.py](/Users/derek/.superset/worktrees/Diamond Hacks/helpful-sagittarius/backend/supabase_repo.py)
-- [requirements.txt](/Users/derek/.superset/worktrees/Diamond Hacks/helpful-sagittarius/backend/requirements.txt)
-- [.env.example](/Users/derek/.superset/worktrees/Diamond Hacks/helpful-sagittarius/backend/.env.example)
+- Sessions are stored in memory only.
+- Pipelines run in the background; Browser Use-capable agents attempt live browser execution first and fall back to deterministic local logic when the Browser Use runtime or warmed profiles are unavailable.
+- Each agent input is validated against a step-specific schema before the orchestrator calls that step.
+- Each agent output is validated against a step-specific schema before it is emitted to SSE or saved in `/result`.
+- The orchestrator applies per-step timeouts, emits `agent_error` and `agent_retrying` events, retries transient `BUY` search failures once by default, and stores partial results on pipeline failure.
+- `AGENT_EXECUTION_MODE=local_functions` keeps the app runnable without launching separate agent processes.
+- `python -m backend.run_agents` starts one FastAPI process per agent scaffold when you want to validate the per-agent `/task` apps.
+- `make check` is the current local verification path and mirrors CI.
 
-## Run
+## Next Backend Tasks
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r backend/requirements.txt
-cp backend/.env.example backend/.env
-uvicorn backend.main:app --reload --port 8000
-```
-
-## Required Env
-
-- `INTERNAL_SECRET`
-- `SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
-
-If Supabase env vars are missing, the backend still runs, but persistence falls back to in-memory only.
-
-## Quick Verification
-
-Health check:
-
-```bash
-curl http://localhost:8000/health
-```
-
-Start a SELL session:
-
-```bash
-curl -X POST http://localhost:8000/sell/start \
-  -H 'Content-Type: application/json' \
-  -d '{"image_b64":"demo"}'
-```
-
-Connect to the SSE stream:
-
-```bash
-curl -N http://localhost:8000/stream/<session_id>
-```
-
-Fetch the final result:
-
-```bash
-curl http://localhost:8000/result/<session_id>
-```
-
-## Notes
-
-- The current pipeline behavior is stubbed so the persistence layer can be exercised immediately.
-- The next backend step is replacing `run_stub_pipeline()` in [main.py](/Users/derek/.superset/worktrees/Diamond Hacks/helpful-sagittarius/backend/main.py) with real agent orchestration.
+- Manually validate the profile-gated Browser Use paths on real logged-in marketplace accounts.
+- Add frontend-facing custom Browser Use events such as `listing_found` and `offer_sent` where needed.
+- Add actual Fetch.ai uAgent and Chat Protocol registration plus Agentverse verification.

@@ -9,6 +9,7 @@ __pycache__/
 dist/
 build/
 .eggs/
+.pytest_cache/
 
 # Environment
 .env

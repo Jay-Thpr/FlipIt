@@ -1,1 +1,1 @@
-"""Backend package for the DiamondHacks FastAPI service."""
+"""Backend package for DiamondHacks."""

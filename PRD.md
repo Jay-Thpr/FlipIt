@@ -1,4 +1,4 @@
-# PRD — Autonomous Resale Agent (FILLER) v3
+# PRD — Autonomous Resale Agent (FILLER) v4
 **DiamondHacks 2026 | April 5–6 | UCSD**
 
 ---
@@ -35,9 +35,11 @@ A mobile-first autonomous resale agent that works from both sides of the secondh
 
 ## 4. Core User Flows
 
+The app is a persistent agent management dashboard. Users add items to buy or sell; the app configures an agent for each item that runs autonomously and surfaces results on the dashboard. Each item card shows real-time agent status and taps through to a detail view with settings, market data, and active conversations.
+
 ### SELL Flow
 ```
-User opens app → taps SELL → takes photo
+User opens app → taps "+" in Selling section → takes photo of item
         ↓
 VisionAgent: identifies item (Gemini Vision) + clean photo (Nano Banana)
         ↓
@@ -47,13 +49,13 @@ PricingAgent: computes median price + profit margin (Gemini)
         ↓
 DepopListingAgent: populates Depop form (Browser Use)
         ↓
-Screen: before/after photo + comp breakdown + profit margin + Depop form preview
-User taps Post (manual final step)
+Item card appears in Selling dashboard — shows profit margin + "Ready to Post"
+User opens Item Detail → reviews Depop form preview → taps Post (manual final step)
 ```
 
 ### BUY Flow
 ```
-User opens app → taps BUY → pastes link or describes item
+User opens app → taps "+" in Buying section → pastes link or describes item
         ↓
 DepopSearchAgent: finds active Depop listings (Browser Use)
         ↓
@@ -65,9 +67,10 @@ OfferUpSearchAgent: finds active OfferUp listings (Browser Use) [best effort]
         ↓
 RankingAgent: scores + ranks all listings (Gemini)
         ↓
-HagglingAgent × N: sends one optimized offer per seller (Browser Use, called once per seller)
+NegotiationAgent × N: sends one optimized offer per seller (Browser Use, once per seller)
         ↓
-Screen: ranked listing feed + offer status tracker per seller
+Item card appears in Buying dashboard — shows best price found + offer statuses
+User opens Item Detail → sees ranked listings, market overview, active conversations per seller
 ```
 
 ---
@@ -95,7 +98,7 @@ All agents: local Python uAgents, running on Render, registered on Agentverse vi
 | 7 | MercariSearchAgent | BUY | Active Mercari listing search | Browser Use |
 | 8 | OfferUpSearchAgent | BUY | Active OfferUp listing search | Browser Use |
 | 9 | RankingAgent | BUY | Score + rank all listings | Gemini |
-| 10 | HagglingAgent | BUY | Generate + send one offer per seller | Browser Use, Gemini |
+| 10 | NegotiationAgent | BUY | Generate + send one offer per seller | Browser Use, Gemini |
 
 ### 5.3 SELL Sequencing
 ```
@@ -107,7 +110,7 @@ Strictly sequential. Each agent completes fully before the next fires. EbayResea
 ```
 DepopSearchAgent → EbaySearchAgent → MercariSearchAgent → OfferUpSearchAgent
         → RankingAgent
-        → HagglingAgent (×N, once per target seller)
+        → NegotiationAgent (×N, once per target seller)
 ```
 Search agents run sequentially — one platform at a time. Sequential-but-fast: each platform search takes 10-20 seconds, total search phase ~60 seconds. Results aggregate after all search agents complete, then pass to RankingAgent. HagglingAgent is called independently once per seller, sequentially.
 
@@ -284,7 +287,7 @@ Search agents run sequentially — one platform at a time. Sequential-but-fast: 
 
 ---
 
-### 6.10 HagglingAgent (BUY) — called once per seller
+### 6.10 NegotiationAgent (BUY) — called once per seller
 
 **Input:** Single listing `{ platform, seller, url, price, condition }` + `{ median_price }` from RankingAgent
 
@@ -313,47 +316,135 @@ Search agents run sequentially — one platform at a time. Sequential-but-fast: 
 - `react-native-sse` for SSE real-time agent feed
 - Python FastAPI backend via REST
 
-### 7.2 Screen Structure
+### 7.2 Design System
 
-**Home Screen:**
-Two large mode cards with clear CTAs:
-- **SELL** — "Scan something. Know your margin. List it."
-- **BUY** — "Find something. Agents hunt it down and haggle."
+**Style:** Vibrant and block-based — bold, high contrast, geometric, modern.
 
-**SELL Screen:**
+**Color palette:**
+| Token | Value | Usage |
+|-------|-------|-------|
+| `--color-primary` | `#7C3AED` | Primary actions, active states, accents |
+| `--color-on-primary` | `#FFFFFF` | Text/icons on primary |
+| `--color-secondary` | `#A78BFA` | Secondary elements, subtle highlights |
+| `--color-accent` | `#16A34A` | CTAs, success, deal-closed |
+| `--color-background` | `#FAF5FF` | Page backgrounds (light mode) |
+| `--color-foreground` | `#4C1D95` | Primary text |
+| `--color-muted` | `#ECEEF9` | Card backgrounds, dividers |
+| `--color-border` | `#DDD6FE` | Borders, separators |
+| `--color-destructive` | `#DC2626` | Errors, destructive actions |
+
+Dark mode variants defined separately — do not invert light mode values.
+
+**Typography:** Inter across all weights. Headings 700/32px+, section headers 600/18–24px, body 400/16px, labels 500/12–14px. Numeric data uses tabular figures.
+
+**Spacing:** Strict 4/8pt grid — values: 4, 8, 12, 16, 24, 32, 48px.
+
+**Icons:** Single consistent SVG set (e.g. Lucide). No emoji icons. Icon-only buttons require `aria-label`. Standard size: 20–24pt.
+
+**Touch targets:** 44×44pt minimum. Use `hitSlop` where visual size is smaller.
+
+**Animation:** 150–300ms, `transform`/`opacity` only. Respect `prefers-reduced-motion`. Exit ~60–70% of enter duration.
+
+### 7.3 Screen Structure
+
+**Home Screen (Dashboard)**
+- Header: app logo left, settings gear icon right
+- Two stacked sections: **Buying** (top) and **Selling** (bottom), each with an Inter 600/18px section header
+- Horizontal-scroll card grid per section
+- **Item card:** rounded corners (12–16px), `--color-muted` background, subtle shadow. Contains: item thumbnail (or initial placeholder), item name (600/16px), target price or best found price (700 tabular accent-colored), status badge (Active = `--color-accent` green, Paused = gray pill), row of platform SVG icons. Entire card tappable → Item Detail. Press state: scale 0.97, 150ms ease-out.
+- **Add New card:** same size, `+` icon centered (24pt `--color-primary`), "Add New" label, dashed `--color-border` border. Tapping opens item creation flow (camera for SELL, text input for BUY).
+- Empty state per section: Add New card + "No active agents. Tap + to get started."
+
+**Item Creation — SELL**
 - Full-screen camera viewfinder
-- Tap to capture → pipeline starts immediately
-- Bottom sheet rises with agent activity feed
-- Results screen (after pipeline): before/after photo strip, comp table, profit margin hero number, Depop form preview screenshot
+- Tap to capture → SELL pipeline starts
+- Agent activity bottom sheet rises showing pipeline progress in real time
 
-**BUY Screen:**
+**Item Creation — BUY**
 - Text input: paste link or describe item
-- Submit → pipeline starts
-- Agent activity feed: 4 platform search agents show sequentially with platform badges
-- Results: ranked listing cards (platform badge, price, condition, score, haggle flag)
-- "Send Offers" CTA → HagglingAgent fires per seller
-- Offer tracker: per-seller status badge (Sent / Replied / Accepted)
+- Submit → BUY pipeline starts
+- Agent activity bottom sheet shows 4 platform search agents firing sequentially with platform badges
 
-### 7.3 Agent Activity Feed (both modes)
-- Persistent animated bottom sheet
-- One card per agent: name, status (idle / active / complete / error), live log line
+**Item Detail Page**
+Opened by tapping any item card.
+- Header: back arrow (restores scroll position), item name as title, Active/Paused toggle (pill, right)
+- **Item Overview:** large item image, name (700/24px), description (400/16px), condition label, quantity
+- **Item Settings** (card-grouped iOS-style rows):
+  - Target Price, Min/Max Acceptable Price, Auto-Accept Threshold — editable numeric fields
+  - Active Platforms — multi-select toggle (platform icon + label)
+  - Negotiation Style — segmented: Aggressive / Moderate / Passive
+  - Reply Tone — segmented: Professional / Casual / Firm
+  - Auto-Relist — toggle
+  - Schedule Start / End — date picker rows
+- **Market Overview:** per-platform cards (horizontal scroll or stacked) showing platform name + icon, current market price (large tabular 700), listing volume, trend indicator (up/down + % change)
+- **Active Conversations:** list grouped by platform. Each row: platform icon, username (500/15px), last message preview (1 line muted), timestamp (right-aligned 12px muted), unread badge. Tapping → Chat Log. Empty state: "No active conversations yet."
+
+**SELL Result (within Item Detail)**
+- Before/after photo strip (raw vs. clean Nano Banana image)
+- Comp table: sold prices from eBay, filtered and ranked
+- Profit margin hero number (large, `--color-accent`)
+- Depop form preview screenshot — fully populated, paused at submit
+- "Post to Depop" CTA (manual final step)
+
+**BUY Result (within Item Detail)**
+- Ranked listing cards: platform badge, price, condition, score, haggle flag
+- "Send Offers" CTA → NegotiationAgent fires per flagged seller
+- Per-seller offer tracker: status badge (Sent / Replied / Accepted)
+
+**Chat Log Page**
+Read-only conversation log between agent and one seller/buyer.
+- Header: back arrow → Item Detail (restores scroll), two-line title (item name top, platform + username bottom bold)
+- Agent messages: right-aligned bubble, `--color-primary` bg, white text
+- Counterparty messages: left-aligned bubble, `--color-muted` bg, `--color-foreground` text
+- Timestamps below each message (or centered date chips between groups)
+- System events (e.g. "Offer sent: $45") as centered muted pills
+- No compose area — read-only log
+- Empty state: "No messages yet."
+
+**Settings Page**
+Accessible from home header gear icon.
+- **Appearance:** Light / Dark / System Default segmented control
+- **Account:** profile photo (tappable with Edit overlay), display name, email
+- **Connected Platforms:** per platform (eBay, Depop, Mercari, OfferUp) — logo, name, Connected/Not Connected badge, account username if connected, Connect/Disconnect control, API key status indicator
+- **Global Defaults:** Auto-reply toggle, Response delay (Instant / 1 min / 5 min / 15 min / 1 hr), Default negotiation style
+- **Notifications:** New message received (on), Price drop detected (on), Deal closed (on), Listing expired (off)
+- **Usage stats (2×2 grid):** Active Listings, Messages This Month, Deals Closed, API Usage — each cell: large 700/28px `--color-primary` number + 400/13px muted label
+
+### 7.4 General UX Rules
+
+- Back navigation always restores previous scroll position and open filters/state
+- Loading: skeleton shimmer for any content >300ms to load. Never blank screen.
+- Destructive actions (delete agent, disconnect platform) require confirmation dialog with `--color-destructive` confirm button
+- Disabled controls: 40% opacity + non-interactive semantics
+- Error messages: inline near field, state cause, suggest fix — no generic "Something went wrong"
+- Empty states: always include short explanation + clear action
+- All interactive elements have visible pressed/hover state, 150–300ms ease-out
+- Contrast: primary text ≥4.5:1, muted text ≥3:1, both light and dark
+- Safe areas: no interactive UI behind notch, status bar, or gesture indicator bar
+
+### 7.5 Agent Activity Feed (pipeline in progress)
+
+Shown as an animated bottom sheet during pipeline execution (both SELL and BUY item creation flows).
+- One row per agent: name, status (idle / active / complete / error), live summary line
 - Active agent: pulsing animation
-- Complete agent: green checkmark + one-line result summary
+- Complete agent: green checkmark + one-line result
 - Error agent: red indicator + fallback note
 
-### 7.4 SSE Event Types
+### 7.6 SSE Event Types
+
+Actual event names emitted by `orchestrator.py` — do not rename:
 
 ```
-agent_started      { agent_name, mode }
-agent_log          { agent_name, message }       # live log line
-agent_completed    { agent_name, summary }       # one-line result
-agent_error        { agent_name, error, fallback }
-listing_found      { platform, listing }         # BUY: streams as found
-offer_sent         { seller, platform, status }  # BUY: per seller
-pipeline_complete  { mode, session_id }
+pipeline_started   { input, mode }
+agent_started      { agent_name, attempt, mode }
+agent_retrying     { agent_name, attempt, max_attempts }
+agent_completed    { agent_name, summary, output }
+agent_error        { agent_name, attempt, max_attempts, error, category }
+pipeline_complete  { mode, pipeline, outputs }
+pipeline_failed    { error }
 ```
 
-Frontend updates in real time on each event. No polling.
+Frontend updates in real time on each event. No polling. Fallback: poll `/result/{session_id}` if SSE connection drops.
 
 ---
 
@@ -415,20 +506,22 @@ Frontend updates in real time on each event. No polling.
 - Backend health check confirmed
 
 **Demo Arc 1 — SELL (90 seconds):**
-1. Open app, tap SELL. "You just found this at Goodwill. Is it worth buying?"
-2. Take photo.
-3. VisionAgent: item identified on screen, clean product photo appears. "It knows exactly what this is."
-4. EbayResearchAgent: comp table populates. "Real sold prices from eBay."
-5. PricingAgent: profit margin appears large. "After fees, you make $Y."
-6. DepopListingAgent: Depop form screenshot appears, fully populated. "Your listing is ready. One tap to post."
+1. Open app to dashboard. "You just found this at Goodwill. Is it worth buying?"
+2. Tap "+" in Selling section → camera opens. Take photo.
+3. Agent activity sheet rises: VisionAgent fires — item identified, clean product photo appears. "It knows exactly what this is."
+4. EbayResearchAgent: comp table populates in the sheet. "Real sold prices from eBay."
+5. PricingAgent: profit margin appears. "After fees, you make $Y."
+6. DepopListingAgent: form populated. Item card appears in Selling dashboard — "Ready to Post."
+7. Tap item card → Item Detail. Show Depop form screenshot + comp table + profit margin. "One tap to post."
 
 **Demo Arc 2 — BUY (90 seconds):**
-1. Tap BUY. "You want these specific Jordan 1s but refuse to pay asking price."
-2. Paste product link.
-3. DepopSearchAgent, EbaySearchAgent, MercariSearchAgent fire sequentially — platform badges animate. "Checking every resale platform."
-4. RankingAgent: ranked listing cards appear, haggle targets flagged. "Found 31 listings. These 5 are below market."
-5. Tap Send Offers. HagglingAgent fires. "Sent personalized offers to 5 sellers."
-6. Show pre-staged reply from test account. "One already replied."
+1. Tap "+" in Buying section. "You want these specific Jordan 1s but refuse to pay asking price."
+2. Paste product link. Submit.
+3. Agent activity sheet rises: DepopSearchAgent, EbaySearchAgent, MercariSearchAgent fire sequentially — platform badges animate. "Checking every resale platform."
+4. RankingAgent: ranked listing cards appear in the sheet, haggle targets flagged. "Found 31 listings. These 5 are below market."
+5. Item card appears in Buying dashboard. Tap it → Item Detail → "Send Offers" CTA.
+6. NegotiationAgent fires per flagged seller. Offer tracker shows "Sent" badges.
+7. Open Chat Log for one seller — show pre-staged reply. "One already replied."
 
 **Fallbacks:**
 - eBay blocks SELL → fallback event emits, Mercari fires, demo continues
@@ -446,7 +539,7 @@ Frontend updates in real time on each event. No polling.
 | Gemini | Gemini API as reasoning backbone | Gemini Vision (VisionAgent), Gemini reasoning (PricingAgent description, RankingAgent summaries, HagglingAgent offer generation) |
 | Enchanted Commerce | Revolutionize commerce | Full two-sided autonomous resale marketplace — buying and selling both automated end-to-end |
 | Best AI/ML | Push AI/ML boundaries | 10-agent orchestration, vision model, semantic ranking, generative negotiation |
-| Best UI/UX | Beautiful and intuitive UX | Native mobile polish, live agent feed, progressive results, before/after photo, ranked cards |
+| Best UI/UX | Beautiful and intuitive UX | Persistent dashboard, item detail with market data + conversations, chat log, settings — full product feel with polished design system |
 | Best Mobile Hack | Standout mobile app | Full Expo React Native — camera integration, in-store use case, real mobile UX |
 | Best .Tech Domain | Register .tech domain | Register day one |
 
@@ -485,26 +578,28 @@ Frontend updates in real time on each event. No polling.
 ## 13. Build Priority Order
 
 **Must have — demo blockers (build first):**
-1. Expo app shell: Home, SELL screen, BUY screen, camera
+1. Expo app shell: Home dashboard, Item Detail, camera (SELL), text input (BUY)
 2. FastAPI backend + SSE infrastructure
 3. VisionAgent — Gemini Vision identification
 4. EbayResearchAgent — sold comp scraping
 5. PricingAgent — margin calculation
-6. Agent activity feed in mobile UI (SSE-driven)
+6. Agent activity bottom sheet in UI (SSE-driven)
 7. DepopSearchAgent + EbaySearchAgent + MercariSearchAgent
 
 **Should have:**
 8. DepopListingAgent — Depop form population
-9. RankingAgent — scored listing feed
-10. HagglingAgent — offer sending
-11. Nano Banana — clean photo generation
-12. All 10 agents registered on Agentverse via Mailbox
+9. RankingAgent — scored listing feed in Item Detail
+10. NegotiationAgent — offer sending
+11. Chat Log page per seller conversation
+12. Nano Banana — clean photo generation
+13. All 10 agents registered on Agentverse via Mailbox
 
 **Nice to have:**
-13. OfferUpSearchAgent
-14. Mercari fallback inside EbayResearchAgent
-15. User-adjustable thrift cost field
-16. Offer status tracker with pre-staged reply demo
+14. OfferUpSearchAgent
+15. Mercari fallback inside EbayResearchAgent
+16. Market Overview cards per platform in Item Detail
+17. Settings page (appearance, platforms, global defaults, notifications, usage stats)
+18. Offer status tracker with pre-staged reply demo
 
 ---
 
@@ -513,9 +608,9 @@ Frontend updates in real time on each event. No polling.
 | Person | Owns |
 |---|---|
 | 1 | Fetch.ai + agent architecture: uAgents setup, Mailbox registration, Chat Protocol, all agent scaffolding, ASI:One integration |
-| 2 | Browser Use: EbayResearchAgent, DepopListingAgent, all 4 BUY search agents, HagglingAgent — Browser Use specialist |
+| 2 | Browser Use: EbayResearchAgent, DepopListingAgent, all 4 BUY search agents, NegotiationAgent — Browser Use specialist |
 | 3 | AI pipeline: VisionAgent (Gemini Vision + Nano Banana), PricingAgent, RankingAgent (Gemini), offer message generation |
-| 4 | Mobile frontend: Expo app, camera, SSE feed, agent activity UI, SELL results screen, BUY results + ranking cards |
+| 4 | Mobile frontend: Expo app, camera, SSE feed, agent activity bottom sheet, Home dashboard, Item Detail (settings + market overview + conversations), Chat Log, Settings, SELL and BUY result views |
 
 FastAPI backend split between persons 1 and 2 — 1 owns session management + SSE infrastructure, 2 owns Browser Use execution endpoints.
 
