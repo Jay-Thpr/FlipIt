@@ -26,6 +26,11 @@ class PipelineStartResponse(BaseModel):
     created_at: str = Field(default_factory=utc_now_iso)
 
 
+class CorrectionRequest(BaseModel):
+    session_id: str
+    corrected_item: dict[str, Any]
+
+
 class AgentTaskRequest(BaseModel):
     session_id: str
     pipeline: Literal["sell", "buy"]

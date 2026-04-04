@@ -10,6 +10,7 @@ from fastapi.responses import StreamingResponse
 from backend.config import AGENTS, APP_BASE_URL, INTERNAL_API_TOKEN, get_agent_execution_mode
 from backend.orchestrator import get_pipeline_steps, run_pipeline
 from backend.schemas import (
+    CorrectionRequest,
     InternalEventRequest,
     PipelineStartRequest,
     PipelineStartResponse,
@@ -74,14 +75,27 @@ async def list_pipelines() -> dict[str, list[dict[str, str]]]:
     return get_pipeline_steps()
 
 
-@app.post("/sell/start", response_model=PipelineStartResponse)
-async def start_sell(request: PipelineStartRequest) -> PipelineStartResponse:
+@app.post("/sell/start")
+async def sell_start(request: PipelineStartRequest) -> PipelineStartResponse:
     return await start_session("sell", request)
 
 
-@app.post("/buy/start", response_model=PipelineStartResponse)
-async def start_buy(request: PipelineStartRequest) -> PipelineStartResponse:
+@app.post("/buy/start")
+async def buy_start(request: PipelineStartRequest) -> PipelineStartResponse:
     return await start_session("buy", request)
+
+
+@app.post("/sell/correct")
+async def sell_correct(request: CorrectionRequest) -> dict[str, bool]:
+    """Called by frontend when user corrects a low-confidence identification."""
+    from backend.orchestrator import resume_sell_pipeline
+    
+    session = await session_manager.get_session(request.session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+        
+    asyncio.create_task(resume_sell_pipeline(request.session_id, request.corrected_item))
+    return {"ok": True}
 
 
 @app.get("/result/{session_id}")
