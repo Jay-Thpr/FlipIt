@@ -120,25 +120,30 @@ async def stream(session_id: str) -> StreamingResponse:
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    async def event_generator():
-        queue = await session_manager.subscribe(session_id)
-        try:
-            for event in session.events:
+    return StreamingResponse(iter_session_events(session_id), media_type="text/event-stream")
+
+
+async def iter_session_events(session_id: str):
+    session = await session_manager.get_session(session_id)
+    if session is None:
+        return
+
+    queue = await session_manager.subscribe(session_id)
+    try:
+        for event in session.events:
+            yield format_sse(event)
+            if event.event_type in {"pipeline_complete", "pipeline_failed"}:
+                return
+        while True:
+            try:
+                event = await asyncio.wait_for(queue.get(), timeout=KEEPALIVE_INTERVAL)
                 yield format_sse(event)
                 if event.event_type in {"pipeline_complete", "pipeline_failed"}:
-                    return
-            while True:
-                try:
-                    event = await asyncio.wait_for(queue.get(), timeout=KEEPALIVE_INTERVAL)
-                    yield format_sse(event)
-                    if event.event_type in {"pipeline_complete", "pipeline_failed"}:
-                        break
-                except asyncio.TimeoutError:
-                    yield ": ping\n\n"
-        finally:
-            await session_manager.unsubscribe(session_id, queue)
-
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+                    break
+            except asyncio.TimeoutError:
+                yield ": ping\n\n"
+    finally:
+        await session_manager.unsubscribe(session_id, queue)
 
 
 def format_sse(event: SessionEvent) -> str:
