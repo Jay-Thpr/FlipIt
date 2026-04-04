@@ -230,6 +230,10 @@ def test_negotiation_agent_generates_messages_for_top_candidates() -> None:
             "status": "prepared",
             "failure_reason": None,
             "conversation_url": None,
+            "execution_mode": "deterministic",
+            "browser_use_error": "profile_missing",
+            "attempt_source": "prepared",
+            "failure_category": "profile_missing",
         },
         {
             "platform": "offerup",
@@ -241,6 +245,10 @@ def test_negotiation_agent_generates_messages_for_top_candidates() -> None:
             "status": "prepared",
             "failure_reason": None,
             "conversation_url": None,
+            "execution_mode": "deterministic",
+            "browser_use_error": "profile_missing",
+            "attempt_source": "prepared",
+            "failure_category": "profile_missing",
         },
         {
             "platform": "mercari",
@@ -252,8 +260,13 @@ def test_negotiation_agent_generates_messages_for_top_candidates() -> None:
             "status": "prepared",
             "failure_reason": None,
             "conversation_url": None,
+            "execution_mode": "deterministic",
+            "browser_use_error": "profile_missing",
+            "attempt_source": "prepared",
+            "failure_category": "profile_missing",
         },
     ]
+    assert result["output"]["browser_use"]["mode"] == "skipped"
 
 
 def test_negotiation_agent_sends_offers_with_browser_use_when_profiles_exist(monkeypatch) -> None:
@@ -310,7 +323,11 @@ def test_negotiation_agent_sends_offers_with_browser_use_when_profiles_exist(mon
     assert result["status"] == "completed"
     assert result["output"]["summary"] == "Processed 3 negotiation attempts starting with ebay_seller_1 on ebay"
     assert all(offer["status"] == "sent" for offer in result["output"]["offers"])
+    assert all(offer["execution_mode"] == "browser_use" for offer in result["output"]["offers"])
+    assert all(offer["browser_use_error"] is None for offer in result["output"]["offers"])
+    assert all(offer["attempt_source"] == "browser_use" for offer in result["output"]["offers"])
     assert result["output"]["offers"][0]["conversation_url"] == "https://messages.example/1"
+    assert result["output"]["browser_use"]["mode"] == "browser_use"
     assert call_count["value"] == 3
 
 
@@ -371,9 +388,18 @@ def test_negotiation_agent_records_failed_live_send_without_breaking_batch(monke
     result = response.json()
     assert result["status"] == "completed"
     assert result["output"]["offers"][0]["status"] == "sent"
+    assert result["output"]["offers"][0]["execution_mode"] == "browser_use"
+    assert result["output"]["offers"][0]["browser_use_error"] is None
+    assert result["output"]["offers"][0]["attempt_source"] == "browser_use"
     assert result["output"]["offers"][1]["status"] == "failed"
     assert result["output"]["offers"][1]["failure_reason"] == "offer form changed"
+    assert result["output"]["offers"][1]["execution_mode"] == "browser_use"
+    assert result["output"]["offers"][1]["browser_use_error"] == "browser_error"
+    assert result["output"]["offers"][1]["failure_category"] == "browser_error"
     assert result["output"]["offers"][2]["status"] == "sent"
+    assert result["output"]["offers"][2]["execution_mode"] == "browser_use"
+    assert result["output"]["offers"][2]["browser_use_error"] is None
+    assert result["output"]["browser_use"]["mode"] == "browser_use"
 
 
 def test_buy_pipeline_uses_real_ranking_and_negotiation_outputs(client: TestClient) -> None:
@@ -395,6 +421,9 @@ def test_buy_pipeline_uses_real_ranking_and_negotiation_outputs(client: TestClie
     assert ranking["top_choice"]["platform"] == "ebay"
     assert ranking["top_choice"]["score"] == 0.94
     assert negotiation["offers"][0]["target_price"] == 45.35
+    assert negotiation["offers"][0]["execution_mode"] == "deterministic"
+    assert negotiation["offers"][0]["browser_use_error"] == "profile_missing"
+    assert negotiation["browser_use"]["mode"] == "skipped"
     assert len(negotiation["offers"]) == 3
 
 
@@ -424,4 +453,8 @@ def test_buy_pipeline_processes_live_negotiation_results(monkeypatch, client: Te
     negotiation = result["result"]["outputs"]["negotiation"]
 
     assert negotiation["offers"][0]["status"] == "sent"
+    assert negotiation["offers"][0]["execution_mode"] == "browser_use"
+    assert negotiation["offers"][0]["browser_use_error"] is None
+    assert negotiation["offers"][0]["attempt_source"] == "browser_use"
     assert negotiation["offers"][0]["conversation_url"] == "https://messages.example/live"
+    assert negotiation["browser_use"]["mode"] == "browser_use"

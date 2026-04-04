@@ -68,6 +68,11 @@ The backend uses underscore-delimited SSE event names:
 
 - `pipeline_started`, `pipeline_complete`, `pipeline_failed`
 - `agent_started`, `agent_completed`, `agent_error`, `agent_retrying`
+- `search_method` (emitted by search agents: `{agent: str, method: "httpx"|"browser_use"|"fallback"}`)
+- `vision_low_confidence` (when vision inference < 0.70 confidence)
+- `draft_created` (from listing agent)
+- `offer_prepared` / `offer_sent` / `offer_failed` (from negotiation agent)
+- `browser_use_fallback` (when Browser Use fails and fallback data is returned)
 
 ---
 
@@ -100,7 +105,8 @@ This is a Python/FastAPI backend for an autonomous resale agent system. There is
 4. `depop_listing_agent` — populates Depop form via Browser Use, pauses before submit
 
 **Buy pipeline** (`POST /buy/start`): user provides search query/budget → 6 agents:
-1–4. `depop_search_agent`, `ebay_search_agent`, `mercari_search_agent`, `offerup_search_agent` — parallel-ish search (sequential in code, retryable)
+1–4. `depop_search_agent`, `ebay_search_agent`, `mercari_search_agent`, `offerup_search_agent` — parallel-ish search (sequential in code, retryable).
+     **Note on Search Architecture:** We use a 3-tier resolution path for speed and stealth: `httpx` (internal APIs / eBay Browse API) → `browser_use` (Chromium scrape) → `fallback` (deterministic mock data).
 5. `ranking_agent` — scores and ranks all results
 6. `negotiation_agent` — prepares/sends offers
 
@@ -119,10 +125,12 @@ Client connects to `GET /stream/{session_id}` (SSE) to receive real-time events.
 ### Schema Contracts (`backend/schemas.py`)
 
 Every agent has a strict Pydantic input model (e.g. `EbaySoldCompsAgentInput`) that validates `previous_outputs` from prior steps. Adding a new agent requires:
-1. New output model extending `AgentOutputBase`
-2. New input model specifying which `previous_outputs` fields are required
+1. New output model extending `AgentOutputBase`. Search agents and comp agents have an `execution_mode: Literal["httpx", "browser_use", "fallback"]` field.
+2. New input model specifying which `previous_outputs` fields are required.
 3. Entries in `AGENT_OUTPUT_MODELS` and `AGENT_INPUT_CONTRACTS`
 4. Registration in `backend/agents/registry.py`
+
+*Note on PricingOutput:* `PricingAgent` synthesizes market comps to include `TrendData` and `VelocityData` objects indicating market direction and demand based on dates and prices.
 
 ### Adding a New Agent
 
@@ -138,3 +146,6 @@ Extend `BaseAgent` from `backend/agents/base.py`, implement `build_output(reques
 | `INTERNAL_API_TOKEN` | `dev-internal-token` | Auth for `POST /internal/event/{session_id}` |
 | `AGENT_TIMEOUT_SECONDS` | `30` | Per-agent execution timeout |
 | `BUY_AGENT_MAX_RETRIES` | `1` | Extra retries for buy-side search agents |
+| `BROWSER_USE_FORCE_FALLBACK`| `false` | If `true`, skips all Chromium scraping and returns fallback mock data |
+| `BROWSER_USE_PROFILE_ROOT` | `profiles` | Dir for persistent browser profiles |
+| `EBAY_APP_ID`, `EBAY_CERT_ID`| *(none)* | eBay developer credentials for Browse API (Topic 3) |

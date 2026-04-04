@@ -37,6 +37,10 @@ For local development, copy `.env.example` to `.env` and set `INTERNAL_API_TOKEN
 - `make compile` byte-compiles backend and tests as a quick build sanity check.
 - `make check` runs tests plus compile checks.
 - `make ci` matches the local CI flow.
+- `./.venv/bin/python scripts/browser_use_validation.py --group buy_search` runs backend-only Browser Use smoke validation for the search agents.
+- `./.venv/bin/python -m backend.browser_use_validation --mode fallback --scenario depop_listing` forces deterministic fallback for a targeted validation case.
+- `./.venv/bin/python -m backend.browser_use_validation --require-live --group sell` fails if the selected sell-side scenarios do not execute in live Browser Use mode.
+- `./.venv/bin/python -m backend.browser_use_runtime_audit` audits Chromium, env vars, profile directories, and runtime settings before live Browser Use runs.
 
 ## Current API
 
@@ -55,3 +59,5 @@ For local development, copy `.env.example` to `.env` and set `INTERNAL_API_TOKEN
 - Render builds must install Chromium with `python -m patchright install chromium`.
 - Headed Chromium needs a paid Render instance for demo reliability; the free tier is not sufficient for live Browser Use runs.
 - Set `INTERNAL_API_TOKEN` and `GOOGLE_API_KEY` in the Render dashboard as secrets instead of committing values into `render.yaml`.
+- Use the validation harness before demos: fallback mode checks contract stability, and `--require-live` confirms that selected flows actually executed through Browser Use.
+- Use [BrowserUse-Live-Validation.md](/Users/jt/Desktop/diamondhacks/BrowserUse-Live-Validation.md) as the manual pre-demo checklist for warmed profiles and platform-specific smoke tests.

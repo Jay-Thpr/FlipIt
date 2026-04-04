@@ -126,3 +126,40 @@ def test_browser_task_timeout_respects_prd_floor(monkeypatch: pytest.MonkeyPatch
 
     monkeypatch.setenv("AGENT_TIMEOUT_SECONDS", "45")
     assert browser_use_support.get_browser_task_timeout_seconds() == 45.0
+
+
+def test_summarize_browser_use_error_handles_empty_and_runtime_errors() -> None:
+    assert browser_use_support.summarize_browser_use_error(RuntimeError("dom changed")) == "dom changed"
+    assert (
+        browser_use_support.summarize_browser_use_error(
+            browser_use_support.BrowserUseRuntimeUnavailable("missing key")
+        )
+        == "missing key"
+    )
+
+
+def test_classify_browser_use_failure_returns_stable_categories() -> None:
+    assert browser_use_support.classify_browser_use_failure(
+        browser_use_support.BrowserUseRuntimeUnavailable("missing key")
+    ) == "runtime_unavailable"
+    assert browser_use_support.classify_browser_use_failure(RuntimeError("profile login expired")) == "profile_missing"
+    assert browser_use_support.classify_browser_use_failure(RuntimeError("page navigation timeout")) == "browser_error"
+    assert browser_use_support.classify_browser_use_failure(RuntimeError("sold page changed")) == "browser_error"
+
+
+def test_build_browser_use_metadata_returns_expected_shape() -> None:
+    assert browser_use_support.build_browser_use_metadata(
+        mode="fallback",
+        attempted_live_run=True,
+        profile_name="depop",
+        profile_available=True,
+        error_category="navigation",
+        detail="DOM changed",
+    ) == {
+        "mode": "fallback",
+        "attempted_live_run": True,
+        "profile_name": "depop",
+        "profile_available": True,
+        "error_category": "navigation",
+        "detail": "DOM changed",
+    }

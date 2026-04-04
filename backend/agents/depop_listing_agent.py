@@ -3,9 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 
 from backend.agents.base import BaseAgent, build_agent_app
+from backend.agents.browser_use_events import emit_browser_use_event
 from backend.agents.browser_use_marketplaces import BrowserUseListingDraftResult, build_depop_listing_task
 from backend.agents.browser_use_support import (
     BrowserUseRuntimeUnavailable,
+    build_browser_use_metadata,
+    classify_browser_use_failure,
     get_browser_profile_path,
     run_structured_browser_task,
 )
@@ -65,7 +68,7 @@ class DepopListingAgent(BaseAgent):
             f"Estimated profit: ${pricing['expected_profit']}."
         )
 
-        browser_use_result = await self.try_browser_use_listing(
+        browser_use_result, browser_use_error, profile_available = await self.try_browser_use_listing(
             title=title,
             description=description,
             suggested_price=suggested_price,
@@ -87,10 +90,46 @@ class DepopListingAgent(BaseAgent):
                 "description": description,
                 "price": suggested_price,
             },
+            "execution_mode": "fallback",
+            "browser_use_error": browser_use_error,
+            "browser_use": self.build_runtime_metadata(
+                browser_use_result=browser_use_result,
+                browser_use_error=browser_use_error,
+                profile_available=profile_available,
+            ),
         }
         if browser_use_result is not None:
             output["draft_status"] = browser_use_result["draft_status"]
             output["form_screenshot_url"] = browser_use_result.get("form_screenshot_url")
+            output["execution_mode"] = "browser_use"
+        elif browser_use_error is not None:
+            await emit_browser_use_event(
+                session_id=request.session_id,
+                pipeline=request.pipeline,
+                step=request.step,
+                event_type="browser_use_fallback",
+                data={
+                    "agent_name": self.slug,
+                    "platform": "depop",
+                    "error": browser_use_error,
+                },
+            )
+        await emit_browser_use_event(
+            session_id=request.session_id,
+            pipeline=request.pipeline,
+            step=request.step,
+            event_type="draft_created",
+            data={
+                "agent_name": self.slug,
+                "platform": "depop",
+                "title": title,
+                "suggested_price": suggested_price,
+                "category_path": category_path,
+                "draft_status": output["draft_status"],
+                "form_screenshot_url": output.get("form_screenshot_url"),
+                "source": output["execution_mode"],
+            },
+        )
         return output
 
     async def try_browser_use_listing(
@@ -101,10 +140,10 @@ class DepopListingAgent(BaseAgent):
         suggested_price: float,
         category_path: str,
         image_urls: list[str],
-    ) -> dict[str, str | None] | None:
+    ) -> tuple[dict[str, str | None] | None, str | None, bool]:
         profile_path = Path(get_browser_profile_path("depop"))
         if not profile_path.exists():
-            return None
+            return None, "profile_missing", False
         image_path = self.get_local_image_path(image_urls)
         task = build_depop_listing_task(
             title=title,
@@ -114,17 +153,21 @@ class DepopListingAgent(BaseAgent):
             image_path=image_path,
         )
         try:
-            return await run_structured_browser_task(
-                task=task,
-                output_model=BrowserUseListingDraftResult,
-                allowed_domains=["depop.com", "www.depop.com"],
-                user_data_dir=str(profile_path),
-                keep_alive=True,
-                max_steps=18,
-                max_failures=3,
+            return (
+                await run_structured_browser_task(
+                    task=task,
+                    output_model=BrowserUseListingDraftResult,
+                    allowed_domains=["depop.com", "www.depop.com"],
+                    user_data_dir=str(profile_path),
+                    keep_alive=True,
+                    max_steps=18,
+                    max_failures=3,
+                ),
+                None,
+                True,
             )
-        except (BrowserUseRuntimeUnavailable, Exception):
-            return None
+        except (BrowserUseRuntimeUnavailable, Exception) as exc:
+            return None, classify_browser_use_failure(exc), True
 
     def get_local_image_path(self, image_urls: list[str]) -> str | None:
         for candidate in image_urls:
@@ -134,6 +177,39 @@ class DepopListingAgent(BaseAgent):
             if path.exists():
                 return str(path.resolve())
         return None
+
+    def build_runtime_metadata(
+        self,
+        *,
+        browser_use_result: dict[str, str | None] | None,
+        browser_use_error: str | None,
+        profile_available: bool,
+    ) -> dict[str, object]:
+        if browser_use_result is not None:
+            return build_browser_use_metadata(
+                mode="browser_use",
+                attempted_live_run=True,
+                profile_name="depop",
+                profile_available=True,
+                detail="Live Depop draft creation completed through Browser Use.",
+            )
+        if browser_use_error == "profile_missing" and not profile_available:
+            return build_browser_use_metadata(
+                mode="skipped",
+                attempted_live_run=False,
+                profile_name="depop",
+                profile_available=False,
+                error_category="profile_missing",
+                detail="Skipped live Depop draft creation because the warmed depop profile is missing.",
+            )
+        return build_browser_use_metadata(
+            mode="fallback",
+            attempted_live_run=browser_use_error not in {None, "runtime_unavailable"},
+            profile_name="depop",
+            profile_available=profile_available,
+            error_category=browser_use_error,
+            detail="Used deterministic fallback listing metadata.",
+        )
 
 
 agent = DepopListingAgent()

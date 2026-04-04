@@ -30,6 +30,21 @@ This scaffold gives the team a stable local contract before Browser Use, Gemini,
 - [supabase/migrations/20260404145000_init_session_persistence.sql](../supabase/migrations/20260404145000_init_session_persistence.sql) creates the initial session, event, and result tables.
 - [supabase_repo.py](supabase_repo.py) contains the repository layer for future durable session storage integration.
 
+## Browser Use Validation Harness
+
+Use the backend-only harness when you need repeatable Browser Use checks without frontend or Fetch.ai in the loop.
+
+```bash
+python scripts/browser_use_validation.py --group buy_search
+python scripts/browser_use_validation.py --group pipeline --json
+python scripts/browser_use_validation.py --scenario depop_listing --require-live
+```
+
+- `--group buy_search` runs the four marketplace search agents.
+- `--group pipeline` runs full `sell` and `buy` smoke scenarios against the FastAPI app.
+- `--scenario ... --require-live` is useful for warmed-profile checks before demos.
+- `--mode fallback` forces deterministic fallback mode for quick local sanity checks.
+
 ## Next Backend Tasks
 
 - Manually validate the profile-gated Browser Use paths on real logged-in marketplace accounts.

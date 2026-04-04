@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from copy import deepcopy
+from typing import Any
 
 from backend.agent_client import run_agent_task
 from backend.config import get_agent_timeout_seconds, get_buy_agent_max_retries
@@ -158,6 +159,11 @@ async def run_pipeline(session_id: str, pipeline: str, request: PipelineStartReq
             )
             outputs[step_name] = validated_output
             context[step_name] = validated_output
+            
+            # Save partial result in case of pause to allow resume
+            partial_result = {"pipeline": pipeline, "outputs": outputs}
+            await session_manager.update_status(session_id, status="running", result=partial_result)
+
             await publish(
                 session_id,
                 "agent_completed",
@@ -170,10 +176,31 @@ async def run_pipeline(session_id: str, pipeline: str, request: PipelineStartReq
                 },
             )
 
+            # Check for vision_agent low confidence pause condition
+            if pipeline == "sell" and step_name == "vision_analysis":
+                confidence = validated_output.get("pricing_confidence", 1.0) # Using pricing conf as placeholder for now, actual is confidence
+                confidence_score = validated_output.get("confidence", confidence)
+                if isinstance(confidence_score, (int, float)) and confidence_score < 0.70:
+                    await publish(
+                        session_id,
+                        "vision_low_confidence",
+                        pipeline="sell",
+                        step="vision_analysis",
+                        data={
+                            "suggestion": validated_output,
+                            "message": f"Not sure — is this a {validated_output.get('brand', 'Unknown')} {validated_output.get('detected_item', 'item')}?"
+                        }
+                    )
+                    raise Exception("low_confidence_pause")
+
         result = {"pipeline": pipeline, "outputs": outputs}
         await session_manager.update_status(session_id, status="completed", result=result)
         await publish(session_id, "pipeline_complete", pipeline=pipeline, data={"mode": pipeline, **result})
     except Exception as exc:
+        if str(exc) == "low_confidence_pause":
+            # Just return and leave the session in "running" state
+            return
+            
         partial_result = {"pipeline": pipeline, "outputs": outputs}
         await session_manager.update_status(session_id, status="failed", error=str(exc), result=partial_result)
         await publish(
@@ -181,4 +208,88 @@ async def run_pipeline(session_id: str, pipeline: str, request: PipelineStartReq
             "pipeline_failed",
             pipeline=pipeline,
             data={"mode": pipeline, "error": str(exc), "partial_result": partial_result},
+        )
+
+
+async def resume_sell_pipeline(session_id: str, corrected_item: dict[str, Any]) -> None:
+    """Resumes the SELL pipeline after a user corrects a low-confidence vision identification."""
+    session = await session_manager.get_session(session_id)
+    if not session or not session.pipeline == "sell":
+        return
+
+    outputs = session.result.get("outputs", {}) if session.result else {}
+    outputs["vision_analysis"] = corrected_item
+    
+    # Reconstruct context from outputs
+    context = deepcopy(outputs)
+
+    # Re-run starting from step 2 (skip vision_agent)
+    steps = [step for (agent, step) in SELL_STEPS]
+    remaining_steps = SELL_STEPS[1:]
+
+    try:
+        await publish(session_id, "pipeline_resumed", pipeline="sell")
+        
+        for agent_slug, step_name in remaining_steps:
+            if step_name in outputs:
+                continue
+                
+            task_request = AgentTaskRequest(
+                session_id=session_id,
+                pipeline="sell",
+                step=step_name,
+                input={
+                    "original_input": session.request.input,
+                    "previous_outputs": context,
+                },
+                context=context,
+            )
+            await publish(
+                session_id,
+                "agent_started",
+                pipeline="sell",
+                step=step_name,
+                data=dict(
+                    agent_name=agent_slug,
+                    attempt_number=1,
+                    max_attempts=1,
+                ),
+            )
+            validated_output = await execute_step(
+                session_id=session_id,
+                pipeline="sell",
+                agent_slug=agent_slug,
+                step_name=step_name,
+                task_request=task_request,
+            )
+            outputs[step_name] = validated_output
+            context[step_name] = validated_output
+            
+            # Save progress incrementally
+            partial_result = {"pipeline": "sell", "outputs": outputs}
+            await session_manager.update_status(session_id, status="running", result=partial_result)
+
+            await publish(
+                session_id,
+                "agent_completed",
+                pipeline="sell",
+                step=step_name,
+                data={
+                    "agent_name": agent_slug,
+                    "summary": validated_output.get("summary", ""),
+                    "output": validated_output,
+                },
+            )
+
+        result = {"pipeline": "sell", "outputs": outputs}
+        await session_manager.update_status(session_id, status="completed", result=result)
+        await publish(session_id, "pipeline_complete", pipeline="sell", data={"mode": "sell", **result})
+    except Exception as exc:
+        partial_result = {"pipeline": "sell", "outputs": outputs}
+        await session_manager.update_status(session_id, status="failed", error=str(exc), result=partial_result)
+        await publish(
+            session_id,
+            "pipeline_failed",
+            pipeline="sell",
+            data={"mode": "sell", "error": str(exc), "partial_result": partial_result},
         )

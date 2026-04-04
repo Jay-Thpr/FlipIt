@@ -96,6 +96,21 @@ def test_readme_documents_render_browser_runtime_requirements() -> None:
     assert "paid" in readme.lower()
     assert "Chromium" in readme
     assert "GOOGLE_API_KEY" in readme
+    assert "BrowserUse-Live-Validation.md" in readme
+
+
+def test_browser_use_docs_and_scripts_exist() -> None:
+    status = (REPO_ROOT / "BrowserUse-Status.md").read_text()
+    live_validation = (REPO_ROOT / "BrowserUse-Live-Validation.md").read_text()
+
+    assert "listing_found" in status
+    assert "browser_use_fallback" in status
+    assert "backend.browser_use_runtime_audit" in status
+    assert "Preconditions" in live_validation
+    assert "BUY Flow" in live_validation
+    assert "SELL Flow" in live_validation
+    assert (REPO_ROOT / "scripts/browser_use_validation.py").exists()
+    assert (REPO_ROOT / "scripts/browser_use_runtime_audit.py").exists()
 
 
 def test_claude_documents_current_sse_event_names() -> None:

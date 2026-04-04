@@ -3,8 +3,16 @@ from __future__ import annotations
 from pathlib import Path
 
 from backend.agents.base import BaseAgent, build_agent_app
+from backend.agents.browser_use_events import emit_browser_use_event
 from backend.agents.browser_use_marketplaces import BrowserUseNegotiationResult, build_negotiation_task
-from backend.agents.browser_use_support import BrowserUseRuntimeUnavailable, get_browser_profile_path, run_structured_browser_task
+from backend.agents.browser_use_support import (
+    BrowserUseRuntimeUnavailable,
+    build_browser_use_metadata,
+    classify_browser_use_failure,
+    get_browser_profile_path,
+    run_structured_browser_task,
+    summarize_browser_use_error,
+)
 from backend.schemas import AgentTaskRequest, NegotiationOutput
 
 
@@ -62,9 +70,56 @@ class NegotiationAgent(BaseAgent):
         offers = []
         for listing in prioritized_candidates:
             prepared_offer = self.build_prepared_offer(listing=listing, median_price=median_price)
+            await emit_browser_use_event(
+                session_id=request.session_id,
+                pipeline=request.pipeline,
+                step=request.step,
+                event_type="offer_prepared",
+                data={
+                    "agent_name": self.slug,
+                    "platform": prepared_offer["platform"],
+                    "seller": prepared_offer["seller"],
+                    "listing_url": prepared_offer["listing_url"],
+                    "listing_title": prepared_offer["listing_title"],
+                    "target_price": prepared_offer["target_price"],
+                    "source": prepared_offer["execution_mode"],
+                },
+            )
             live_result = await self.try_send_offer(prepared_offer)
-            if live_result is not None:
-                prepared_offer.update(live_result)
+            prepared_offer.update(live_result)
+            if prepared_offer["execution_mode"] == "browser_use":
+                await emit_browser_use_event(
+                    session_id=request.session_id,
+                    pipeline=request.pipeline,
+                    step=request.step,
+                    event_type="offer_sent" if prepared_offer["status"] == "sent" else "offer_failed",
+                    data={
+                        "agent_name": self.slug,
+                        "platform": prepared_offer["platform"],
+                        "seller": prepared_offer["seller"],
+                        "listing_url": prepared_offer["listing_url"],
+                        "listing_title": prepared_offer["listing_title"],
+                        "target_price": prepared_offer["target_price"],
+                        "status": prepared_offer["status"],
+                        "conversation_url": prepared_offer["conversation_url"],
+                        "failure_reason": prepared_offer["failure_reason"],
+                        "source": prepared_offer["execution_mode"],
+                    },
+                )
+            elif prepared_offer["browser_use_error"] is not None:
+                await emit_browser_use_event(
+                    session_id=request.session_id,
+                    pipeline=request.pipeline,
+                    step=request.step,
+                    event_type="browser_use_fallback",
+                    data={
+                        "agent_name": self.slug,
+                        "platform": prepared_offer["platform"],
+                        "seller": prepared_offer["seller"],
+                        "listing_url": prepared_offer["listing_url"],
+                        "error": prepared_offer["browser_use_error"],
+                    },
+                )
             offers.append(prepared_offer)
 
         processed_statuses = {offer["status"] for offer in offers}
@@ -84,6 +139,7 @@ class NegotiationAgent(BaseAgent):
             "display_name": self.display_name,
             "summary": summary,
             "offers": offers,
+            "browser_use": self.build_runtime_metadata(offers),
         }
 
     def build_prepared_offer(self, *, listing: dict[str, object], median_price: float) -> dict[str, object]:
@@ -105,13 +161,22 @@ class NegotiationAgent(BaseAgent):
             "status": "prepared",
             "failure_reason": None,
             "conversation_url": None,
+            "execution_mode": "deterministic",
+            "browser_use_error": None,
+            "attempt_source": "prepared",
+            "failure_category": None,
         }
 
-    async def try_send_offer(self, prepared_offer: dict[str, object]) -> dict[str, object] | None:
+    async def try_send_offer(self, prepared_offer: dict[str, object]) -> dict[str, object]:
         platform = str(prepared_offer["platform"])
         profile_path = Path(get_browser_profile_path(platform))
         if not profile_path.exists():
-            return None
+            return {
+                "execution_mode": "deterministic",
+                "browser_use_error": "profile_missing",
+                "attempt_source": "prepared",
+                "failure_category": "profile_missing",
+            }
 
         task = build_negotiation_task(
             platform=platform,
@@ -120,7 +185,7 @@ class NegotiationAgent(BaseAgent):
             target_price=float(prepared_offer["target_price"]),
         )
         try:
-            return await run_structured_browser_task(
+            result = await run_structured_browser_task(
                 task=task,
                 output_model=BrowserUseNegotiationResult,
                 allowed_domains=self.allowed_domains_for_platform(platform),
@@ -129,13 +194,29 @@ class NegotiationAgent(BaseAgent):
                 max_steps=16,
                 max_failures=3,
             )
-        except BrowserUseRuntimeUnavailable:
-            return None
+            return {
+                **result,
+                "execution_mode": "browser_use",
+                "browser_use_error": None,
+                "attempt_source": "browser_use",
+                "failure_category": None,
+            }
+        except BrowserUseRuntimeUnavailable as exc:
+            return {
+                "execution_mode": "deterministic",
+                "browser_use_error": classify_browser_use_failure(exc),
+                "attempt_source": "prepared",
+                "failure_category": classify_browser_use_failure(exc),
+            }
         except Exception as exc:
             return {
                 "status": "failed",
-                "failure_reason": str(exc),
+                "failure_reason": summarize_browser_use_error(exc),
                 "conversation_url": None,
+                "execution_mode": "browser_use",
+                "browser_use_error": classify_browser_use_failure(exc),
+                "attempt_source": "browser_use",
+                "failure_category": classify_browser_use_failure(exc),
             }
 
     def allowed_domains_for_platform(self, platform: str) -> list[str]:
@@ -145,6 +226,29 @@ class NegotiationAgent(BaseAgent):
             "mercari": ["mercari.com", "www.mercari.com"],
             "offerup": ["offerup.com", "www.offerup.com"],
         }[platform]
+
+    def build_runtime_metadata(self, offers: list[dict[str, object]]) -> dict[str, object]:
+        if any(offer["execution_mode"] == "browser_use" for offer in offers):
+            live_count = sum(1 for offer in offers if offer["execution_mode"] == "browser_use")
+            return build_browser_use_metadata(
+                mode="browser_use",
+                attempted_live_run=True,
+                detail=f"Processed {live_count} live Browser Use negotiation attempts.",
+            )
+        first_error = next((offer for offer in offers if offer.get("browser_use_error")), None)
+        if first_error and first_error["browser_use_error"] == "profile_missing":
+            return build_browser_use_metadata(
+                mode="skipped",
+                attempted_live_run=False,
+                error_category="profile_missing",
+                detail="Skipped live negotiation because warmed marketplace profiles were missing.",
+            )
+        return build_browser_use_metadata(
+            mode="fallback",
+            attempted_live_run=False,
+            error_category=first_error["browser_use_error"] if first_error else None,
+            detail="Prepared deterministic negotiation offers without live Browser Use sends.",
+        )
 
 
 agent = NegotiationAgent()
