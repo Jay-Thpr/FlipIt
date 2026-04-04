@@ -63,6 +63,15 @@ def lifecycle_event_types(events: list[dict[str, Any]]) -> list[str]:
     ]
 
 
+def step_event_types(events: list[dict[str, Any]]) -> list[tuple[str, str]]:
+    return [
+        (event["event_type"], event["payload"]["step"])
+        for event in events
+        if event["payload"]["step"]
+        and event["event_type"] in {"agent_started", "agent_completed", "draft_created", "listing_found", "offer_prepared"}
+    ]
+
+
 def start_and_collect_events(client: TestClient, endpoint: str, payload: dict[str, Any]) -> tuple[str, list[dict[str, Any]], dict[str, Any]]:
     response = client.post(endpoint, json=payload)
     assert response.status_code == 200
@@ -100,16 +109,18 @@ def test_sell_pipeline_emits_expected_event_order_and_result(client: TestClient)
     assert [event["event_type"] for event in draft_events] == ["draft_created"]
     assert draft_events[0]["payload"]["data"]["platform"] == "depop"
     assert draft_events[0]["payload"]["data"]["draft_status"] == "fallback"
-    assert [event["payload"]["step"] for event in events if event["payload"]["step"]] == [
-        "vision_analysis",
-        "vision_analysis",
-        "ebay_sold_comps",
-        "ebay_sold_comps",
-        "pricing",
-        "pricing",
-        "depop_listing",
-        "depop_listing",
-        "depop_listing",
+    fallback_events = [event for event in events if event["event_type"] == "browser_use_fallback"]
+    assert len(fallback_events) == 2
+    assert step_event_types(events) == [
+        ("agent_started", "vision_analysis"),
+        ("agent_completed", "vision_analysis"),
+        ("agent_started", "ebay_sold_comps"),
+        ("agent_completed", "ebay_sold_comps"),
+        ("agent_started", "pricing"),
+        ("agent_completed", "pricing"),
+        ("agent_started", "depop_listing"),
+        ("draft_created", "depop_listing"),
+        ("agent_completed", "depop_listing"),
     ]
     assert all(event["payload"]["session_id"] == session_id for event in events)
     assert result["status"] == "completed"
@@ -182,30 +193,32 @@ def test_buy_pipeline_emits_expected_event_order_and_result(client: TestClient) 
     assert listing_events[0]["payload"]["data"]["platform"] == "depop"
     assert listing_events[0]["payload"]["data"]["source"] == "fallback"
     assert prepared_offer_events[0]["payload"]["data"]["seller"] == "nike_seller_1"
-    assert [event["payload"]["step"] for event in events if event["payload"]["step"]] == [
-        "depop_search",
-        "depop_search",
-        "depop_search",
-        "depop_search",
-        "ebay_search",
-        "ebay_search",
-        "ebay_search",
-        "ebay_search",
-        "mercari_search",
-        "mercari_search",
-        "mercari_search",
-        "mercari_search",
-        "offerup_search",
-        "offerup_search",
-        "offerup_search",
-        "offerup_search",
-        "ranking",
-        "ranking",
-        "negotiation",
-        "negotiation",
-        "negotiation",
-        "negotiation",
-        "negotiation",
+    fallback_events = [event for event in events if event["event_type"] == "browser_use_fallback"]
+    assert len(fallback_events) == 7
+    assert step_event_types(events) == [
+        ("agent_started", "depop_search"),
+        ("listing_found", "depop_search"),
+        ("listing_found", "depop_search"),
+        ("agent_completed", "depop_search"),
+        ("agent_started", "ebay_search"),
+        ("listing_found", "ebay_search"),
+        ("listing_found", "ebay_search"),
+        ("agent_completed", "ebay_search"),
+        ("agent_started", "mercari_search"),
+        ("listing_found", "mercari_search"),
+        ("listing_found", "mercari_search"),
+        ("agent_completed", "mercari_search"),
+        ("agent_started", "offerup_search"),
+        ("listing_found", "offerup_search"),
+        ("listing_found", "offerup_search"),
+        ("agent_completed", "offerup_search"),
+        ("agent_started", "ranking"),
+        ("agent_completed", "ranking"),
+        ("agent_started", "negotiation"),
+        ("offer_prepared", "negotiation"),
+        ("offer_prepared", "negotiation"),
+        ("offer_prepared", "negotiation"),
+        ("agent_completed", "negotiation"),
     ]
     assert all(event["payload"]["session_id"] == session_id for event in events)
     assert result["status"] == "completed"
