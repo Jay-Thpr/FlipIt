@@ -37,6 +37,10 @@ BUY_AGENT_MAX_RETRIES = int(os.getenv("BUY_AGENT_MAX_RETRIES", "1"))
 EBAY_APP_ID = os.getenv("EBAY_APP_ID", "")
 EBAY_CERT_ID = os.getenv("EBAY_CERT_ID", "")
 
+# Fetch.ai (optional; uAgent / Agentverse wiring is separate from /task contracts)
+FETCH_ENABLED = os.getenv("FETCH_ENABLED", "").lower() in ("1", "true", "yes")
+AGENTVERSE_API_KEY = os.getenv("AGENTVERSE_API_KEY", "")
+
 
 def get_agent_execution_mode() -> str:
     return os.getenv("AGENT_EXECUTION_MODE", AGENT_EXECUTION_MODE)
@@ -48,3 +52,11 @@ def get_agent_timeout_seconds() -> float:
 
 def get_buy_agent_max_retries() -> int:
     return int(os.getenv("BUY_AGENT_MAX_RETRIES", str(BUY_AGENT_MAX_RETRIES)))
+
+
+def fetch_integration_flags() -> dict[str, bool]:
+    """Non-secret booleans for /health (Agentverse key presence only, never the value)."""
+    return {
+        "fetch_enabled": FETCH_ENABLED,
+        "agentverse_credentials_present": bool(AGENTVERSE_API_KEY.strip()),
+    }

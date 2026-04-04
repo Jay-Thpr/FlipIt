@@ -40,6 +40,7 @@ def test_ebay_sold_comps_agent_prices_brand_item_and_condition() -> None:
                     "brand": "Carhartt",
                     "category": "outerwear",
                     "condition": "fair",
+                    "confidence": 0.88,
                 }
             },
         },
@@ -54,6 +55,7 @@ def test_ebay_sold_comps_agent_prices_brand_item_and_condition() -> None:
                 "brand": "Carhartt",
                 "category": "outerwear",
                 "condition": "fair",
+                "confidence": 0.88,
             },
         },
     }
@@ -91,6 +93,7 @@ def test_ebay_sold_comps_agent_uses_unknown_brand_fallback() -> None:
                     "brand": "Unknown",
                     "category": "unknown",
                     "condition": "good",
+                    "confidence": 0.55,
                 }
             },
         },
@@ -139,6 +142,7 @@ def test_ebay_sold_comps_agent_records_live_execution_metadata(monkeypatch) -> N
                     "brand": "Patagonia",
                     "category": "outerwear",
                     "condition": "excellent",
+                    "confidence": 0.88,
                 }
             },
         },
@@ -177,6 +181,7 @@ def test_ebay_sold_comps_agent_reports_browser_use_fallback_error(monkeypatch) -
                     "brand": "Patagonia",
                     "category": "outerwear",
                     "condition": "excellent",
+                    "confidence": 0.88,
                 }
             },
         },

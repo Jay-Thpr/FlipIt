@@ -39,6 +39,7 @@ def test_pricing_agent_prices_from_real_comps_and_item_signals() -> None:
                     "brand": "Patagonia",
                     "category": "apparel",
                     "condition": "excellent",
+                    "confidence": 0.88,
                 },
                 "ebay_sold_comps": {
                     "agent": "ebay_sold_comps_agent",
@@ -82,6 +83,7 @@ def test_pricing_agent_falls_back_for_unknown_item_signals() -> None:
                     "brand": "Unknown",
                     "category": "unknown",
                     "condition": "good",
+                    "confidence": 0.55,
                 },
                 "ebay_sold_comps": {
                     "agent": "ebay_sold_comps_agent",

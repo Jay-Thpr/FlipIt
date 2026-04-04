@@ -29,6 +29,8 @@ def test_healthcheck_exposes_execution_metadata(client: TestClient) -> None:
         "status": "ok",
         "agent_execution_mode": "local_functions",
         "agent_count": "10",
+        "fetch_enabled": False,
+        "agentverse_credentials_present": False,
     }
 
 
@@ -103,6 +105,7 @@ async def test_pipeline_passes_accumulated_outputs_to_each_step(monkeypatch: pyt
             brand="unknown",
             category="apparel",
             condition="good",
+            confidence=0.85,
         ).model_dump(),
         "ebay_sold_comps_agent": EbaySoldCompsOutput(
             agent="ebay_sold_comps_agent",

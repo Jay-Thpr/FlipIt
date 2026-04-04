@@ -7,6 +7,7 @@ This document defines the interface for the backend REST endpoints and the real-
 | Date | Notes |
 |------|--------|
 | 2026-04-04 | Documented all public REST routes; aligned `GET /result` with `SessionState`; clarified `pipeline_failed.partial_result`; noted buy-side marketplace searches may run concurrently (SSE order for those steps is not guaranteed). |
+| 2026-04-04 | `GET /health` includes `fetch_enabled` and `agentverse_credentials_present` (booleans, no secrets). |
 
 ---
 

@@ -40,6 +40,8 @@ def test_healthcheck(client: TestClient) -> None:
         "status": "ok",
         "agent_execution_mode": "local_functions",
         "agent_count": "10",
+        "fetch_enabled": False,
+        "agentverse_credentials_present": False,
     }
 
 

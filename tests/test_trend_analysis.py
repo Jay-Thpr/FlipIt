@@ -146,6 +146,7 @@ class TestPricingAgentOutput:
                         "brand": "Nike",
                         "category": "apparel",
                         "condition": "good",
+                        "confidence": 0.88,
                     },
                     "ebay_sold_comps": {
                         "agent": "ebay_sold_comps_agent",

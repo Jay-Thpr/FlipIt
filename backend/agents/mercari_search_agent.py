@@ -24,12 +24,7 @@ class MercariSearchAgent(BaseAgent):
     async def build_output(self, request: AgentTaskRequest) -> dict:
         query = request.input["original_input"].get("query")
         budget = request.input["original_input"].get("budget")
-        previous_outputs = request.input["previous_outputs"]
-        previous_prices = [
-            listing["price"]
-            for output in (previous_outputs["depop_search"], previous_outputs["ebay_search"])
-            for listing in output["results"]
-        ]
+        previous_prices: list[float] = []
 
         # Priority: httpx → Browser Use → deterministic fallback
         results, result_source, browser_use_error = await self._resolve_results(query=query)

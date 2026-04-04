@@ -56,6 +56,7 @@ VALID_TASK_PAYLOADS = {
                     "brand": "unknown",
                     "category": "apparel",
                     "condition": "good",
+                    "confidence": 0.85,
                 }
             },
         },
@@ -70,6 +71,7 @@ VALID_TASK_PAYLOADS = {
                 "brand": "unknown",
                 "category": "apparel",
                 "condition": "good",
+                "confidence": 0.85,
             },
         },
     },
@@ -88,6 +90,7 @@ VALID_TASK_PAYLOADS = {
                     "brand": "unknown",
                     "category": "apparel",
                     "condition": "good",
+                    "confidence": 0.85,
                 },
                 "ebay_sold_comps": {
                     "agent": "ebay_sold_comps_agent",
@@ -117,6 +120,7 @@ VALID_TASK_PAYLOADS = {
                     "brand": "unknown",
                     "category": "apparel",
                     "condition": "good",
+                    "confidence": 0.85,
                 },
                 "ebay_sold_comps": {
                     "agent": "ebay_sold_comps_agent",
@@ -152,18 +156,7 @@ VALID_TASK_PAYLOADS = {
         "step": "ebay_search",
         "input": {
             "original_input": {"query": "Nike vintage tee size M", "budget": 45},
-            "previous_outputs": {
-                "depop_search": {
-                    "agent": "depop_search_agent",
-                    "display_name": "Depop Search Agent",
-                    "summary": "Depop Search Agent completed depop_search",
-                    "results": [{
-                        "platform": "depop", "title": "Sample listing", "price": 40.0,
-                        "url": "https://depop.example/listing-1", "condition": "good",
-                        "seller": "depop_seller_1", "seller_score": 21, "posted_at": "2026-04-02",
-                    }],
-                }
-            },
+            "previous_outputs": {},
         },
         "context": {"request_metadata": {"source": "contract-test"}, "pipeline_input": {"query": "Nike vintage tee size M", "budget": 45}},
     },
@@ -173,28 +166,7 @@ VALID_TASK_PAYLOADS = {
         "step": "mercari_search",
         "input": {
             "original_input": {"query": "Nike vintage tee size M", "budget": 45},
-            "previous_outputs": {
-                "depop_search": {
-                    "agent": "depop_search_agent",
-                    "display_name": "Depop Search Agent",
-                    "summary": "Depop Search Agent completed depop_search",
-                    "results": [{
-                        "platform": "depop", "title": "Sample listing", "price": 40.0,
-                        "url": "https://depop.example/listing-1", "condition": "good",
-                        "seller": "depop_seller_1", "seller_score": 21, "posted_at": "2026-04-02",
-                    }],
-                },
-                "ebay_search": {
-                    "agent": "ebay_search_agent",
-                    "display_name": "eBay Search Agent",
-                    "summary": "eBay Search Agent completed ebay_search",
-                    "results": [{
-                        "platform": "ebay", "title": "Sample listing", "price": 38.0,
-                        "url": "https://ebay.example/listing-1", "condition": "good",
-                        "seller": "ebay_seller_1", "seller_score": 640, "posted_at": "2026-04-03",
-                    }],
-                },
-            },
+            "previous_outputs": {},
         },
         "context": {"request_metadata": {"source": "contract-test"}, "pipeline_input": {"query": "Nike vintage tee size M", "budget": 45}},
     },
@@ -204,38 +176,7 @@ VALID_TASK_PAYLOADS = {
         "step": "offerup_search",
         "input": {
             "original_input": {"query": "Nike vintage tee size M", "budget": 45},
-            "previous_outputs": {
-                "depop_search": {
-                    "agent": "depop_search_agent",
-                    "display_name": "Depop Search Agent",
-                    "summary": "Depop Search Agent completed depop_search",
-                    "results": [{
-                        "platform": "depop", "title": "Sample listing", "price": 40.0,
-                        "url": "https://depop.example/listing-1", "condition": "good",
-                        "seller": "depop_seller_1", "seller_score": 21, "posted_at": "2026-04-02",
-                    }],
-                },
-                "ebay_search": {
-                    "agent": "ebay_search_agent",
-                    "display_name": "eBay Search Agent",
-                    "summary": "eBay Search Agent completed ebay_search",
-                    "results": [{
-                        "platform": "ebay", "title": "Sample listing", "price": 38.0,
-                        "url": "https://ebay.example/listing-1", "condition": "good",
-                        "seller": "ebay_seller_1", "seller_score": 640, "posted_at": "2026-04-03",
-                    }],
-                },
-                "mercari_search": {
-                    "agent": "mercari_search_agent",
-                    "display_name": "Mercari Search Agent",
-                    "summary": "Mercari Search Agent completed mercari_search",
-                    "results": [{
-                        "platform": "mercari", "title": "Sample listing", "price": 37.0,
-                        "url": "https://mercari.example/listing-1", "condition": "good",
-                        "seller": "mercari_seller_1", "seller_score": 56, "posted_at": "2026-04-03",
-                    }],
-                },
-            },
+            "previous_outputs": {},
         },
         "context": {"request_metadata": {"source": "contract-test"}, "pipeline_input": {"query": "Nike vintage tee size M", "budget": 45}},
     },

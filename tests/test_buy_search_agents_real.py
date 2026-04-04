@@ -199,7 +199,7 @@ def test_ebay_search_agent_falls_back_when_browser_use_unavailable(monkeypatch) 
         "step": "ebay_search",
         "input": {
             "original_input": {"query": "Nike vintage tee size M", "budget": 45},
-            "previous_outputs": {"depop_search": build_buy_previous_outputs()["depop_search"]},
+            "previous_outputs": {},
         },
         "context": {},
     }
@@ -238,10 +238,7 @@ def test_mercari_search_agent_falls_back_when_browser_use_raises(monkeypatch) ->
         "step": "mercari_search",
         "input": {
             "original_input": {"query": "Nike vintage tee size M", "budget": 45},
-            "previous_outputs": {
-                "depop_search": build_buy_previous_outputs()["depop_search"],
-                "ebay_search": build_buy_previous_outputs()["ebay_search"],
-            },
+            "previous_outputs": {},
         },
         "context": {},
     }
@@ -280,7 +277,7 @@ def test_offerup_search_agent_uses_browser_use_results_when_available(monkeypatc
         "step": "offerup_search",
         "input": {
             "original_input": {"query": "Nike vintage tee size M", "budget": 45},
-            "previous_outputs": build_buy_previous_outputs(),
+            "previous_outputs": {},
         },
         "context": {},
     }
@@ -337,7 +334,8 @@ def test_buy_pipeline_accepts_live_search_results(monkeypatch, client: TestClien
     assert ebay_results[0]["platform"] == "ebay"
     assert mercari_results[0]["platform"] == "mercari"
     assert offerup_results[0]["platform"] == "offerup"
-    assert ebay_results[0]["price"] < depop_results[0]["price"]
+    # Search agents run in parallel; fallback pricing no longer depends on Depop comps for eBay.
+    assert ebay_results[0]["price"] > 0
     assert mercari_results[0]["seller"].startswith("nike_")
     assert offerup_results[0]["posted_at"].startswith("2026-")
     assert result["result"]["outputs"]["depop_search"]["browser_use"]["mode"] == "browser_use"

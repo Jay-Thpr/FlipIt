@@ -7,7 +7,13 @@ from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
-from backend.config import AGENTS, APP_BASE_URL, INTERNAL_API_TOKEN, get_agent_execution_mode
+from backend.config import (
+    AGENTS,
+    APP_BASE_URL,
+    INTERNAL_API_TOKEN,
+    fetch_integration_flags,
+    get_agent_execution_mode,
+)
 from backend.orchestrator import get_pipeline_steps, run_pipeline
 from backend.schemas import (
     CorrectionRequest,
@@ -48,11 +54,14 @@ async def start_session(pipeline: str, request: PipelineStartRequest) -> Pipelin
 
 
 @app.get("/health")
-async def healthcheck() -> dict[str, str]:
+async def healthcheck() -> dict[str, str | bool]:
+    flags = fetch_integration_flags()
     return {
         "status": "ok",
         "agent_execution_mode": get_agent_execution_mode(),
         "agent_count": str(len(AGENTS)),
+        "fetch_enabled": flags["fetch_enabled"],
+        "agentverse_credentials_present": flags["agentverse_credentials_present"],
     }
 
 

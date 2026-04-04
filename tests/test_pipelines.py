@@ -88,7 +88,7 @@ def test_sell_pipeline_emits_expected_event_order_and_result(client: TestClient)
         "/sell/start",
         {
             "user_id": "sell-user",
-            "input": {"image_urls": ["https://example.com/item.jpg"], "notes": "Vintage tee"},
+            "input": {"image_urls": ["https://example.com/item.jpg"], "notes": "Vintage Nike tee"},
             "metadata": {"source": "test"},
         },
     )
@@ -170,56 +170,40 @@ def test_buy_pipeline_emits_expected_event_order_and_result(client: TestClient) 
         },
     )
 
-    assert lifecycle_event_types(events) == [
-        "pipeline_started",
-        "agent_started",
-        "agent_completed",
-        "agent_started",
-        "agent_completed",
-        "agent_started",
-        "agent_completed",
-        "agent_started",
-        "agent_completed",
-        "agent_started",
-        "agent_completed",
-        "agent_started",
-        "agent_completed",
-        "pipeline_complete",
+    lifecycle = lifecycle_event_types(events)
+    assert lifecycle[0] == "pipeline_started"
+    assert lifecycle[-1] == "pipeline_complete"
+    assert lifecycle.count("agent_started") == 6
+    assert lifecycle.count("agent_completed") == 6
+
+    search_steps = {"depop_search", "ebay_search", "mercari_search", "offerup_search"}
+    started_steps = [
+        e["payload"]["step"]
+        for e in events
+        if e["event_type"] == "agent_started" and e["payload"].get("step") in search_steps
     ]
+    assert set(started_steps) == search_steps
+
+    def last_index(ev_type: str, step: str) -> int:
+        return max(i for i, e in enumerate(events) if e["event_type"] == ev_type and e["payload"].get("step") == step)
+
+    def first_index(ev_type: str, step: str) -> int:
+        return next(i for i, e in enumerate(events) if e["event_type"] == ev_type and e["payload"].get("step") == step)
+
+    last_search_done = max(last_index("agent_completed", s) for s in search_steps)
+    assert last_search_done < first_index("agent_started", "ranking")
+    assert last_index("agent_completed", "ranking") < first_index("agent_started", "negotiation")
+
     listing_events = [event for event in events if event["event_type"] == "listing_found"]
     prepared_offer_events = [event for event in events if event["event_type"] == "offer_prepared"]
     assert len(listing_events) == 8
     assert len(prepared_offer_events) == 3
-    assert listing_events[0]["payload"]["data"]["platform"] == "depop"
-    assert listing_events[0]["payload"]["data"]["source"] == "fallback"
+    depop_listings = [e for e in listing_events if e["payload"]["data"]["platform"] == "depop"]
+    assert depop_listings
+    assert depop_listings[0]["payload"]["data"]["source"] == "fallback"
     assert prepared_offer_events[0]["payload"]["data"]["seller"] == "nike_seller_1"
     fallback_events = [event for event in events if event["event_type"] == "browser_use_fallback"]
     assert len(fallback_events) == 7
-    assert step_event_types(events) == [
-        ("agent_started", "depop_search"),
-        ("listing_found", "depop_search"),
-        ("listing_found", "depop_search"),
-        ("agent_completed", "depop_search"),
-        ("agent_started", "ebay_search"),
-        ("listing_found", "ebay_search"),
-        ("listing_found", "ebay_search"),
-        ("agent_completed", "ebay_search"),
-        ("agent_started", "mercari_search"),
-        ("listing_found", "mercari_search"),
-        ("listing_found", "mercari_search"),
-        ("agent_completed", "mercari_search"),
-        ("agent_started", "offerup_search"),
-        ("listing_found", "offerup_search"),
-        ("listing_found", "offerup_search"),
-        ("agent_completed", "offerup_search"),
-        ("agent_started", "ranking"),
-        ("agent_completed", "ranking"),
-        ("agent_started", "negotiation"),
-        ("offer_prepared", "negotiation"),
-        ("offer_prepared", "negotiation"),
-        ("offer_prepared", "negotiation"),
-        ("agent_completed", "negotiation"),
-    ]
     assert all(event["payload"]["session_id"] == session_id for event in events)
     assert result["status"] == "completed"
     assert result["result"]["pipeline"] == "buy"
@@ -243,7 +227,10 @@ def test_buy_pipeline_emits_expected_event_order_and_result(client: TestClient) 
 
 
 def test_internal_event_requires_valid_token(client: TestClient) -> None:
-    start_response = client.post("/sell/start", json={"input": {}, "metadata": {}})
+    start_response = client.post(
+        "/sell/start",
+        json={"input": {"notes": "Nike hoodie good"}, "metadata": {}},
+    )
     session_id = start_response.json()["session_id"]
     wait_for_terminal_result(client, session_id)
 
@@ -257,7 +244,10 @@ def test_internal_event_requires_valid_token(client: TestClient) -> None:
 
 
 def test_internal_event_is_appended_to_session_history(client: TestClient) -> None:
-    start_response = client.post("/sell/start", json={"input": {}, "metadata": {}})
+    start_response = client.post(
+        "/sell/start",
+        json={"input": {"notes": "Nike hoodie good"}, "metadata": {}},
+    )
     session_id = start_response.json()["session_id"]
     wait_for_terminal_result(client, session_id)
 

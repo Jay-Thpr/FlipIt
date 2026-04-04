@@ -44,6 +44,7 @@ def test_vision_agent_infers_item_attributes_from_notes_and_image_url() -> None:
     assert body["output"]["category"] == "apparel"
     assert body["output"]["detected_item"] == "hoodie"
     assert body["output"]["condition"] == "excellent"
+    assert body["output"]["confidence"] == 0.88
     assert "Nike hoodie" in body["output"]["summary"]
 
 
@@ -72,6 +73,7 @@ def test_vision_agent_falls_back_to_unknown_item_when_input_is_sparse() -> None:
     assert body["output"]["category"] == "unknown"
     assert body["output"]["detected_item"] == "item"
     assert body["output"]["condition"] == "good"
+    assert body["output"]["confidence"] == 0.55
 
 
 def test_sell_pipeline_uses_real_vision_agent_output(client: TestClient) -> None:

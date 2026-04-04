@@ -67,6 +67,13 @@ class VisionAgent(BaseAgent):
         category, detected_item = self._detect_category(tokens)
         condition = self._detect_condition(tokens)
         summary_subject = detected_item if brand == "Unknown" else f"{brand} {detected_item}"
+        # Heuristic confidence until Gemini: known brand + non-generic item → higher score.
+        if brand != "Unknown" and detected_item not in ("item", "unknown"):
+            confidence = 0.88
+        elif brand != "Unknown":
+            confidence = 0.78
+        else:
+            confidence = 0.55
 
         return {
             "agent": self.slug,
@@ -76,6 +83,7 @@ class VisionAgent(BaseAgent):
             "brand": brand,
             "category": category,
             "condition": condition,
+            "confidence": confidence,
         }
 
     def _combined_text(self, request: AgentTaskRequest) -> str:

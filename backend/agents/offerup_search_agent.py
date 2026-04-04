@@ -23,16 +23,7 @@ class OfferUpSearchAgent(BaseAgent):
     async def build_output(self, request: AgentTaskRequest) -> dict:
         query = request.input["original_input"].get("query")
         budget = request.input["original_input"].get("budget")
-        previous_outputs = request.input["previous_outputs"]
-        previous_prices = [
-            listing["price"]
-            for output in (
-                previous_outputs["depop_search"],
-                previous_outputs["ebay_search"],
-                previous_outputs["mercari_search"],
-            )
-            for listing in output["results"]
-        ]
+        previous_prices: list[float] = []
 
         results, browser_use_error = await self.try_browser_use_search(query=query)
         result_source = "browser_use"

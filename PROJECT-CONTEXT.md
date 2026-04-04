@@ -68,12 +68,9 @@ An autonomous resale agent app called **FILLER**. A user photographs a thrift st
 3. `pricing_agent` → `pricing`
 4. `depop_listing_agent` → `depop_listing`
 
-### BUY Pipeline (sequential)
+### BUY Pipeline
 
-1. `depop_search_agent` → `depop_search`
-2. `ebay_search_agent` → `ebay_search`
-3. `mercari_search_agent` → `mercari_search`
-4. `offerup_search_agent` → `offerup_search`
+1–4. Marketplace search agents (`depop_search`, `ebay_search`, `mercari_search`, `offerup_search`) run **in parallel** during execution; SSE `agent_started` / `listing_found` order for those steps may interleave—attribute by `step` / `data.agent_name`.
 5. `ranking_agent` → `ranking`
 6. `negotiation_agent` → `negotiation`
 

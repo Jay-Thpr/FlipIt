@@ -31,6 +31,7 @@ def build_sell_previous_outputs() -> dict[str, Any]:
             "brand": "Patagonia",
             "category": "apparel",
             "condition": "excellent",
+            "confidence": 0.88,
         },
         "ebay_sold_comps": {
             "agent": "ebay_sold_comps_agent",
@@ -160,6 +161,7 @@ def test_depop_listing_agent_uses_fallback_copy_for_sparse_input(monkeypatch) ->
                     "brand": "Unknown",
                     "category": "unknown",
                     "condition": "good",
+                    "confidence": 0.55,
                 },
                 "ebay_sold_comps": {
                     "agent": "ebay_sold_comps_agent",

@@ -10,10 +10,15 @@ from backend.schemas import (
     AgentTaskRequest,
     PipelineStartRequest,
     SessionEvent,
+    normalize_vision_correction,
     validate_agent_output,
     validate_agent_task_request,
 )
 from backend.session import session_manager
+
+
+class LowConfidencePause(Exception):
+    """Pause sell pipeline after vision_low_confidence without marking the session failed."""
 
 SELL_STEPS = (
     ("vision_agent", "vision_analysis"),
@@ -22,11 +27,14 @@ SELL_STEPS = (
     ("depop_listing_agent", "depop_listing"),
 )
 
-BUY_STEPS = (
+BUY_SEARCH_STEPS = (
     ("depop_search_agent", "depop_search"),
     ("ebay_search_agent", "ebay_search"),
     ("mercari_search_agent", "mercari_search"),
     ("offerup_search_agent", "offerup_search"),
+)
+
+BUY_STEPS = BUY_SEARCH_STEPS + (
     ("ranking_agent", "ranking"),
     ("negotiation_agent", "negotiation"),
 )
@@ -127,8 +135,59 @@ async def execute_step(
     raise RuntimeError(f"Unreachable retry state for {agent_slug}")
 
 
+async def _run_buy_search_parallel(
+    session_id: str,
+    request: PipelineStartRequest,
+    context: dict,
+    outputs: dict,
+) -> None:
+    async def run_one(agent_slug: str, step_name: str) -> tuple[str, dict]:
+        task_request = validate_agent_task_request(
+            agent_slug,
+            AgentTaskRequest(
+                session_id=session_id,
+                pipeline="buy",
+                step=step_name,
+                input={
+                    "original_input": deepcopy(request.input),
+                    "previous_outputs": {},
+                },
+                context=deepcopy(context),
+            ),
+        )
+        validated = await execute_step(
+            session_id=session_id,
+            pipeline="buy",
+            agent_slug=agent_slug,
+            step_name=step_name,
+            task_request=task_request,
+        )
+        return step_name, validated
+
+    pairs = await asyncio.gather(*[run_one(slug, step) for slug, step in BUY_SEARCH_STEPS])
+    completion_order = ("depop_search", "ebay_search", "mercari_search", "offerup_search")
+    by_step = dict(pairs)
+    for step_name in completion_order:
+        validated_output = by_step[step_name]
+        agent_slug = next(slug for slug, name in BUY_SEARCH_STEPS if name == step_name)
+        outputs[step_name] = validated_output
+        context[step_name] = validated_output
+        partial_result = {"pipeline": "buy", "outputs": outputs}
+        await session_manager.update_status(session_id, status="running", result=partial_result)
+        await publish(
+            session_id,
+            "agent_completed",
+            pipeline="buy",
+            step=step_name,
+            data={
+                "agent_name": agent_slug,
+                "summary": validated_output.get("summary", ""),
+                "output": validated_output,
+            },
+        )
+
+
 async def run_pipeline(session_id: str, pipeline: str, request: PipelineStartRequest) -> None:
-    steps = SELL_STEPS if pipeline == "sell" else BUY_STEPS
     await session_manager.update_status(session_id, status="running")
     await publish(session_id, "pipeline_started", pipeline=pipeline, data={"input": request.input, "mode": pipeline})
 
@@ -136,6 +195,12 @@ async def run_pipeline(session_id: str, pipeline: str, request: PipelineStartReq
     outputs: dict = {}
 
     try:
+        if pipeline == "buy":
+            await _run_buy_search_parallel(session_id, request, context, outputs)
+            steps = BUY_STEPS[len(BUY_SEARCH_STEPS) :]
+        else:
+            steps = SELL_STEPS
+
         for agent_slug, step_name in steps:
             task_request = validate_agent_task_request(
                 agent_slug,
@@ -178,9 +243,8 @@ async def run_pipeline(session_id: str, pipeline: str, request: PipelineStartReq
 
             # Check for vision_agent low confidence pause condition
             if pipeline == "sell" and step_name == "vision_analysis":
-                confidence = validated_output.get("pricing_confidence", 1.0) # Using pricing conf as placeholder for now, actual is confidence
-                confidence_score = validated_output.get("confidence", confidence)
-                if isinstance(confidence_score, (int, float)) and confidence_score < 0.70:
+                confidence_score = validated_output.get("confidence", 1.0)
+                if isinstance(confidence_score, (int, float)) and float(confidence_score) < 0.70:
                     await publish(
                         session_id,
                         "vision_low_confidence",
@@ -188,19 +252,21 @@ async def run_pipeline(session_id: str, pipeline: str, request: PipelineStartReq
                         step="vision_analysis",
                         data={
                             "suggestion": validated_output,
-                            "message": f"Not sure — is this a {validated_output.get('brand', 'Unknown')} {validated_output.get('detected_item', 'item')}?"
-                        }
+                            "message": (
+                                f"Not sure — is this a {validated_output.get('brand', 'Unknown')} "
+                                f"{validated_output.get('detected_item', 'item')}?"
+                            ),
+                        },
                     )
-                    raise Exception("low_confidence_pause")
+                    raise LowConfidencePause
 
         result = {"pipeline": pipeline, "outputs": outputs}
         await session_manager.update_status(session_id, status="completed", result=result)
         await publish(session_id, "pipeline_complete", pipeline=pipeline, data={"mode": pipeline, **result})
+    except LowConfidencePause:
+        # Session stays running; client calls POST /sell/correct to resume.
+        return
     except Exception as exc:
-        if str(exc) == "low_confidence_pause":
-            # Just return and leave the session in "running" state
-            return
-            
         partial_result = {"pipeline": pipeline, "outputs": outputs}
         await session_manager.update_status(session_id, status="failed", error=str(exc), result=partial_result)
         await publish(
@@ -218,41 +284,35 @@ async def resume_sell_pipeline(session_id: str, corrected_item: dict[str, Any]) 
         return
 
     outputs = session.result.get("outputs", {}) if session.result else {}
-    outputs["vision_analysis"] = corrected_item
-    
-    # Reconstruct context from outputs
-    context = deepcopy(outputs)
+    outputs["vision_analysis"] = normalize_vision_correction(corrected_item)
+    await session_manager.update_status(session_id, status="running", result={"pipeline": "sell", "outputs": outputs})
+
+    base_context: dict[str, Any] = {
+        "request_metadata": session.request.metadata,
+        "pipeline_input": session.request.input,
+    }
 
     # Re-run starting from step 2 (skip vision_agent)
-    steps = [step for (agent, step) in SELL_STEPS]
     remaining_steps = SELL_STEPS[1:]
 
     try:
         await publish(session_id, "pipeline_resumed", pipeline="sell")
-        
+
         for agent_slug, step_name in remaining_steps:
             if step_name in outputs:
                 continue
-                
-            task_request = AgentTaskRequest(
-                session_id=session_id,
-                pipeline="sell",
-                step=step_name,
-                input={
-                    "original_input": session.request.input,
-                    "previous_outputs": context,
-                },
-                context=context,
-            )
-            await publish(
-                session_id,
-                "agent_started",
-                pipeline="sell",
-                step=step_name,
-                data=dict(
-                    agent_name=agent_slug,
-                    attempt_number=1,
-                    max_attempts=1,
+
+            task_request = validate_agent_task_request(
+                agent_slug,
+                AgentTaskRequest(
+                    session_id=session_id,
+                    pipeline="sell",
+                    step=step_name,
+                    input={
+                        "original_input": deepcopy(session.request.input),
+                        "previous_outputs": deepcopy(outputs),
+                    },
+                    context=deepcopy({**base_context, **outputs}),
                 ),
             )
             validated_output = await execute_step(
@@ -263,8 +323,7 @@ async def resume_sell_pipeline(session_id: str, corrected_item: dict[str, Any]) 
                 task_request=task_request,
             )
             outputs[step_name] = validated_output
-            context[step_name] = validated_output
-            
+
             # Save progress incrementally
             partial_result = {"pipeline": "sell", "outputs": outputs}
             await session_manager.update_status(session_id, status="running", result=partial_result)

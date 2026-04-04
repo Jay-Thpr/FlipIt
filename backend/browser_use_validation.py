@@ -161,6 +161,7 @@ def _sell_previous_outputs() -> dict[str, Any]:
             "brand": "Patagonia",
             "category": "apparel",
             "condition": "excellent",
+            "confidence": 0.88,
         },
         "ebay_sold_comps": {
             "agent": "ebay_sold_comps_agent",
@@ -225,7 +226,7 @@ def get_validation_scenarios() -> dict[str, ValidationScenario]:
                 "step": "ebay_search",
                 "input": {
                     "original_input": {"query": "Nike vintage tee size M", "budget": 45},
-                    "previous_outputs": {"depop_search": buy_previous_outputs["depop_search"]},
+                    "previous_outputs": {},
                 },
                 "context": {"request_metadata": {"source": "browser-use-validation"}},
             },
@@ -241,10 +242,7 @@ def get_validation_scenarios() -> dict[str, ValidationScenario]:
                 "step": "mercari_search",
                 "input": {
                     "original_input": {"query": "Nike vintage tee size M", "budget": 45},
-                    "previous_outputs": {
-                        "depop_search": buy_previous_outputs["depop_search"],
-                        "ebay_search": buy_previous_outputs["ebay_search"],
-                    },
+                    "previous_outputs": {},
                 },
                 "context": {"request_metadata": {"source": "browser-use-validation"}},
             },
@@ -260,11 +258,7 @@ def get_validation_scenarios() -> dict[str, ValidationScenario]:
                 "step": "offerup_search",
                 "input": {
                     "original_input": {"query": "Nike vintage tee size M", "budget": 45},
-                    "previous_outputs": {
-                        "depop_search": buy_previous_outputs["depop_search"],
-                        "ebay_search": buy_previous_outputs["ebay_search"],
-                        "mercari_search": buy_previous_outputs["mercari_search"],
-                    },
+                    "previous_outputs": {},
                 },
                 "context": {"request_metadata": {"source": "browser-use-validation"}},
             },

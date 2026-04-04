@@ -120,6 +120,7 @@ class VisionAnalysisOutput(AgentOutputBase):
     brand: str
     category: str
     condition: str
+    confidence: float = Field(ge=0.0, le=1.0, description="Model certainty; <0.70 triggers sell pause for user correction.")
 
 
 class EbaySoldCompsOutput(AgentOutputBase):
@@ -233,34 +234,19 @@ class DepopSearchAgentInput(BaseModel):
     previous_outputs: EmptyPreviousOutputs = Field(default_factory=EmptyPreviousOutputs)
 
 
-class EbaySearchPreviousOutputs(BaseModel):
-    depop_search: SearchResultsOutput
-
-
 class EbaySearchAgentInput(BaseModel):
     original_input: BuyPipelineInput = Field(default_factory=BuyPipelineInput)
-    previous_outputs: EbaySearchPreviousOutputs
-
-
-class MercariSearchPreviousOutputs(BaseModel):
-    depop_search: SearchResultsOutput
-    ebay_search: SearchResultsOutput
+    previous_outputs: EmptyPreviousOutputs = Field(default_factory=EmptyPreviousOutputs)
 
 
 class MercariSearchAgentInput(BaseModel):
     original_input: BuyPipelineInput = Field(default_factory=BuyPipelineInput)
-    previous_outputs: MercariSearchPreviousOutputs
-
-
-class OfferupSearchPreviousOutputs(BaseModel):
-    depop_search: SearchResultsOutput
-    ebay_search: SearchResultsOutput
-    mercari_search: SearchResultsOutput
+    previous_outputs: EmptyPreviousOutputs = Field(default_factory=EmptyPreviousOutputs)
 
 
 class OfferupSearchAgentInput(BaseModel):
     original_input: BuyPipelineInput = Field(default_factory=BuyPipelineInput)
-    previous_outputs: OfferupSearchPreviousOutputs
+    previous_outputs: EmptyPreviousOutputs = Field(default_factory=EmptyPreviousOutputs)
 
 
 class RankingPreviousOutputs(BaseModel):
@@ -384,6 +370,25 @@ AGENT_INPUT_CONTRACTS = {
 def validate_agent_output(agent_slug: str, output: dict[str, Any]) -> dict[str, Any]:
     model = AGENT_OUTPUT_MODELS[agent_slug]
     return TypeAdapter(model).validate_python(output).model_dump()
+
+
+def normalize_vision_correction(raw: dict[str, Any]) -> dict[str, Any]:
+    """Map frontend-friendly correction payloads into a valid VisionAnalysisOutput dict."""
+    data = dict(raw)
+    if "detected_item" not in data and data.get("item_name") is not None:
+        data["detected_item"] = str(data["item_name"])
+    data.setdefault("agent", "vision_agent")
+    data.setdefault("display_name", "Vision Agent")
+    brand = str(data.get("brand", "Unknown"))
+    detected = str(data.get("detected_item", "item"))
+    data.setdefault("brand", brand)
+    data.setdefault("detected_item", detected)
+    data.setdefault("category", str(data.get("category", "unknown")))
+    data.setdefault("condition", str(data.get("condition", "good")))
+    if not data.get("summary"):
+        data["summary"] = f"User-corrected identification: {brand} {detected}".strip()
+    data.setdefault("confidence", 1.0)
+    return VisionAnalysisOutput.model_validate(data).model_dump()
 
 
 def validate_agent_task_request(agent_slug: str, request: AgentTaskRequest) -> AgentTaskRequest:
