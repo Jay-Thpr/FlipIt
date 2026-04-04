@@ -62,6 +62,9 @@ class RankingAgent(BaseAgent):
             for listing in previous_outputs[step]["results"]
         ]
 
+        if not candidates:
+            raise ValueError("No marketplace listings were found to rank")
+
         ranked_candidates = []
         for listing in candidates:
             score = self.score_listing(listing, budget)

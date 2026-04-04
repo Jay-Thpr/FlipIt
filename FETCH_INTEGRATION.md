@@ -259,6 +259,149 @@ Still needed if these agents move beyond local demo:
 - deploy strategy for running all Fetch agents alongside the backend
 - persistent Browser Use profile strategy where login state matters
 
+## Next Steps To Get Fetch And Browser Use Fully Running
+
+This is the recommended order to get from the current scaffold to a working end-to-end setup.
+
+### Step 1: Keep the product path stable
+
+Do not make ASI:One the main runtime for the mobile app.
+
+The stable path should remain:
+
+- mobile app
+- FastAPI backend
+- backend agents
+- Browser Use where needed
+
+Fetch should remain a parallel agent exposure layer.
+
+### Step 2: Make Browser Use reliable on the backend first
+
+Before scaling Fetch to all agents, validate the browser-backed agents locally from the backend side.
+
+Priority order:
+
+1. `depop_search_agent`
+2. `ebay_search_agent`
+3. `ebay_sold_comps_agent`
+4. `depop_listing_agent`
+5. `negotiation_agent`
+
+For each of those:
+
+- create the necessary logged-in browser profile under `profiles/`
+- confirm the corresponding backend agent uses Browser Use instead of fallback logic
+- confirm the output still matches the existing schema
+
+The Browser Use and fallback outputs must stay contract-compatible so the orchestrator and Fetch bridge can treat them the same way.
+
+### Step 3: Finish one real Fetch agent end to end
+
+Do not try to finish all 10 Fetch agents first.
+
+Start with:
+
+- `depop_search_agent`
+
+Why:
+
+- simple input shape
+- clear result set
+- already aligned with Browser Use search behavior
+- low risk compared with multi-step sell or negotiation flows
+
+Done means:
+
+- agent runs under Python 3.12/3.13
+- mailbox is created successfully
+- Agentverse recognizes the agent
+- ASI:One can send a prompt and receive a usable response
+
+### Step 4: Connect Fetch responses more explicitly to Browser Use execution
+
+Right now the Fetch bridge reuses the backend agent logic, which is correct, but the chat response does not clearly say whether the result came from:
+
+- live Browser Use
+- deterministic fallback
+
+Future improvement:
+
+- add an execution-mode field to the agent outputs
+- include whether Browser Use actually ran
+- include fallback reason if Browser Use was unavailable
+
+That will make judging and debugging much easier.
+
+### Step 5: Strengthen error handling for live platform gaps
+
+When Browser Use is live, empty marketplace results are normal.
+
+The repo now protects the ranking path from crashing on an empty candidate set, but more work is still useful:
+
+- emit a clear no-results summary for search agents
+- allow ranking/negotiation to short-circuit gracefully
+- return a user-friendly response through Fetch when no listings were found
+
+This matters because the live Browser Use path is less predictable than deterministic fallback data.
+
+### Step 6: Decide how Fetch should call the backend logic long term
+
+Current implementation:
+
+- Fetch agents call the local backend agent registry directly
+
+That is fine for now because it keeps behavior aligned.
+
+Long-term options:
+
+1. Keep the current direct-call model
+   - simplest
+   - lowest duplication
+   - good for hackathon speed
+
+2. Route Fetch agents through authenticated internal FastAPI endpoints
+   - closer to the product runtime
+   - better observability
+   - more moving parts
+
+For the hackathon, the current direct-call bridge is the right tradeoff.
+
+### Step 7: Expand to more Fetch agents only after one path is stable
+
+Recommended rollout:
+
+1. `depop_search_agent`
+2. `ebay_search_agent`
+3. `ranking_agent`
+4. `vision_agent`
+5. `pricing_agent`
+6. remaining agents
+
+That sequence gives you:
+
+- one simple search demo
+- multi-search aggregation
+- ranking story
+- sell-side story
+- full multi-agent story
+
+### Step 8: Prepare the submission deliverables
+
+Still needed for the final sponsor story:
+
+- Agentverse URLs for the registered agents
+- ASI:One chat proof
+- per-agent README/profile copy
+- a short explanation of how Browser Use powers real actions while Fetch provides discoverability
+
+The final narrative should be:
+
+- the mobile app is the product
+- FastAPI is the product orchestration layer
+- Browser Use is the real marketplace execution layer
+- Fetch/Agentverse/ASI:One expose the same agents to the sponsor ecosystem
+
 ## Recommended Next Steps
 
 1. Finish mailbox setup for one agent, ideally `depop_search_agent`.

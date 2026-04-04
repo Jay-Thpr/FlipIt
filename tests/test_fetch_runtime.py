@@ -5,6 +5,7 @@ import pytest
 from backend.fetch_runtime import (
     build_buy_input,
     build_sell_input,
+    execute_agent,
     extract_budget,
     extract_urls,
     format_fetch_response,
@@ -52,3 +53,26 @@ def test_format_fetch_response_contains_summary_and_json() -> None:
     )
     assert "Summary: done" in response
     assert '"agent": "vision_agent"' in response
+
+
+@pytest.mark.asyncio
+async def test_execute_agent_raises_for_empty_ranking_candidates() -> None:
+    empty_search_output = {
+        "agent": "search_agent",
+        "display_name": "Search Agent",
+        "summary": "No listings found",
+        "results": [],
+    }
+    with pytest.raises(RuntimeError, match="No marketplace listings were found to rank"):
+        await execute_agent(
+            agent_slug="ranking_agent",
+            pipeline="buy",
+            step="ranking",
+            original_input={"query": "test", "budget": 40},
+            previous_outputs={
+                "depop_search": empty_search_output,
+                "ebay_search": empty_search_output,
+                "mercari_search": empty_search_output,
+                "offerup_search": empty_search_output,
+            },
+        )
