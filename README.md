@@ -31,6 +31,8 @@ For local development, copy `.env.example` to `.env` and set `INTERNAL_API_TOKEN
 - `make compile` byte-compiles backend and tests as a quick build sanity check.
 - `make check` runs tests plus compile checks.
 - `make ci` matches the local CI flow.
+- `./.venv/bin/python -m backend.browser_use_validation --mode dry-run` runs the backend-only Browser Use validation harness without requiring live browser execution.
+- `./.venv/bin/python -m backend.browser_use_validation --mode live --case buy_pipeline` runs a targeted live validation flow against the current environment and warmed profiles.
 
 ## Current API
 
@@ -45,13 +47,8 @@ For local development, copy `.env.example` to `.env` and set `INTERNAL_API_TOKEN
 
 ## Browser Use Deployment Notes
 
-Browser Use-backed agents run inside the FastAPI pipeline and use headed Chromium via `patchright`. Local setup comes from `make install`; Render builds must also run `python -m patchright install chromium` so the browser binary exists before the service starts.
-
-For deployment, use a paid Render plan. Headed Chromium is too heavy for the free tier, and Browser Use tasks routinely need longer timeouts than local deterministic agents. Render should keep `AGENT_EXECUTION_MODE=local_functions`, set `AGENT_TIMEOUT_SECONDS=60`, and provide `GOOGLE_API_KEY` plus `INTERNAL_API_TOKEN` as dashboard-managed secrets.
-
-## Browser Use Deployment Notes
-
 - Browser Use agents run behind the FastAPI task layer and fall back to deterministic logic if Browser Use dependencies, auth profiles, or `GOOGLE_API_KEY` are missing.
 - Render builds must install Chromium with `python -m patchright install chromium`.
 - Headed Chromium needs a paid Render instance for demo reliability; the free tier is not sufficient for live Browser Use runs.
 - Set `INTERNAL_API_TOKEN` and `GOOGLE_API_KEY` in the Render dashboard as secrets instead of committing values into `render.yaml`.
+- Use the validation harness before demos: dry-run mode checks contract stability, and live mode checks real DOM/auth behavior for selected flows.

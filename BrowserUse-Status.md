@@ -8,6 +8,7 @@ Browser Use now runs behind the FastAPI `/task` handlers in the DiamondHacks bac
 
 - Shared Browser Use runtime/config helpers in [backend/agents/browser_use_support.py](/Users/jt/Desktop/diamondhacks/backend/agents/browser_use_support.py)
 - Shared marketplace prompt/result helpers in [backend/agents/browser_use_marketplaces.py](/Users/jt/Desktop/diamondhacks/backend/agents/browser_use_marketplaces.py)
+- Backend-only validation harness in [backend/browser_use_validation.py](/Users/jt/Desktop/diamondhacks/backend/browser_use_validation.py)
 - Live Browser Use with deterministic fallback in:
   - [backend/agents/ebay_sold_comps_agent.py](/Users/jt/Desktop/diamondhacks/backend/agents/ebay_sold_comps_agent.py)
   - [backend/agents/depop_search_agent.py](/Users/jt/Desktop/diamondhacks/backend/agents/depop_search_agent.py)
@@ -26,6 +27,13 @@ Phase gates passed:
 - search agents
 - Depop listing
 - negotiation
+- validation harness
+
+Harness:
+```bash
+./.venv/bin/python -m backend.browser_use_validation --mode dry-run
+./.venv/bin/python -m backend.browser_use_validation --mode live --case buy_pipeline
+```
 
 Full suite:
 ```bash
