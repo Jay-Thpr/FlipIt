@@ -136,3 +136,30 @@ def test_summarize_browser_use_error_handles_empty_and_runtime_errors() -> None:
         )
         == "missing key"
     )
+
+
+def test_classify_browser_use_failure_returns_stable_categories() -> None:
+    assert browser_use_support.classify_browser_use_failure(
+        browser_use_support.BrowserUseRuntimeUnavailable("missing key")
+    ) == "runtime_unavailable"
+    assert browser_use_support.classify_browser_use_failure(RuntimeError("profile login expired")) == "profile_missing"
+    assert browser_use_support.classify_browser_use_failure(RuntimeError("page navigation timeout")) == "navigation"
+    assert browser_use_support.classify_browser_use_failure(RuntimeError("sold page changed")) == "unknown"
+
+
+def test_build_browser_use_metadata_returns_expected_shape() -> None:
+    assert browser_use_support.build_browser_use_metadata(
+        mode="fallback",
+        attempted_live_run=True,
+        profile_name="depop",
+        profile_available=True,
+        error_category="navigation",
+        detail="DOM changed",
+    ) == {
+        "mode": "fallback",
+        "attempted_live_run": True,
+        "profile_name": "depop",
+        "profile_available": True,
+        "error_category": "navigation",
+        "detail": "DOM changed",
+    }

@@ -177,8 +177,14 @@ def test_depop_search_agent_uses_browser_use_results_when_available(monkeypatch)
     assert result["output"]["execution_mode"] == "browser_use"
     assert result["output"]["browser_use_error"] is None
     assert result["output"]["results"] == build_browser_results("depop")
-    assert result["output"]["execution_mode"] == "browser_use"
-    assert result["output"]["browser_use_error"] is None
+    assert result["output"]["browser_use"] == {
+        "mode": "browser_use",
+        "attempted_live_run": True,
+        "profile_name": None,
+        "profile_available": None,
+        "error_category": None,
+        "detail": "Live Browser Use search returned 2 Depop listings.",
+    }
 
 
 def test_ebay_search_agent_falls_back_when_browser_use_unavailable(monkeypatch) -> None:
@@ -210,6 +216,14 @@ def test_ebay_search_agent_falls_back_when_browser_use_unavailable(monkeypatch) 
     assert result["output"]["results"][0]["price"] == 42.53
     assert result["output"]["results"][0]["seller"] == "nike_seller_1"
     assert result["output"]["results"][0]["posted_at"] == "2026-04-03"
+    assert result["output"]["browser_use"] == {
+        "mode": "fallback",
+        "attempted_live_run": False,
+        "profile_name": None,
+        "profile_available": None,
+        "error_category": "runtime_unavailable",
+        "detail": "Used deterministic fallback results for eBay search.",
+    }
 
 
 def test_mercari_search_agent_falls_back_when_browser_use_raises(monkeypatch) -> None:
@@ -243,6 +257,14 @@ def test_mercari_search_agent_falls_back_when_browser_use_raises(monkeypatch) ->
     assert result["output"]["browser_use_error"] == "unknown"
     assert result["output"]["results"][0]["price"] == 43.89
     assert result["output"]["results"][0]["condition"] == "excellent"
+    assert result["output"]["browser_use"] == {
+        "mode": "fallback",
+        "attempted_live_run": True,
+        "profile_name": None,
+        "profile_available": None,
+        "error_category": "unknown",
+        "detail": "Used deterministic fallback results for Mercari search.",
+    }
 
 
 def test_offerup_search_agent_uses_browser_use_results_when_available(monkeypatch) -> None:
@@ -273,8 +295,14 @@ def test_offerup_search_agent_uses_browser_use_results_when_available(monkeypatc
     assert result["output"]["execution_mode"] == "browser_use"
     assert result["output"]["browser_use_error"] is None
     assert result["output"]["results"] == build_browser_results("offerup")
-    assert result["output"]["execution_mode"] == "browser_use"
-    assert result["output"]["browser_use_error"] is None
+    assert result["output"]["browser_use"] == {
+        "mode": "browser_use",
+        "attempted_live_run": True,
+        "profile_name": None,
+        "profile_available": None,
+        "error_category": None,
+        "detail": "Live Browser Use search returned 2 OfferUp listings.",
+    }
 
 
 def test_buy_pipeline_accepts_live_search_results(monkeypatch, client: TestClient) -> None:
@@ -312,3 +340,5 @@ def test_buy_pipeline_accepts_live_search_results(monkeypatch, client: TestClien
     assert ebay_results[0]["price"] < depop_results[0]["price"]
     assert mercari_results[0]["seller"].startswith("nike_")
     assert offerup_results[0]["posted_at"].startswith("2026-")
+    assert result["result"]["outputs"]["depop_search"]["browser_use"]["mode"] == "browser_use"
+    assert result["result"]["outputs"]["ebay_search"]["browser_use"]["mode"] == "fallback"

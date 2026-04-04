@@ -83,6 +83,14 @@ def test_depop_listing_agent_builds_listing_from_real_sell_outputs() -> None:
     assert result["output"]["execution_mode"] == "fallback"
     assert result["output"]["browser_use_error"] == "profile_missing"
     assert result["output"]["form_screenshot_url"] is None
+    assert result["output"]["browser_use"] == {
+        "mode": "skipped",
+        "attempted_live_run": False,
+        "profile_name": "depop",
+        "profile_available": False,
+        "error_category": "profile_missing",
+        "detail": "Skipped live Depop draft creation because the warmed depop profile is missing.",
+    }
 
 
 def test_depop_listing_agent_records_browser_use_confirmation(monkeypatch) -> None:
@@ -120,6 +128,14 @@ def test_depop_listing_agent_records_browser_use_confirmation(monkeypatch) -> No
     assert result["output"]["execution_mode"] == "browser_use"
     assert result["output"]["browser_use_error"] is None
     assert result["output"]["form_screenshot_url"] == "artifact://depop-form-preview"
+    assert result["output"]["browser_use"] == {
+        "mode": "browser_use",
+        "attempted_live_run": True,
+        "profile_name": "depop",
+        "profile_available": True,
+        "error_category": None,
+        "detail": "Live Depop draft creation completed through Browser Use.",
+    }
 
 
 def test_depop_listing_agent_uses_fallback_copy_for_sparse_input(monkeypatch) -> None:
@@ -182,6 +198,14 @@ def test_depop_listing_agent_uses_fallback_copy_for_sparse_input(monkeypatch) ->
     assert result["output"]["execution_mode"] == "fallback"
     assert result["output"]["browser_use_error"] == "profile_missing"
     assert result["output"]["form_screenshot_url"] is None
+    assert result["output"]["browser_use"] == {
+        "mode": "fallback",
+        "attempted_live_run": True,
+        "profile_name": "depop",
+        "profile_available": True,
+        "error_category": "profile_missing",
+        "detail": "Used deterministic fallback listing metadata.",
+    }
 
 
 def test_sell_pipeline_uses_real_depop_listing_output(client: TestClient, monkeypatch) -> None:
@@ -217,6 +241,7 @@ def test_sell_pipeline_uses_real_depop_listing_output(client: TestClient, monkey
     assert listing["execution_mode"] == "browser_use"
     assert listing["browser_use_error"] is None
     assert listing["form_screenshot_url"] == "artifact://sell-pipeline-preview"
+    assert listing["browser_use"]["mode"] == "browser_use"
 
 
 def test_depop_listing_agent_defaults_to_fallback_metadata_without_live_run() -> None:
@@ -244,3 +269,4 @@ def test_depop_listing_agent_defaults_to_fallback_metadata_without_live_run() ->
     assert result["output"]["execution_mode"] == "fallback"
     assert result["output"]["browser_use_error"] == "profile_missing"
     assert result["output"]["form_screenshot_url"] is None
+    assert result["output"]["browser_use"]["mode"] == "skipped"

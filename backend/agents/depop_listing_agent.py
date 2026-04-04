@@ -68,7 +68,7 @@ class DepopListingAgent(BaseAgent):
             f"Estimated profit: ${pricing['expected_profit']}."
         )
 
-        browser_use_result, browser_use_error = await self.try_browser_use_listing(
+        browser_use_result, browser_use_error, profile_available = await self.try_browser_use_listing(
             title=title,
             description=description,
             suggested_price=suggested_price,
@@ -92,7 +92,11 @@ class DepopListingAgent(BaseAgent):
             },
             "execution_mode": "fallback",
             "browser_use_error": browser_use_error,
-            "browser_use": self.build_runtime_metadata(browser_use_result=browser_use_result, browser_use_error=browser_use_error),
+            "browser_use": self.build_runtime_metadata(
+                browser_use_result=browser_use_result,
+                browser_use_error=browser_use_error,
+                profile_available=profile_available,
+            ),
         }
         if browser_use_result is not None:
             output["draft_status"] = browser_use_result["draft_status"]
@@ -136,10 +140,10 @@ class DepopListingAgent(BaseAgent):
         suggested_price: float,
         category_path: str,
         image_urls: list[str],
-    ) -> tuple[dict[str, str | None] | None, str | None]:
+    ) -> tuple[dict[str, str | None] | None, str | None, bool]:
         profile_path = Path(get_browser_profile_path("depop"))
         if not profile_path.exists():
-            return None, "profile_missing"
+            return None, "profile_missing", False
         image_path = self.get_local_image_path(image_urls)
         task = build_depop_listing_task(
             title=title,
@@ -160,9 +164,10 @@ class DepopListingAgent(BaseAgent):
                     max_failures=3,
                 ),
                 None,
+                True,
             )
         except (BrowserUseRuntimeUnavailable, Exception) as exc:
-            return None, classify_browser_use_failure(exc)
+            return None, classify_browser_use_failure(exc), True
 
     def get_local_image_path(self, image_urls: list[str]) -> str | None:
         for candidate in image_urls:
@@ -178,6 +183,7 @@ class DepopListingAgent(BaseAgent):
         *,
         browser_use_result: dict[str, str | None] | None,
         browser_use_error: str | None,
+        profile_available: bool,
     ) -> dict[str, object]:
         if browser_use_result is not None:
             return build_browser_use_metadata(
@@ -187,7 +193,7 @@ class DepopListingAgent(BaseAgent):
                 profile_available=True,
                 detail="Live Depop draft creation completed through Browser Use.",
             )
-        if browser_use_error == "profile_missing":
+        if browser_use_error == "profile_missing" and not profile_available:
             return build_browser_use_metadata(
                 mode="skipped",
                 attempted_live_run=False,
@@ -200,7 +206,7 @@ class DepopListingAgent(BaseAgent):
             mode="fallback",
             attempted_live_run=browser_use_error not in {None, "runtime_unavailable"},
             profile_name="depop",
-            profile_available=True,
+            profile_available=profile_available,
             error_category=browser_use_error,
             detail="Used deterministic fallback listing metadata.",
         )

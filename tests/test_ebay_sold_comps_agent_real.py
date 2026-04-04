@@ -71,6 +71,8 @@ def test_ebay_sold_comps_agent_prices_brand_item_and_condition() -> None:
     assert result["output"]["summary"] == "Estimated 10 sold eBay comps for Carhartt jacket"
     assert result["output"]["execution_mode"] == "fallback"
     assert result["output"]["browser_use_error"] == "runtime_unavailable"
+    assert result["output"]["browser_use"]["mode"] == "fallback"
+    assert result["output"]["browser_use"]["error_category"] == "runtime_unavailable"
 
 
 def test_ebay_sold_comps_agent_uses_unknown_brand_fallback() -> None:
@@ -108,6 +110,7 @@ def test_ebay_sold_comps_agent_uses_unknown_brand_fallback() -> None:
     assert result["output"]["summary"] == "Estimated 16 sold eBay comps for item"
     assert result["output"]["execution_mode"] == "fallback"
     assert result["output"]["browser_use_error"] == "runtime_unavailable"
+    assert result["output"]["browser_use"]["mode"] == "fallback"
 
 
 def test_ebay_sold_comps_agent_records_live_execution_metadata(monkeypatch) -> None:
@@ -150,6 +153,7 @@ def test_ebay_sold_comps_agent_records_live_execution_metadata(monkeypatch) -> N
     assert result["output"]["summary"] == "Extracted 7 sold eBay comps for Patagonia hoodie with Browser Use"
     assert result["output"]["execution_mode"] == "browser_use"
     assert result["output"]["browser_use_error"] is None
+    assert result["output"]["browser_use"]["mode"] == "browser_use"
 
 
 def test_ebay_sold_comps_agent_reports_browser_use_fallback_error(monkeypatch) -> None:
@@ -186,6 +190,7 @@ def test_ebay_sold_comps_agent_reports_browser_use_fallback_error(monkeypatch) -
     assert result["status"] == "completed"
     assert result["output"]["execution_mode"] == "fallback"
     assert result["output"]["browser_use_error"] == "unknown"
+    assert result["output"]["browser_use"]["error_category"] == "unknown"
 
 
 def test_sell_pipeline_uses_real_ebay_sold_comps_output(client: TestClient) -> None:
@@ -213,3 +218,4 @@ def test_sell_pipeline_uses_real_ebay_sold_comps_output(client: TestClient) -> N
     assert sold_comps["summary"] == "Estimated 11 sold eBay comps for Patagonia hoodie"
     assert sold_comps["execution_mode"] == "fallback"
     assert sold_comps["browser_use_error"] == "runtime_unavailable"
+    assert sold_comps["browser_use"]["mode"] == "fallback"
