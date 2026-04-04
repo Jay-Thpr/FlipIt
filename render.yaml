@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: diamondhacks-backend
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: ./start.sh
+    envVars:
+      - key: APP_HOST
+        value: 0.0.0.0
+      - key: APP_PORT
+        value: "10000"
+      - key: APP_BASE_URL
+        value: https://diamondhacks-backend.onrender.com
+      - key: AGENT_EXECUTION_MODE
+        value: local_functions
