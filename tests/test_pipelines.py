@@ -46,6 +46,23 @@ def parse_sse_events(response_text: str) -> list[dict[str, Any]]:
     return events
 
 
+def lifecycle_event_types(events: list[dict[str, Any]]) -> list[str]:
+    return [
+        event["event_type"]
+        for event in events
+        if event["event_type"]
+        in {
+            "pipeline_started",
+            "agent_started",
+            "agent_completed",
+            "agent_error",
+            "agent_retrying",
+            "pipeline_complete",
+            "pipeline_failed",
+        }
+    ]
+
+
 def start_and_collect_events(client: TestClient, endpoint: str, payload: dict[str, Any]) -> tuple[str, list[dict[str, Any]], dict[str, Any]]:
     response = client.post(endpoint, json=payload)
     assert response.status_code == 200
@@ -67,7 +84,7 @@ def test_sell_pipeline_emits_expected_event_order_and_result(client: TestClient)
         },
     )
 
-    assert [event["event_type"] for event in events] == [
+    assert lifecycle_event_types(events) == [
         "pipeline_started",
         "agent_started",
         "agent_completed",
@@ -79,6 +96,10 @@ def test_sell_pipeline_emits_expected_event_order_and_result(client: TestClient)
         "agent_completed",
         "pipeline_complete",
     ]
+    draft_events = [event for event in events if event["event_type"] == "draft_created"]
+    assert [event["event_type"] for event in draft_events] == ["draft_created"]
+    assert draft_events[0]["payload"]["data"]["platform"] == "depop"
+    assert draft_events[0]["payload"]["data"]["draft_status"] == "fallback"
     assert [event["payload"]["step"] for event in events if event["payload"]["step"]] == [
         "vision_analysis",
         "vision_analysis",
@@ -86,6 +107,7 @@ def test_sell_pipeline_emits_expected_event_order_and_result(client: TestClient)
         "ebay_sold_comps",
         "pricing",
         "pricing",
+        "depop_listing",
         "depop_listing",
         "depop_listing",
     ]
@@ -137,7 +159,7 @@ def test_buy_pipeline_emits_expected_event_order_and_result(client: TestClient) 
         },
     )
 
-    assert [event["event_type"] for event in events] == [
+    assert lifecycle_event_types(events) == [
         "pipeline_started",
         "agent_started",
         "agent_completed",
@@ -153,17 +175,35 @@ def test_buy_pipeline_emits_expected_event_order_and_result(client: TestClient) 
         "agent_completed",
         "pipeline_complete",
     ]
+    listing_events = [event for event in events if event["event_type"] == "listing_found"]
+    prepared_offer_events = [event for event in events if event["event_type"] == "offer_prepared"]
+    assert len(listing_events) == 8
+    assert len(prepared_offer_events) == 3
+    assert listing_events[0]["payload"]["data"]["platform"] == "depop"
+    assert listing_events[0]["payload"]["data"]["source"] == "fallback"
+    assert prepared_offer_events[0]["payload"]["data"]["seller"] == "nike_seller_1"
     assert [event["payload"]["step"] for event in events if event["payload"]["step"]] == [
         "depop_search",
         "depop_search",
+        "depop_search",
+        "depop_search",
+        "ebay_search",
+        "ebay_search",
         "ebay_search",
         "ebay_search",
         "mercari_search",
         "mercari_search",
+        "mercari_search",
+        "mercari_search",
+        "offerup_search",
+        "offerup_search",
         "offerup_search",
         "offerup_search",
         "ranking",
         "ranking",
+        "negotiation",
+        "negotiation",
+        "negotiation",
         "negotiation",
         "negotiation",
     ]

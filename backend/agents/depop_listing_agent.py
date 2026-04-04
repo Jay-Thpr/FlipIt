@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from backend.agents.base import BaseAgent, build_agent_app
+from backend.agents.browser_use_events import emit_browser_use_event
 from backend.agents.browser_use_marketplaces import BrowserUseListingDraftResult, build_depop_listing_task
 from backend.agents.browser_use_support import (
     BrowserUseRuntimeUnavailable,
@@ -91,6 +92,22 @@ class DepopListingAgent(BaseAgent):
         if browser_use_result is not None:
             output["draft_status"] = browser_use_result["draft_status"]
             output["form_screenshot_url"] = browser_use_result.get("form_screenshot_url")
+        await emit_browser_use_event(
+            session_id=request.session_id,
+            pipeline=request.pipeline,
+            step=request.step,
+            event_type="draft_created",
+            data={
+                "agent_name": self.slug,
+                "platform": "depop",
+                "title": title,
+                "suggested_price": suggested_price,
+                "category_path": category_path,
+                "draft_status": output["draft_status"],
+                "form_screenshot_url": output.get("form_screenshot_url"),
+                "source": "browser_use" if browser_use_result is not None else "fallback",
+            },
+        )
         return output
 
     async def try_browser_use_listing(

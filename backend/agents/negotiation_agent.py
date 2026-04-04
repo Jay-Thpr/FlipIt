@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from backend.agents.base import BaseAgent, build_agent_app
+from backend.agents.browser_use_events import emit_browser_use_event
 from backend.agents.browser_use_marketplaces import BrowserUseNegotiationResult, build_negotiation_task
 from backend.agents.browser_use_support import BrowserUseRuntimeUnavailable, get_browser_profile_path, run_structured_browser_task
 from backend.schemas import AgentTaskRequest, NegotiationOutput
@@ -62,9 +63,42 @@ class NegotiationAgent(BaseAgent):
         offers = []
         for listing in prioritized_candidates:
             prepared_offer = self.build_prepared_offer(listing=listing, median_price=median_price)
+            await emit_browser_use_event(
+                session_id=request.session_id,
+                pipeline=request.pipeline,
+                step=request.step,
+                event_type="offer_prepared",
+                data={
+                    "agent_name": self.slug,
+                    "platform": prepared_offer["platform"],
+                    "seller": prepared_offer["seller"],
+                    "listing_url": prepared_offer["listing_url"],
+                    "listing_title": prepared_offer["listing_title"],
+                    "target_price": prepared_offer["target_price"],
+                    "source": "deterministic",
+                },
+            )
             live_result = await self.try_send_offer(prepared_offer)
             if live_result is not None:
                 prepared_offer.update(live_result)
+                await emit_browser_use_event(
+                    session_id=request.session_id,
+                    pipeline=request.pipeline,
+                    step=request.step,
+                    event_type="offer_sent" if prepared_offer["status"] == "sent" else "offer_failed",
+                    data={
+                        "agent_name": self.slug,
+                        "platform": prepared_offer["platform"],
+                        "seller": prepared_offer["seller"],
+                        "listing_url": prepared_offer["listing_url"],
+                        "listing_title": prepared_offer["listing_title"],
+                        "target_price": prepared_offer["target_price"],
+                        "status": prepared_offer["status"],
+                        "conversation_url": prepared_offer["conversation_url"],
+                        "failure_reason": prepared_offer["failure_reason"],
+                        "source": "browser_use",
+                    },
+                )
             offers.append(prepared_offer)
 
         processed_statuses = {offer["status"] for offer in offers}
