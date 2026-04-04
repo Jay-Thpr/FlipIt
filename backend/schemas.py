@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Any, Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, TypeAdapter
 
 
 def utc_now_iso() -> str:
@@ -42,7 +42,7 @@ class AgentTaskRequest(BaseModel):
 class AgentTaskResponse(BaseModel):
     session_id: str
     step: str
-    status: Literal["completed", "failed"] = "completed"
+    status: Literal["completed", "failed", "paused"] = "completed"
     output: dict[str, Any] = Field(default_factory=dict)
     error: str | None = None
 
@@ -53,6 +53,8 @@ class EmptyPreviousOutputs(BaseModel):
 
 class SellPipelineInput(BaseModel):
     image_urls: list[str] = Field(default_factory=list)
+    image_base64: str | None = Field(default=None, validation_alias=AliasChoices("image_base64", "image_b64"))
+    image_mime_type: str | None = None
     notes: str | None = None
 
 
@@ -120,6 +122,14 @@ class VisionAnalysisOutput(AgentOutputBase):
     brand: str
     category: str
     condition: str
+    item_name: str | None = None
+    model: str | None = None
+    condition_notes: str | None = None
+    confidence: float | None = None
+    color: str | None = None
+    size_visible: str | None = None
+    search_query: str | None = None
+    clean_photo_url: str | None = None
 
 
 class EbaySoldCompsOutput(AgentOutputBase):
@@ -305,13 +315,18 @@ class SessionEvent(BaseModel):
 class SessionState(BaseModel):
     session_id: str
     pipeline: Literal["sell", "buy"]
-    status: Literal["queued", "running", "completed", "failed"] = "queued"
+    status: Literal["queued", "running", "awaiting_input", "completed", "failed"] = "queued"
     created_at: str = Field(default_factory=utc_now_iso)
     updated_at: str = Field(default_factory=utc_now_iso)
     request: PipelineStartRequest
     result: dict[str, Any] = Field(default_factory=dict)
     error: str | None = None
     events: list[SessionEvent] = Field(default_factory=list)
+
+
+class SellCorrectionRequest(BaseModel):
+    session_id: str
+    corrected_item: dict[str, Any] = Field(default_factory=dict)
 
 
 AGENT_OUTPUT_MODELS = {

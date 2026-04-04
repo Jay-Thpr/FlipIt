@@ -98,7 +98,7 @@ async def test_run_structured_browser_task_returns_validated_output(monkeypatch:
     )
 
     assert result == {"title": "browser ok", "count": 3}
-    assert captured["model"] == "gemini-2.0-flash"
+    assert captured["model"] == "gemini-2.5-flash"
     assert captured["browser_profile"].allowed_domains == ["example.com"]
     assert captured["browser_profile"].user_data_dir == "/tmp/demo"
     assert captured["browser_profile"].keep_alive is True

@@ -63,7 +63,7 @@ def should_force_browser_fallback() -> bool:
 
 
 def get_browser_use_model() -> str:
-    return os.getenv("BROWSER_USE_GEMINI_MODEL", "gemini-2.0-flash")
+    return os.getenv("BROWSER_USE_GEMINI_MODEL", "gemini-2.5-flash")
 
 
 def get_browser_profile_root() -> Path:

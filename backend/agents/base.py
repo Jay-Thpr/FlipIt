@@ -8,6 +8,13 @@ from pydantic import BaseModel, ValidationError
 from backend.schemas import AgentTaskRequest, AgentTaskResponse, validate_agent_task_request
 
 
+class AgentPaused(Exception):
+    def __init__(self, message: str, *, output: dict | None = None) -> None:
+        super().__init__(message)
+        self.message = message
+        self.output = output or {}
+
+
 class BaseAgent(ABC):
     def __init__(self, *, slug: str, display_name: str, output_model: type[BaseModel]) -> None:
         self.slug = slug
@@ -40,6 +47,14 @@ class BaseAgent(ABC):
                 step=request.step,
                 status="failed",
                 error=f"Output validation failed for {self.slug}: {exc}",
+            )
+        except AgentPaused as exc:
+            return AgentTaskResponse(
+                session_id=request.session_id,
+                step=request.step,
+                status="paused",
+                output=exc.output,
+                error=exc.message,
             )
         except Exception as exc:
             return AgentTaskResponse(

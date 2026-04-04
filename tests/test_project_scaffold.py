@@ -37,6 +37,8 @@ def test_env_example_contains_required_runtime_variables() -> None:
         "AGENT_TIMEOUT_SECONDS=",
         "BUY_AGENT_MAX_RETRIES=",
         "GOOGLE_API_KEY=",
+        "GEMINI_IMAGE_MODEL=",
+        "CLEAN_PHOTO_PROVIDER=",
         "ANONYMIZED_TELEMETRY=",
         "BROWSER_USE_GEMINI_MODEL=",
         "BROWSER_USE_PROFILE_ROOT=",
@@ -74,8 +76,9 @@ def test_render_config_matches_backend_runtime_contract() -> None:
     assert env_vars["AGENT_TIMEOUT_SECONDS"]["value"] == "60"
     assert env_vars["BUY_AGENT_MAX_RETRIES"]["value"] == "1"
     assert env_vars["GOOGLE_API_KEY"]["sync"] is False
+    assert env_vars["CLEAN_PHOTO_PROVIDER"]["value"] == "auto"
     assert env_vars["ANONYMIZED_TELEMETRY"]["value"] == "false"
-    assert env_vars["BROWSER_USE_GEMINI_MODEL"]["value"] == "gemini-2.0-flash"
+    assert env_vars["BROWSER_USE_GEMINI_MODEL"]["value"] == "gemini-2.5-flash"
     assert env_vars["BROWSER_USE_MAX_STEPS"]["value"] == "15"
     assert env_vars["BROWSER_USE_FORCE_FALLBACK"]["value"] == "false"
 

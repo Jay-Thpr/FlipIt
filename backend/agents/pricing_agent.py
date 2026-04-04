@@ -32,6 +32,7 @@ class PricingAgent(BaseAgent):
         condition = vision_analysis["condition"]
         brand = vision_analysis["brand"]
         detected_item = vision_analysis["detected_item"]
+        item_name = vision_analysis.get("item_name") or detected_item
         sample_size = sold_comps["sample_size"]
 
         condition_multiplier = self.CONDITION_LISTING_MULTIPLIERS.get(condition, 1.0)
@@ -51,12 +52,10 @@ class PricingAgent(BaseAgent):
             2,
         )
 
-        # Synthesize comp list from summary stats for trend + velocity analysis
+        descriptor = item_name if brand == "Unknown" or item_name.lower().startswith(brand.lower()) else f"{brand} {item_name}"
         synthetic_comps = self._synthesize_comps(sold_comps)
         trend = compute_trend(synthetic_comps)
         velocity = compute_velocity(synthetic_comps)
-
-        descriptor = f"{brand} {detected_item}".strip() if brand != "Unknown" else detected_item
 
         return {
             "agent": self.slug,
@@ -71,12 +70,7 @@ class PricingAgent(BaseAgent):
 
     @staticmethod
     def _synthesize_comps(sold_comps: dict) -> list[dict]:
-        """Build a synthetic comp list from summary stats for trend/velocity.
-
-        Since EbaySoldCompsAgent returns median/low/high/sample_size rather
-        than individual sales, we synthesize a plausible list spread across
-        the last 90 days to give compute_trend and compute_velocity enough data.
-        """
+        """Build a synthetic comp list from summary stats for trend/velocity."""
         now = datetime.now(timezone.utc)
         median_price = sold_comps.get("median_sold_price", 40.0)
         low_price = sold_comps.get("low_sold_price", median_price * 0.7)
@@ -85,14 +79,10 @@ class PricingAgent(BaseAgent):
 
         comps = []
         for i in range(sample_size):
-            # Spread sales across 0–90 days ago
             days_ago = int((i / max(sample_size - 1, 1)) * 85)
             date = (now - timedelta(days=days_ago)).date().isoformat()
-
-            # Simulate slight price increase over time (recent items cost more)
             progress = i / max(sample_size - 1, 1)
             price = round(low_price + (high_price - low_price) * (1 - progress * 0.4), 2)
-
             comps.append({"price": price, "date_sold": date})
 
         return comps
@@ -100,4 +90,3 @@ class PricingAgent(BaseAgent):
 
 agent = PricingAgent()
 app = build_agent_app(agent)
-

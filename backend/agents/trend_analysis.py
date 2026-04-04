@@ -8,20 +8,30 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from statistics import median
 
-from dateutil import parser as dateparser
-
-
 def _parse_date(date_str: str) -> datetime:
     """Best-effort date parsing with fallback to 45 days ago."""
+    fallback = datetime.now(timezone.utc) - timedelta(days=45)
+    if not isinstance(date_str, str) or not date_str.strip():
+        return fallback
+
+    normalized = date_str.strip()
+    if normalized.endswith("Z"):
+        normalized = normalized[:-1] + "+00:00"
+
+    for candidate in (normalized, f"{normalized}T00:00:00+00:00"):
+        try:
+            dt = datetime.fromisoformat(candidate)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt
+        except ValueError:
+            continue
+
     try:
-        dt = dateparser.parse(date_str)
-        if dt is None:
-            return datetime.now(timezone.utc) - timedelta(days=45)
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt
+        dt = datetime.strptime(normalized, "%Y-%m-%d")
+        return dt.replace(tzinfo=timezone.utc)
     except Exception:
-        return datetime.now(timezone.utc) - timedelta(days=45)
+        return fallback
 
 
 def compute_trend(comps: list[dict]) -> dict:

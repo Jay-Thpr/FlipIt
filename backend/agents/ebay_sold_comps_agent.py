@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 from typing import Any
 
 from backend.agents.base import BaseAgent, build_agent_app
@@ -71,12 +72,14 @@ class EbaySoldCompsAgent(BaseAgent):
         detected_item = vision_analysis["detected_item"]
         brand = vision_analysis["brand"]
         condition = vision_analysis["condition"]
-        descriptor = f"{brand} {detected_item}".strip() if brand != "Unknown" else detected_item
+        item_name = vision_analysis.get("item_name") or detected_item
+        descriptor = item_name if brand == "Unknown" or item_name.lower().startswith(brand.lower()) else f"{brand} {item_name}"
 
         browser_use_result, browser_use_error = await self.try_browser_use_research(
             brand=brand,
             detected_item=detected_item,
             condition=condition,
+            search_query=vision_analysis.get("search_query"),
         )
         if browser_use_result is not None:
             sample_size = int(browser_use_result["sample_size"])
@@ -144,10 +147,12 @@ class EbaySoldCompsAgent(BaseAgent):
         brand: str,
         detected_item: str,
         condition: str,
+        search_query: str | None,
     ) -> tuple[dict[str, Any] | None, str | None]:
         from pydantic import BaseModel
 
-        query = "+".join(part for part in (brand, detected_item) if part and part != "Unknown") or detected_item
+        query_text = search_query or " ".join(part for part in (brand, detected_item) if part and part != "Unknown") or detected_item
+        query = "+".join(query_text.split())
         condition_code = {
             "new": "1000",
             "excellent": "1500",
@@ -185,11 +190,11 @@ Return only JSON matching the schema.
         try:
             return (
                 await run_structured_browser_task(
-                task=task,
-                output_model=SoldCompResearch,
-                allowed_domains=["ebay.com", "www.ebay.com"],
-                max_steps=12,
-                max_failures=3,
+                    task=task,
+                    output_model=SoldCompResearch,
+                    allowed_domains=["ebay.com", "www.ebay.com"],
+                    max_steps=12,
+                    max_failures=3,
                 ),
                 None,
             )

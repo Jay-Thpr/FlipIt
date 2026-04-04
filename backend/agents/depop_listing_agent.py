@@ -51,17 +51,28 @@ class DepopListingAgent(BaseAgent):
 
         brand = vision_analysis["brand"]
         detected_item = vision_analysis["detected_item"]
+        item_name = vision_analysis.get("item_name") or detected_item
         condition = vision_analysis["condition"]
+        condition_notes = (vision_analysis.get("condition_notes") or "").strip()
+        color = (vision_analysis.get("color") or "").strip()
+        size_visible = (vision_analysis.get("size_visible") or "").strip()
         notes = (original_input.get("notes") or "").strip()
 
-        descriptor = f"{brand} {detected_item}".strip() if brand != "Unknown" else detected_item.title()
+        if brand == "Unknown":
+            descriptor = item_name.title()
+        elif item_name.lower().startswith(brand.lower()):
+            descriptor = item_name
+        else:
+            descriptor = f"{brand} {item_name}"
         title = f"{descriptor} - {condition.title()} Condition"
         category_path = self.CATEGORY_PATHS.get(detected_item.lower(), "Men/Tops/T-Shirts")
         suggested_price = pricing["recommended_list_price"]
 
         note_sentence = notes if notes else f"Clean {detected_item} ready to list."
+        detail_bits = [detail for detail in (condition_notes, color and f"Color: {color}.", size_visible and f"Visible size: {size_visible}.") if detail]
+        detail_sentence = f"{' '.join(detail_bits)} " if detail_bits else ""
         description = (
-            f"{descriptor} in {condition} condition. {note_sentence} "
+            f"{descriptor} in {condition} condition. {detail_sentence}{note_sentence} "
             f"Suggested list price: ${suggested_price}. "
             f"Recent eBay sold range: ${sold_comps['low_sold_price']}-${sold_comps['high_sold_price']} "
             f"across {sold_comps['sample_size']} comps. "
@@ -74,6 +85,7 @@ class DepopListingAgent(BaseAgent):
             suggested_price=suggested_price,
             category_path=category_path,
             image_urls=original_input.get("image_urls") or [],
+            clean_photo_path=vision_analysis.get("clean_photo_url"),
         )
 
         output = {
@@ -140,11 +152,12 @@ class DepopListingAgent(BaseAgent):
         suggested_price: float,
         category_path: str,
         image_urls: list[str],
+        clean_photo_path: str | None,
     ) -> tuple[dict[str, str | None] | None, str | None, bool]:
         profile_path = Path(get_browser_profile_path("depop"))
         if not profile_path.exists():
             return None, "profile_missing", False
-        image_path = self.get_local_image_path(image_urls)
+        image_path = self.get_local_image_path(image_urls, clean_photo_path=clean_photo_path)
         task = build_depop_listing_task(
             title=title,
             description=description,
@@ -169,7 +182,11 @@ class DepopListingAgent(BaseAgent):
         except (BrowserUseRuntimeUnavailable, Exception) as exc:
             return None, classify_browser_use_failure(exc), True
 
-    def get_local_image_path(self, image_urls: list[str]) -> str | None:
+    def get_local_image_path(self, image_urls: list[str], *, clean_photo_path: str | None = None) -> str | None:
+        if clean_photo_path:
+            clean_path = Path(clean_photo_path)
+            if clean_path.exists():
+                return str(clean_path.resolve())
         for candidate in image_urls:
             if candidate.startswith(("http://", "https://")):
                 continue

@@ -288,12 +288,13 @@ def test_stream_emits_keepalive_ping_before_terminal_event(
             pipeline="sell",
             request=PipelineStartRequest(input={}, metadata={}),
         )
+        queue_holder["queue"] = asyncio.Queue()
 
     import asyncio
 
+    queue_holder: dict[str, asyncio.Queue[SessionEvent]] = {}
     asyncio.run(seed_session())
-
-    queue: asyncio.Queue[SessionEvent] = asyncio.Queue()
+    queue = queue_holder["queue"]
     queue.put_nowait(
         SessionEvent(
             session_id=session_id,

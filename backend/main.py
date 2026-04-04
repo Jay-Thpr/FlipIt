@@ -3,17 +3,17 @@ from __future__ import annotations
 import asyncio
 import json
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
-from backend.config import AGENTS, APP_BASE_URL, INTERNAL_API_TOKEN, get_agent_execution_mode
-from backend.orchestrator import get_pipeline_steps, run_pipeline
+from backend.config import AGENTS, INTERNAL_API_TOKEN, get_agent_execution_mode, get_public_app_base_url
+from backend.orchestrator import get_pipeline_steps, resume_sell_pipeline, run_pipeline
 from backend.schemas import (
-    CorrectionRequest,
     InternalEventRequest,
     PipelineStartRequest,
     PipelineStartResponse,
+    SellCorrectionRequest,
     SessionEvent,
 )
 from backend.session import session_manager
@@ -30,19 +30,31 @@ app.add_middleware(
 KEEPALIVE_INTERVAL = 15.0
 
 
-async def start_session(pipeline: str, request: PipelineStartRequest) -> PipelineStartResponse:
+def get_request_base_url(request: Request) -> str:
+    configured_public_base_url = get_public_app_base_url()
+    if configured_public_base_url:
+        return configured_public_base_url
+    return str(request.base_url).rstrip("/")
+
+
+async def start_session(
+    pipeline: str,
+    request: PipelineStartRequest,
+    http_request: Request,
+) -> PipelineStartResponse:
+    base_url = get_request_base_url(http_request)
     response = PipelineStartResponse(
         pipeline=pipeline,
         status="queued",
-        stream_url=f"{APP_BASE_URL}/stream",
-        result_url=f"{APP_BASE_URL}/result",
+        stream_url=f"{base_url}/stream",
+        result_url=f"{base_url}/result",
     )
     await session_manager.create_session(session_id=response.session_id, pipeline=pipeline, request=request)
     asyncio.create_task(run_pipeline(response.session_id, pipeline, request))
     return response.model_copy(
         update={
-            "stream_url": f"{APP_BASE_URL}/stream/{response.session_id}",
-            "result_url": f"{APP_BASE_URL}/result/{response.session_id}",
+            "stream_url": f"{base_url}/stream/{response.session_id}",
+            "result_url": f"{base_url}/result/{response.session_id}",
         }
     )
 
@@ -75,25 +87,26 @@ async def list_pipelines() -> dict[str, list[dict[str, str]]]:
     return get_pipeline_steps()
 
 
-@app.post("/sell/start")
-async def sell_start(request: PipelineStartRequest) -> PipelineStartResponse:
-    return await start_session("sell", request)
+@app.post("/sell/start", response_model=PipelineStartResponse)
+async def start_sell(request: PipelineStartRequest, http_request: Request) -> PipelineStartResponse:
+    return await start_session("sell", request, http_request)
 
 
-@app.post("/buy/start")
-async def buy_start(request: PipelineStartRequest) -> PipelineStartResponse:
-    return await start_session("buy", request)
+@app.post("/buy/start", response_model=PipelineStartResponse)
+async def start_buy(request: PipelineStartRequest, http_request: Request) -> PipelineStartResponse:
+    return await start_session("buy", request, http_request)
 
 
 @app.post("/sell/correct")
-async def sell_correct(request: CorrectionRequest) -> dict[str, bool]:
-    """Called by frontend when user corrects a low-confidence identification."""
-    from backend.orchestrator import resume_sell_pipeline
-    
+async def sell_correct(request: SellCorrectionRequest) -> dict[str, bool]:
     session = await session_manager.get_session(request.session_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
-        
+    if session.pipeline != "sell":
+        raise HTTPException(status_code=400, detail="Only sell sessions can be corrected")
+    if session.status != "awaiting_input":
+        raise HTTPException(status_code=409, detail="Sell session is not waiting for correction")
+
     asyncio.create_task(resume_sell_pipeline(request.session_id, request.corrected_item))
     return {"ok": True}
 

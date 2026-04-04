@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import tempfile
 import time
+from pathlib import Path
 from typing import Any
 
 import backend.agents.depop_listing_agent as depop_listing_module
@@ -270,3 +272,35 @@ def test_depop_listing_agent_defaults_to_fallback_metadata_without_live_run() ->
     assert result["output"]["browser_use_error"] == "profile_missing"
     assert result["output"]["form_screenshot_url"] is None
     assert result["output"]["browser_use"]["mode"] == "skipped"
+
+
+def test_depop_listing_agent_prefers_clean_photo_path_when_present() -> None:
+    with tempfile.NamedTemporaryFile(suffix=".png") as clean_photo:
+        payload = {
+            "session_id": "depop-listing-clean-photo-session",
+            "pipeline": "sell",
+            "step": "depop_listing",
+            "input": {
+                "original_input": {
+                    "image_urls": ["https://images.example.com/original-photo.jpg"],
+                    "notes": "Patagonia hoodie in excellent condition",
+                },
+                "previous_outputs": {
+                    **build_sell_previous_outputs(),
+                    "vision_analysis": {
+                        **build_sell_previous_outputs()["vision_analysis"],
+                        "clean_photo_url": clean_photo.name,
+                    },
+                },
+            },
+            "context": {},
+        }
+
+        from backend.agents.depop_listing_agent import agent as depop_listing_agent
+
+        selected = depop_listing_agent.get_local_image_path(
+            payload["input"]["original_input"]["image_urls"],
+            clean_photo_path=payload["input"]["previous_outputs"]["vision_analysis"]["clean_photo_url"],
+        )
+
+        assert selected == str(Path(clean_photo.name).resolve())

@@ -1,6 +1,6 @@
 # Backend Scaffold
 
-This scaffold gives the team a stable local contract before Browser Use, Gemini, and Fetch.ai integration work lands.
+This backend gives the team a stable local contract for the resale demo, including Gemini-backed sell-side image analysis and Browser Use marketplace automation.
 
 ## Current Endpoints
 
@@ -8,6 +8,7 @@ This scaffold gives the team a stable local contract before Browser Use, Gemini,
 - `GET /agents`
 - `GET /pipelines`
 - `POST /sell/start`
+- `POST /sell/correct`
 - `POST /buy/start`
 - `GET /stream/{session_id}`
 - `GET /result/{session_id}`
@@ -16,6 +17,9 @@ This scaffold gives the team a stable local contract before Browser Use, Gemini,
 ## Current Behavior
 
 - Sessions are stored in memory only.
+- `POST /sell/start` accepts image URLs or inline base64 payloads and runs Gemini image analysis when `GEMINI_API_KEY` or `GOOGLE_API_KEY` is configured.
+- The vision step can also generate a cleaned resale photo through Gemini image generation and stores the resulting local file path in `vision_analysis.clean_photo_url`.
+- Sell sessions pause in `awaiting_input` with a `vision_low_confidence` event when Gemini confidence is below `VISION_LOW_CONFIDENCE_THRESHOLD`, and `POST /sell/correct` resumes the same session.
 - Pipelines run in the background; Browser Use-capable agents attempt live browser execution first and fall back to deterministic local logic when the Browser Use runtime or warmed profiles are unavailable.
 - Each agent input is validated against a step-specific schema before the orchestrator calls that step.
 - Each agent output is validated against a step-specific schema before it is emitted to SSE or saved in `/result`.
@@ -29,6 +33,16 @@ This scaffold gives the team a stable local contract before Browser Use, Gemini,
 - [supabase/README.md](../supabase/README.md) documents the intended persistence model.
 - [supabase/migrations/20260404145000_init_session_persistence.sql](../supabase/migrations/20260404145000_init_session_persistence.sql) creates the initial session, event, and result tables.
 - [supabase_repo.py](supabase_repo.py) contains the repository layer for future durable session storage integration.
+
+## Frontend Connectivity
+
+- `APP_BASE_URL` is the backend address agents use for internal callbacks.
+- `PUBLIC_APP_BASE_URL` is the frontend-facing address returned in `stream_url` and `result_url`.
+- `GEMINI_MODEL` controls image-to-product analysis and defaults to `gemini-2.5-flash`.
+- `GEMINI_IMAGE_MODEL` controls clean-photo generation and defaults to `gemini-3.1-flash-image-preview`.
+- `CLEAN_PHOTO_PROVIDER` accepts `auto`, `gemini`, or `nano_banana` and lets you force the clean-photo step through a mock or external Nano Banana-style service.
+- For local Expo Go testing, keep `APP_BASE_URL=http://127.0.0.1:8000` and set `PUBLIC_APP_BASE_URL=http://<your-lan-ip>:8000`.
+- On Render, set both values to the deployed HTTPS URL.
 
 ## Browser Use Validation Harness
 

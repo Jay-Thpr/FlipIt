@@ -159,9 +159,12 @@ async def test_pipeline_passes_accumulated_outputs_to_each_step(monkeypatch: pyt
         "pricing",
         "depop_listing",
     ]
-    assert captured_requests[0].input == {
-        "original_input": {"image_urls": ["https://example.com/item.jpg"], "notes": None},
-        "previous_outputs": {},
+    assert captured_requests[0].input["previous_outputs"] == {}
+    assert captured_requests[0].input["original_input"] == {
+        "image_urls": ["https://example.com/item.jpg"],
+        "image_base64": None,
+        "image_mime_type": None,
+        "notes": None,
     }
     assert captured_requests[1].input["previous_outputs"] == {
         "vision_analysis": valid_outputs["vision_agent"],
