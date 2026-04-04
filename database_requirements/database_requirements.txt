@@ -2,6 +2,7 @@ Database Requirements
 
 Current requirement:
 - No database is needed for the hackathon build.
+- The current FastAPI plan can still run entirely in memory for the shortest demo path.
 
 Planned storage model:
 - Store active SSE session queues in memory.
@@ -19,8 +20,38 @@ Known limitations:
 - Any process restart drops active sessions and stored results.
 - This is acceptable for the current hackathon scope.
 
-If persistence is added later, the database would need to support:
+If persistence is added, the preferred path is Supabase used as managed Postgres while keeping FastAPI for orchestration and SSE.
+
+Supabase persistence goals:
 - session metadata
 - final pipeline results
-- optional event logs / audit history
+- event logs / audit history
 - retry-safe writes keyed by `session_id`
+- lightweight querying by mode, status, and creation time
+
+Recommended data model:
+- `public.pipeline_sessions`
+  - one row per SELL or BUY run
+  - keyed by `session_id`
+  - stores mode, status, input payload, timestamps, and error summary
+- `public.pipeline_session_events`
+  - append-only event log for `pipeline_started`, `agent_started`, `agent_completed`, `agent_error`, `agent_log`, `pipeline_complete`, etc.
+  - linked to `session_id`
+  - optional `dedupe_key` for retry-safe event writes
+- `public.pipeline_session_results`
+  - one row per session
+  - stores final result payload returned by `GET /result/{session_id}`
+
+Endpoint-to-database mapping:
+- `POST /sell/start` or `POST /buy/start`
+  - create `pipeline_sessions` row with `status = 'running'`
+- `POST /internal/event/{session_id}`
+  - insert into `pipeline_session_events`
+- `POST /internal/result/{session_id}`
+  - upsert into `pipeline_session_results`
+- `GET /result/{session_id}`
+  - read from `pipeline_session_results`
+
+Implementation note:
+- Keep live SSE queues in memory even after adding Supabase.
+- Use Supabase for durability and recovery, not as a replacement for the existing SSE contract.
