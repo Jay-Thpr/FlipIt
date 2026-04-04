@@ -44,7 +44,7 @@ The code examples in this guide show Browser Use patterns, but the **actual repo
 - Step names and pipeline wiring come from `backend.schemas.AGENT_INPUT_CONTRACTS`; do not invent new step names or rename fields ad hoc.
 - Keep Browser Use logic behind the `/task` handler for now. The Fetch.ai Chat Protocol wrapper is still scaffold-level in this repo, so Browser Use work should not depend on direct uAgent message handling yet.
 - Audit live runtime prerequisites with `./.venv/bin/python -m backend.browser_use_runtime_audit`.
-- Validate agent and pipeline behavior with `./.venv/bin/python -m backend.browser_use_validation --mode dry-run` before running targeted live cases.
+- Validate agent and pipeline behavior with `python scripts/browser_use_validation.py --group pipeline` before running targeted live cases.
 
 Current orchestrator events use underscore names such as:
 - `pipeline_started`
