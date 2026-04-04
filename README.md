@@ -33,6 +33,7 @@ For local development, copy `.env.example` to `.env` and set `INTERNAL_API_TOKEN
 - `make ci` matches the local CI flow.
 - `./.venv/bin/python -m backend.browser_use_validation --mode dry-run` runs the backend-only Browser Use validation harness without requiring live browser execution.
 - `./.venv/bin/python -m backend.browser_use_validation --mode live --case buy_pipeline` runs a targeted live validation flow against the current environment and warmed profiles.
+- `./.venv/bin/python -m backend.browser_use_runtime_audit` audits Chromium, env vars, profile directories, and runtime settings before live Browser Use runs.
 
 ## Current API
 
