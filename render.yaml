@@ -2,7 +2,9 @@ services:
   - type: web
     name: diamondhacks-backend
     runtime: python
-    buildCommand: pip install -r requirements.txt
+    buildCommand: >
+      pip install -r requirements.txt &&
+      python -m patchright install chromium
     startCommand: ./start.sh
     envVars:
       - key: APP_HOST
@@ -13,3 +15,19 @@ services:
         value: https://diamondhacks-backend.onrender.com
       - key: AGENT_EXECUTION_MODE
         value: local_functions
+      - key: INTERNAL_API_TOKEN
+        sync: false
+      - key: AGENT_TIMEOUT_SECONDS
+        value: "60"
+      - key: BUY_AGENT_MAX_RETRIES
+        value: "1"
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: ANONYMIZED_TELEMETRY
+        value: "false"
+      - key: BROWSER_USE_GEMINI_MODEL
+        value: gemini-2.0-flash
+      - key: BROWSER_USE_MAX_STEPS
+        value: "15"
+      - key: BROWSER_USE_FORCE_FALLBACK
+        value: "false"
