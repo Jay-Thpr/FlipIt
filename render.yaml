@@ -31,3 +31,9 @@ services:
         value: "15"
       - key: BROWSER_USE_FORCE_FALLBACK
         value: "false"
+      - key: BROWSER_USE_PROFILE_ROOT
+        value: profiles
+      - key: EBAY_APP_ID
+        sync: false
+      - key: EBAY_CERT_ID
+        sync: false
