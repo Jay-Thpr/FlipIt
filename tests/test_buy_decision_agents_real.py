@@ -394,8 +394,8 @@ def test_negotiation_agent_records_failed_live_send_without_breaking_batch(monke
     assert result["output"]["offers"][1]["status"] == "failed"
     assert result["output"]["offers"][1]["failure_reason"] == "offer form changed"
     assert result["output"]["offers"][1]["execution_mode"] == "browser_use"
-    assert result["output"]["offers"][1]["browser_use_error"] == "unknown"
-    assert result["output"]["offers"][1]["failure_category"] == "unknown"
+    assert result["output"]["offers"][1]["browser_use_error"] == "browser_error"
+    assert result["output"]["offers"][1]["failure_category"] == "browser_error"
     assert result["output"]["offers"][2]["status"] == "sent"
     assert result["output"]["offers"][2]["execution_mode"] == "browser_use"
     assert result["output"]["offers"][2]["browser_use_error"] is None

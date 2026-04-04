@@ -143,8 +143,8 @@ def test_classify_browser_use_failure_returns_stable_categories() -> None:
         browser_use_support.BrowserUseRuntimeUnavailable("missing key")
     ) == "runtime_unavailable"
     assert browser_use_support.classify_browser_use_failure(RuntimeError("profile login expired")) == "profile_missing"
-    assert browser_use_support.classify_browser_use_failure(RuntimeError("page navigation timeout")) == "navigation"
-    assert browser_use_support.classify_browser_use_failure(RuntimeError("sold page changed")) == "unknown"
+    assert browser_use_support.classify_browser_use_failure(RuntimeError("page navigation timeout")) == "browser_error"
+    assert browser_use_support.classify_browser_use_failure(RuntimeError("sold page changed")) == "browser_error"
 
 
 def test_build_browser_use_metadata_returns_expected_shape() -> None:

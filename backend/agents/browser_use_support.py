@@ -24,14 +24,12 @@ def classify_browser_use_failure(exc: Exception) -> str:
     if isinstance(exc, BrowserUseRuntimeUnavailable):
         return "runtime_unavailable"
     if isinstance(exc, (BrowserUseTaskExecutionError, ValidationError, ValueError)):
-        return "validation"
+        return "result_invalid"
 
     message = str(exc).lower()
-    if "profile" in message or "login" in message or "session" in message:
+    if "profile" in message:
         return "profile_missing"
-    if "timeout" in message or "timed out" in message or "navigation" in message:
-        return "navigation"
-    return "unknown"
+    return "browser_error"
 
 
 def build_browser_use_metadata(

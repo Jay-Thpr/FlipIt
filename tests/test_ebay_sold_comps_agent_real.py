@@ -189,8 +189,8 @@ def test_ebay_sold_comps_agent_reports_browser_use_fallback_error(monkeypatch) -
     result = response.json()
     assert result["status"] == "completed"
     assert result["output"]["execution_mode"] == "fallback"
-    assert result["output"]["browser_use_error"] == "unknown"
-    assert result["output"]["browser_use"]["error_category"] == "unknown"
+    assert result["output"]["browser_use_error"] == "browser_error"
+    assert result["output"]["browser_use"]["error_category"] == "browser_error"
 
 
 def test_sell_pipeline_uses_real_ebay_sold_comps_output(client: TestClient) -> None:
