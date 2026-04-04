@@ -1,15 +1,19 @@
-# UI Requirements
+# UI Requirements — AgentMarket Frontend
+
+Last updated: 2026-04-04
+
+---
 
 ## Overview
 
-A mobile marketplace agent app where users set up automated buy/sell agents across multiple platforms. The UI is dark-mode-first, professional, and data-forward — purpose-built for a power user who wants to monitor and manage deals at a glance.
+A mobile marketplace agent app where users set up automated buy/sell agents across multiple platforms. The UI is professional and data-forward — purpose-built for a power user who wants to monitor and manage deals at a glance.
 
 ---
 
 ## Design System
 
 ### Theme
-The app uses a **dynamic theme system** (`contexts/ThemeContext.tsx`) with three modes: **Dark** (default), **Light**, and **System**. Dark mode is the primary design target.
+The app uses a **dynamic theme system** (`contexts/ThemeContext.tsx`) with three modes: **Light**, **Dark**, and **System**. Default is **System** (follows device setting).
 
 ### Style
 **Dark professional** — neutral zinc palette with violet accent, high contrast, clean typography. Feels closer to Linear or a trading terminal than a consumer marketplace.
@@ -18,7 +22,7 @@ The app uses a **dynamic theme system** (`contexts/ThemeContext.tsx`) with three
 
 Two full token sets are defined: `DarkColors` and `LightColors`. Components consume colors via `useTheme().colors`.
 
-#### Dark Mode (default)
+#### Dark Mode
 | Token | Value | Usage |
 |-------|-------|-------|
 | `primary` | `#8B5CF6` | Primary actions, active accents, brand |
@@ -29,7 +33,6 @@ Two full token sets are defined: `DarkColors` and `LightColors`. Components cons
 | `background` | `#09090B` | Page background (zinc-950) |
 | `surface` | `#18181B` | Cards, elevated surfaces (zinc-900) |
 | `surfaceRaised` | `#27272A` | Pressed/active surface state |
-| `foreground` | `#FAFAFA` | Primary text |
 | `muted` | `#27272A` | Subtle fills, icon backgrounds |
 | `border` | `#3F3F46` | Dividers, card borders (zinc-700) |
 | `destructive` | `#EF4444` | Errors, destructive actions |
@@ -43,20 +46,20 @@ Two full token sets are defined: `DarkColors` and `LightColors`. Components cons
 |-------|-------|-------|
 | `primary` | `#7C3AED` | — |
 | `accent` | `#16A34A` | — |
-| `background` | `#F4F4F5` | Neutral off-white (not lavender) |
+| `background` | `#F4F4F5` | Neutral off-white |
 | `surface` | `#FFFFFF` | — |
-| `textPrimary` | `#18181B` | Dark gray, not purple |
+| `textPrimary` | `#18181B` | Dark gray |
 | `textMuted` | `#A1A1AA` | — |
 | `statusBarStyle` | `dark` | — |
 
 ### Typography
 **Font:** Inter (system default, all weights via React Native)
-- App name / display: Inter 800, 24px, letterSpacing -0.5
+- App name: Inter 800, 24px, letterSpacing -0.5
 - Section headers: Inter 700, 18px, letterSpacing -0.3
-- Card item name: Inter 700, 13px (overlay), 14px (list)
-- Price: Inter 800, 15px, letterSpacing -0.3
+- Card item name: Inter 700, 13px (overlay)
+- Price / offer: Inter 800, 15px, letterSpacing -0.3
 - Labels/captions: Inter 600, 11–13px
-- Section labels (uppercase): Inter 700, 11px, letterSpacing 0.8
+- Section labels (uppercase): Inter 600, 11px, letterSpacing 0.8
 
 ### Spacing
 Strict 4/8pt system. Common values: 4, 8, 10, 12, 14, 16, 20, 24, 32, 48.
@@ -64,7 +67,7 @@ Strict 4/8pt system. Common values: 4, 8, 10, 12, 14, 16, 20, 24, 32, 48.
 ### Icons
 Lucide (`lucide-react-native`) throughout. No emojis as icons. Standard size: 18–22pt. Small: 14–16pt. All icon-only buttons use `hitSlop` for 44×44pt touch targets.
 
-### Platform Badges
+### Platform Colors
 Two color configs per platform (dark + light). Dark mode uses deep tinted backgrounds with lighter text. Light mode uses pastel backgrounds.
 
 | Platform | Dark text | Dark bg | Light text | Light bg |
@@ -75,16 +78,13 @@ Two color configs per platform (dark + light). Dark mode uses deep tinted backgr
 | OfferUp | `#FBBF24` | `#3D2000` | `#D97706` | `#FEF3C7` |
 | Facebook | `#60A5FA` | `#0F1E3D` | `#1877F2` | `#EFF6FF` |
 
-### Status Badges
-Theme-aware, always inline pill shape.
+### Status Badges (theme-aware pill shape)
 
 | Status | Dark bg | Dark text | Light bg | Light text |
 |--------|---------|-----------|----------|------------|
 | Active | `#052E16` | `#4ADE80` | `#DCFCE7` | `#15803D` |
 | Paused | `#27272A` | `#A1A1AA` | `#F4F4F5` | `#71717A` |
 | Archived | `#450A0A` | `#F87171` | `#FEE2E2` | `#DC2626` |
-
-On image cards (where the badge sits over a colored background), use a `rgba(0,0,0,0.45)` pill with a colored dot + white text — not the surface-aware badge.
 
 ---
 
@@ -97,98 +97,76 @@ On image cards (where the badge sits over a colored background), use a `rgba(0,0
 The main dashboard. Gives the user an immediate read on all active buying and selling agents.
 
 #### Header Bar
-- `AgentMarket` brand name (primary color, Inter 800, 24px) + subtitle on the left
-- Settings icon button (40×40, `surface` bg, `border` border, 12px radius) on the right → navigates to Settings
+- Left: `AgentMarket` brand name (primary color, Inter 800, 24px) + "X / 10 Agents in Use" counter pill below it
+- Right: Circular avatar button (40×40, primary bg, initials "SS") → tapping opens a profile dropdown modal
+
+**No subtitle** under the app name.
+
+#### Profile Dropdown Modal (semi-transparent overlay, top-right)
+- User avatar + name + email row
+- "Settings" menu item → navigates to `/settings`
+- Divider
+- "Sign Out" (destructive red)
 
 #### Layout
-Two stacked sections: **Selling** (top) and **Buying** (bottom), each with a horizontal card carousel.
-
-#### Section Header
-Per section:
-- Section title (Inter 700, 18px) + active count pill (`"N active"` with green dot) on the left
-- Total agent count label (`"N agents"`) on the right
-- No divider between sections — 24px top padding separates them
-
-#### Item Card Carousel (`components/ItemCard.tsx`)
-Horizontal `ScrollView` with `snapToInterval` per section. Card width = 44% of screen width (~2.3 cards visible). Cards snap to start alignment.
-
-Each card:
-- **Width**: 44% of screen width. **Height**: `width / 0.68` (portrait aspect ratio).
-- **Background**: `item.imageColor` (colored placeholder; swap for `<Image>` when real images are available)
-- **Watermark**: Large initial letter centered, `rgba(255,255,255,0.12)`, 120px, weight 900 — gives depth to placeholder
-- **Status pill** (top-right, always visible over any image color):
-  - `rgba(0,0,0,0.45)` background
-  - Colored dot (`#4ADE80` active / `#A1A1AA` paused / `#F87171` archived)
-  - White label text, 11px
-- **Unread badge** (top-left): 9×9 purple dot when the item has unread conversations
-- **Bottom overlay**: `rgba(0,0,0,0.62)` solid overlay containing:
-  - Item name — white, Inter 700, 13px, max 2 lines
-  - Price / price range — white, Inter 800, 15px
-  - Row of `PlatformBadge` components (max 3 shown, `+N` overflow label)
-- **Border radius**: 16px
-- **Pressed state**: `activeOpacity={0.88}`
-- Tapping navigates to Item Detail page
-
-#### Add New Card (`components/AddNewCard.tsx`)
-- Same dimensions as item cards (same `cardWidth / 0.68` height formula)
-- `surface` background, dashed `border` border, 16px radius
-- Centered: circle icon button (48×48) with `+` icon, "Add New" label, "Set up an agent" hint
-- Always the last card in each section's carousel
-
-#### Empty State
-If a section has no items, the carousel contains only the Add New card.
+Two stacked sections: **Selling** (top) and **Buying** (bottom), each with:
+- Section title (Inter 700, 18px) + active count pill (text only, **no dot**) on the left
+- Total agent count label on the right
+- Horizontal scrollable carousel of `ItemCard` components
+- `AddNewCard` button pinned **below** the carousel (full-width, outside scroll, always visible)
 
 ---
 
 ### 2. Item Detail Page (`app/item/[id].tsx`)
 
-Opened by tapping any item card. Full context on one item.
+Opened by tapping any item card.
 
 #### Header Bar
-- Back arrow (38×38 button, `surface` bg, `border` border, 10px radius) → returns to Home
-- Item name as title (truncated, Inter 700, 16px, `textPrimary`)
-- `StatusBadge` (size `md`) on the right
+- Back arrow — **bare, no box or border** (36×36 touch area, no background)
+- Item name as title (Inter 700, 16px, truncated)
+- `StatusBadge` on the right
 
 #### Hero Image
-Full-width colored block, 200px tall, `item.imageColor` background, giant watermark initial (72px, white 75% opacity). Replace with `<Image>` when real images are available.
+Full-width colored block, 200px tall, `item.imageColor` background, giant watermark initial.
 
 #### Section: Overview
-Card body (`surface` bg, `border` border, 14px radius) containing:
-- Item name (Inter 700, 18px)
-- Description (14px, `textSecondary`, lineHeight 20)
-- Row of `MetaChip` components: Condition, Qty, Mode (Buy/Sell)
+Uppercase section label + card body containing:
+- Description, Condition, Quantity, Mode (label / value rows)
+- **Best Current Offer** (highlighted in primary color) — shown only if `item.bestOffer` exists
+- **Item name is NOT repeated** here (already shown in header)
 
 #### Section: Settings
-Card body with labeled rows (label left, value/control right), separated by `border` dividers.
+Uppercase section label + card body:
 
 | Row | Control |
 |-----|---------|
+| **AI Agent Active** | Live `Switch` (at top) |
 | Target Price | Static value |
 | Min Acceptable | Static value (if set) |
 | Max Acceptable | Static value (if set) |
 | Auto-Accept Below | Static value (if set) |
 | Negotiation Style | Static value |
 | Reply Tone | Static value |
-| Active Platforms | Comma-separated text |
-| Auto-Relist | Live `Switch` component |
+| Active Platforms | Comma-separated company names (e.g. "eBay, Depop") |
+
+**No "Auto-Relist" row.**
 
 #### Section: Market Overview
 Horizontal `ScrollView` of market cards. Each card (`surface` bg, `border` border, 12px radius):
-- `PlatformBadge` (size `md`)
-- Current price (Inter 800, 22px, `textPrimary`)
-- Trend row: `TrendingUp`/`TrendingDown` icon + `%` change (colored `accent` or `destructive`)
-- Volume label (11px, `textMuted`)
+- **Platform name** (company name, e.g. "eBay") — no custom badge widget
+- **Buy price** + **Sell price** side by side with a vertical divider
+- **Volume** — "N listings"
+- No trend percentage indicators
 
 #### Section: Active Conversations
-Card body with conversation rows separated by `border` dividers.
+Card body with conversation rows:
+- Username (bold) + platform name as text (muted)
+- Last message preview: **white/primary color** when unread, **grayed** when read — **no dot indicator**
+- Timestamp + chevron
 
-Each row:
-- `PlatformBadge` (size `md`)
-- Username (Inter 600, 14px) + purple unread dot if `conv.unread`
-- Last message preview (1 line, `textMuted`)
-- Timestamp + chevron (right side)
-
-Tapping → Chat Log page. Empty state: centered muted text.
+#### Archive Listing (bottom)
+- Outlined destructive button: "Archive Listing"
+- Tapping triggers `Alert.alert` confirmation before archiving
 
 ---
 
@@ -197,76 +175,140 @@ Tapping → Chat Log page. Empty state: centered muted text.
 Read-only conversation view.
 
 #### Header Bar
-- Back arrow → Item Detail
-- Two-line center: item name (Inter 700, 15px) + `PlatformBadge` + `@username`
-- Background: `surface`, bottom border
+- Back arrow — **bare, no box** (same pattern as item detail)
+- Center: `@username` (bold, 15px) + item name (muted subtitle, 12px)
+- Right: Platform company name as plain text (e.g. "Depop") — **no platform badge widget**
 
-#### Info Banner
-Slim `muted` banner below header: `"Log view only — all messages sent by your agent"` (centered, 11px, `textMuted`)
+**No info banner** below the header ("Log view only" banner has been removed).
 
 #### Message List (`FlatList`)
-- Padding 16px horizontal and vertical
-- Agent bubbles: right-aligned, `primary` background, `onPrimary` text, `borderBottomRightRadius: 4`
-- Counterparty bubbles: left-aligned, `surface` background with `border`, `textPrimary` text, `borderBottomLeftRadius: 4`
-- All bubbles: 16px radius, 14px text, lineHeight 20
+- Agent bubbles: right-aligned, `primary` background, `onPrimary` text
+- Counterparty bubbles: left-aligned, `surface` background with `border`
 - Timestamp below each bubble (`textMuted`, 11px)
-- Empty state: centered muted text
 
 ---
 
 ### 4. Settings Page (`app/settings.tsx`)
 
-App-wide settings, fully wired to the global theme context.
-
-Navigation: gear icon on Home → Settings (Stack navigator with custom header using `background` color).
+Navigation: avatar menu on Home → Settings (Stack navigator, back button labeled "Back").
 
 #### Appearance
-Segmented theme picker (Light / Dark / System). **Selecting a theme immediately updates the entire app** via `ThemeContext.setTheme()`. Active option shows `surfaceRaised` bg + `primary` border + primary-colored label/icon. Default: **Dark**.
+Segmented theme picker (Light / Dark / System). Default: **System**. Active option shows `surfaceRaised` bg + `primary` border.
 
 #### Account
-Three rows in a card: Display Name, Email, Profile Photo. Each row: icon in `muted` rounded square + label + value + chevron.
+Three rows: Display Name, Email, Profile Photo (icon + label + value + chevron).
 
-#### Connected Platforms
-One row per platform. Each row:
-- Colored icon square (theme-aware: dark bg in dark mode)
-- Platform name + username or "Not connected"
-- API status dot (green = valid, red = expired/missing)
-- Connected badge (`rgba` green pill) or Connect badge (`muted` pill with border)
+#### Platforms (formerly "Connected Platforms")
+One row per platform:
+- Colored icon square (theme-aware)
+- Platform name + username (if connected), or "Not connected"
+- **No colored dots next to username**
+- Status: "Connected" (green text, no wifi icon) or "Connect" (gray outlined text badge)
 
-#### Agent Behavior
+#### Default Agent Behavior (formerly "Agent Behavior")
+**No subtitle/subtext under the section title.**
 - Auto-Reply toggle
-- Response Delay row (tappable, value shown)
-- Negotiation Style segmented control (Aggressive / Moderate / Passive) — `muted` track, `surface` active pill
+- Response Delay row
+- Negotiation Style — **stacked layout**: label row above, full-width segmented selector below (prevents overflow)
 
 #### Notifications
-Four toggle rows with Lucide icons: New Message, Price Drop, Deal Closed, Listing Expired.
+Four toggle rows: New Message, Price Drop, Deal Closed, Listing Expired.
 
 #### Usage
-2×2 grid of stat tiles (`surface` bg, `border` border, 14px radius). Each tile: large number (Inter 800, 28px, `primary`) + label (12px, `textMuted`).
+2×2 grid inside a `SectionCard` (same visual treatment as other sections):
+- Active Listings, Messages This Month, Deals Closed, API Usage
+- Each tile: large number (Inter 800, 28px, `primary`) + label
 
 ---
 
-## Component Map
+## Components
 
-| Component | File | Notes |
-|-----------|------|-------|
-| `ItemCard` | `components/ItemCard.tsx` | Image card with overlay. Prop: `item`, `cardWidth`, `onPress` |
-| `AddNewCard` | `components/AddNewCard.tsx` | Matches ItemCard dimensions. Prop: `cardWidth`, `onPress` |
-| `StatusBadge` | `components/StatusBadge.tsx` | Theme-aware. Prop: `status`, `size` (`sm`\|`md`) |
-| `PlatformBadge` | `components/PlatformBadge.tsx` | Theme-aware. Prop: `platform`, `size` (`sm`\|`md`) |
-| `ThemeProvider` | `contexts/ThemeContext.tsx` | Wraps entire app in `_layout.tsx`. Exposes `useTheme()` |
+### `ItemCard` (`components/ItemCard.tsx`)
+- Colored background with watermark initial letter
+- **Top-left**: Status text label — "Active" (green `#4ADE80`) or "Paused" (gray `#A1A1AA`) — **text only, no dot**
+- **Bottom overlay** (`rgba(0,0,0,0.62)`): Item name + best offer (`$X` or "Finding..." if no `bestOffer`)
+- **No platform badges, no unread dot, no price range display**
+
+### `AddNewCard` (`components/AddNewCard.tsx`)
+- Rendered **outside** the horizontal carousel, below it, full-width
+- Always visible regardless of how many items exist in a section
+
+### `StatusBadge` (`components/StatusBadge.tsx`)
+- Theme-aware pill. Used in item detail header.
+
+### `PlatformBadge` (`components/PlatformBadge.tsx`)
+- Still defined but **not used** in conversations or chat headers (replaced by plain company name text)
 
 ---
 
-## General UX Rules
+## Data Model (`data/mockData.ts`)
 
-- **Back navigation** always restores the previous scroll position.
-- **Dark mode default**: app opens in dark mode; user can switch in Settings > Appearance.
-- **Theme propagation**: all color values come from `useTheme().colors` — no hardcoded hex values in components.
-- **Image placeholders**: all item "images" are currently `item.imageColor` colored views with a watermark initial. Replace `backgroundColor` with `<Image source={{ uri: item.imageUrl }} />` when backend provides URLs.
-- **Destructive actions** require a confirmation dialog. Use `destructive` color for the confirm button.
-- **Empty states** include explanation + action (Add New card or helper text).
-- **All interactive elements** have a visible pressed state (`activeOpacity` or `Switch` feedback). Transitions: 150–300ms ease-out.
-- **Touch targets**: minimum 44×44pt via `hitSlop` where visual size is smaller.
-- **Safe areas**: `SafeAreaView` with `edges` prop on every screen. No interactive UI behind notch, status bar, or gesture bar.
-- **Contrast**: `textPrimary` ≥4.5:1, `textSecondary`/`textMuted` ≥3:1, verified in both light and dark modes.
+### `Item`
+```ts
+interface Item {
+  id: string;
+  type: 'buy' | 'sell';
+  name: string;
+  description: string;
+  condition: string;
+  imageColor: string;
+  targetPrice: number;
+  minPrice?: number;
+  maxPrice?: number;
+  autoAcceptThreshold?: number;
+  platforms: Platform[];
+  status: 'active' | 'paused' | 'archived';
+  quantity: number;
+  negotiationStyle: 'aggressive' | 'moderate' | 'passive';
+  replyTone: 'professional' | 'casual' | 'firm';
+  bestOffer?: number;       // Current best offer — shown in card and overview
+  marketData: MarketData[];
+  conversations: Conversation[];
+}
+```
+
+### `MarketData`
+```ts
+interface MarketData {
+  platform: Platform;
+  bestBuyPrice: number;   // Best (lowest) buy price on this platform
+  bestSellPrice: number;  // Best (highest) sell price on this platform
+  volume: number;         // Number of active listings
+}
+```
+
+### `PLATFORM_NAMES`
+```ts
+const PLATFORM_NAMES: Record<Platform, string> = {
+  ebay: 'eBay',
+  depop: 'Depop',
+  mercari: 'Mercari',
+  offerup: 'OfferUp',
+  facebook: 'Facebook',
+};
+```
+
+---
+
+## Navigation
+
+- **Back button label**: "Back" (set globally in `_layout.tsx` via `headerBackTitle: 'Back'`)
+- Routes: `index`, `settings`, `item/[id]`, `chat/[id]`
+- `item/[id]` and `chat/[id]` use `headerShown: false` (custom headers)
+
+---
+
+## Key Design Rules
+
+- **No colored status dots** anywhere — status is text-only ("Active" / "Paused") or themed badge
+- **No wifi icons** in platform connection status
+- **No decorative dots** in count pills
+- **Profile access** via circular avatar button — no hamburger / gear icon on home
+- **AddNewCard** always visible below carousel — not inside the scroll
+- **Negotiation Style** uses stacked layout in settings to prevent overflow
+- **Unread conversations** shown by bright/bold preview text — no dot
+- **Archive** requires `Alert.alert` confirmation
+- **Destructive actions** use `colors.destructive` and are visually separated from primary actions
+- **Theme propagation**: all color values come from `useTheme().colors` — no hardcoded hex in components (exception: status text on image cards)
+- **Touch targets**: minimum 44×44pt via `hitSlop` where visual size is smaller
+- **Safe areas**: `SafeAreaView` with `edges` on every screen

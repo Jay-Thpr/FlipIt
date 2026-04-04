@@ -3,8 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
-import { mockItems, Message } from '../../data/mockData';
-import PlatformBadge from '../../components/PlatformBadge';
+import { mockItems, Message, PLATFORM_NAMES } from '../../data/mockData';
 
 export default function ChatLogScreen() {
   const { id, itemId } = useLocalSearchParams<{ id: string; itemId: string }>();
@@ -66,28 +65,21 @@ export default function ChatLogScreen() {
       >
         <TouchableOpacity
           onPress={() => router.back()}
-          style={[styles.backBtn, { backgroundColor: colors.muted }]}
+          style={styles.backBtn}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <ArrowLeft size={20} color={colors.textPrimary} />
+          <ArrowLeft size={22} color={colors.textPrimary} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={[styles.headerItem, { color: colors.textPrimary }]} numberOfLines={1}>
+          <Text style={[styles.headerContact, { color: colors.textPrimary }]} numberOfLines={1}>
+            @{conversation.username}
+          </Text>
+          <Text style={[styles.headerItem, { color: colors.textMuted }]} numberOfLines={1}>
             {item.name}
           </Text>
-          <View style={styles.headerSubRow}>
-            <PlatformBadge platform={conversation.platform} />
-            <Text style={[styles.headerSub, { color: colors.textMuted }]}>
-              @{conversation.username}
-            </Text>
-          </View>
         </View>
-      </View>
-
-      {/* Read-only note */}
-      <View style={[styles.logBanner, { backgroundColor: colors.muted, borderBottomColor: colors.border }]}>
-        <Text style={[styles.logBannerText, { color: colors.textMuted }]}>
-          Log view only — all messages sent by your agent
+        <Text style={[styles.platformName, { color: colors.textSecondary }]}>
+          {PLATFORM_NAMES[conversation.platform]}
         </Text>
       </View>
 
@@ -117,38 +109,25 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   backBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
+    width: 36,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerCenter: {
     flex: 1,
-    gap: 3,
+    gap: 2,
   },
-  headerItem: {
+  headerContact: {
     fontSize: 15,
     fontWeight: '700',
   },
-  headerSubRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-  },
-  headerSub: {
+  headerItem: {
     fontSize: 12,
   },
-
-  logBanner: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-  },
-  logBannerText: {
-    fontSize: 11,
-    textAlign: 'center',
-    fontWeight: '500',
+  platformName: {
+    fontSize: 13,
+    fontWeight: '600',
   },
 
   messageList: {

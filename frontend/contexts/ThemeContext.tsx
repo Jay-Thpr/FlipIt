@@ -12,14 +12,14 @@ interface ThemeContextValue {
 }
 
 const ThemeContext = createContext<ThemeContextValue>({
-  theme: 'dark',
+  theme: 'system',
   setTheme: () => {},
   colors: DarkColors,
   isDark: true,
 });
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<ThemePreference>('dark');
+  const [theme, setTheme] = useState<ThemePreference>('system');
   const systemScheme = useColorScheme();
 
   const isDark =

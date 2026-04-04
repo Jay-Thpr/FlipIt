@@ -23,7 +23,7 @@ function ThemedStack() {
           headerTitleStyle: { fontWeight: '700', fontSize: 17 },
           contentStyle: { backgroundColor: colors.background },
           headerShadowVisible: false,
-          headerBackTitle: '',
+          headerBackTitle: 'Back',
         }}
       >
         <Stack.Screen name="index" options={{ headerShown: false }} />

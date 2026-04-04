@@ -1,25 +1,40 @@
 import React, { useState } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, TouchableOpacity, Switch,
+  View, Text, ScrollView, StyleSheet, TouchableOpacity, Switch, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
-import { ArrowLeft, ChevronRight, TrendingUp, TrendingDown } from 'lucide-react-native';
+import { ArrowLeft, ChevronRight } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
-import { mockItems, MarketData, Conversation, Platform } from '../../data/mockData';
+import { mockItems, MarketData, Conversation, PLATFORM_NAMES } from '../../data/mockData';
 import StatusBadge from '../../components/StatusBadge';
-import PlatformBadge from '../../components/PlatformBadge';
 
 export default function ItemDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { colors } = useTheme();
   const item = mockItems.find(i => i.id === id);
+  const [aiActive, setAiActive] = useState(item?.status === 'active');
 
   if (!item) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <Text style={{ padding: 24, color: colors.textMuted }}>Item not found.</Text>
       </SafeAreaView>
+    );
+  }
+
+  function handleArchive() {
+    Alert.alert(
+      'Archive Listing',
+      'Are you sure you want to archive this listing? The AI agent will stop and it will be removed from active agents.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Archive',
+          style: 'destructive',
+          onPress: () => router.back(),
+        },
+      ]
     );
   }
 
@@ -32,10 +47,10 @@ export default function ItemDetailScreen() {
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <TouchableOpacity
           onPress={() => router.back()}
-          style={[styles.backBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
+          style={styles.backBtn}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <ArrowLeft size={20} color={colors.textPrimary} />
+          <ArrowLeft size={22} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]} numberOfLines={1}>
           {item.name}
@@ -51,19 +66,30 @@ export default function ItemDetailScreen() {
 
         {/* Overview */}
         <SectionCard title="Overview">
-          <Text style={[styles.itemName, { color: colors.textPrimary }]}>{item.name}</Text>
-          <Text style={[styles.description, { color: colors.textSecondary }]}>
-            {item.description}
-          </Text>
-          <View style={styles.metaRow}>
-            <MetaChip label="Condition" value={item.condition} />
-            <MetaChip label="Qty" value={`×${item.quantity}`} />
-            <MetaChip label="Mode" value={item.type === 'buy' ? 'Buying' : 'Selling'} />
-          </View>
+          <InfoRow label="Description" value={item.description} />
+          <InfoDivider />
+          <InfoRow label="Condition" value={item.condition} />
+          <InfoDivider />
+          <InfoRow label="Quantity" value={`×${item.quantity}`} />
+          <InfoDivider />
+          <InfoRow label="Mode" value={item.type === 'buy' ? 'Buying' : 'Selling'} />
+          {item.bestOffer != null && (
+            <>
+              <InfoDivider />
+              <InfoRow label="Best Current Offer" value={`$${item.bestOffer}`} highlight />
+            </>
+          )}
         </SectionCard>
 
         {/* Settings */}
         <SectionCard title="Settings">
+          {/* AI Agent toggle */}
+          <SettingToggle
+            label="AI Agent Active"
+            value={aiActive}
+            onToggle={() => setAiActive(v => !v)}
+          />
+          <SettingDivider />
           <SettingRow label="Target Price" value={`$${item.targetPrice}`} />
           {item.minPrice != null && (
             <SettingRow label="Min Acceptable" value={`$${item.minPrice}`} />
@@ -82,8 +108,7 @@ export default function ItemDetailScreen() {
             label="Reply Tone"
             value={item.replyTone.charAt(0).toUpperCase() + item.replyTone.slice(1)}
           />
-          <SettingRow label="Active Platforms" value={item.platforms.join(', ')} />
-          <SettingToggle label="Auto-Relist" value={item.autoRelist} />
+          <SettingRow label="Active Platforms" value={item.platforms.map(p => PLATFORM_NAMES[p]).join(', ')} />
         </SectionCard>
 
         {/* Market Overview */}
@@ -118,6 +143,19 @@ export default function ItemDetailScreen() {
             ))
           )}
         </SectionCard>
+
+        {/* Archive */}
+        <View style={styles.dangerZone}>
+          <TouchableOpacity
+            style={[styles.archiveBtn, { borderColor: colors.destructive }]}
+            onPress={handleArchive}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.archiveBtnText, { color: colors.destructive }]}>
+              Archive Listing
+            </Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -129,7 +167,7 @@ function SectionCard({ title, children }: { title: string; children: React.React
   const { colors } = useTheme();
   return (
     <View style={styles.sectionCard}>
-      <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>{title}</Text>
+      <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>{title.toUpperCase()}</Text>
       <View
         style={[
           styles.cardBody,
@@ -142,35 +180,52 @@ function SectionCard({ title, children }: { title: string; children: React.React
   );
 }
 
-function MetaChip({ label, value }: { label: string; value: string }) {
+function InfoDivider() {
+  const { colors } = useTheme();
+  return <View style={[styles.infoDivider, { backgroundColor: colors.border }]} />;
+}
+
+function InfoRow({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   const { colors } = useTheme();
   return (
-    <View style={[styles.metaChip, { backgroundColor: colors.muted }]}>
-      <Text style={[styles.metaLabel, { color: colors.textMuted }]}>{label}</Text>
-      <Text style={[styles.metaValue, { color: colors.textPrimary }]}>{value}</Text>
+    <View style={styles.infoRow}>
+      <Text style={[styles.infoLabel, { color: colors.textMuted }]}>{label}</Text>
+      <Text
+        style={[
+          styles.infoValue,
+          { color: highlight ? colors.primary : colors.textPrimary },
+          highlight && styles.infoValueHighlight,
+        ]}
+      >
+        {value}
+      </Text>
     </View>
   );
+}
+
+function SettingDivider() {
+  const { colors } = useTheme();
+  return <View style={[styles.settingDivider, { backgroundColor: colors.border }]} />;
 }
 
 function SettingRow({ label, value }: { label: string; value: string }) {
   const { colors } = useTheme();
   return (
-    <View style={[styles.settingRow, { borderBottomColor: colors.border }]}>
+    <View style={styles.settingRow}>
       <Text style={[styles.settingLabel, { color: colors.textPrimary }]}>{label}</Text>
       <Text style={[styles.settingValue, { color: colors.textSecondary }]}>{value}</Text>
     </View>
   );
 }
 
-function SettingToggle({ label, value }: { label: string; value: boolean }) {
+function SettingToggle({ label, value, onToggle }: { label: string; value: boolean; onToggle: () => void }) {
   const { colors } = useTheme();
-  const [val, setVal] = useState(value);
   return (
-    <View style={[styles.settingRow, { borderBottomColor: 'transparent' }]}>
+    <View style={styles.settingRow}>
       <Text style={[styles.settingLabel, { color: colors.textPrimary }]}>{label}</Text>
       <Switch
-        value={val}
-        onValueChange={setVal}
+        value={value}
+        onValueChange={onToggle}
         trackColor={{ true: colors.primary, false: colors.border }}
         thumbColor={colors.white}
       />
@@ -180,7 +235,7 @@ function SettingToggle({ label, value }: { label: string; value: boolean }) {
 
 function MarketCard({ data }: { data: MarketData }) {
   const { colors } = useTheme();
-  const isUp = data.trend >= 0;
+  const platformName = PLATFORM_NAMES[data.platform];
   return (
     <View
       style={[
@@ -188,16 +243,17 @@ function MarketCard({ data }: { data: MarketData }) {
         { backgroundColor: colors.surface, borderColor: colors.border },
       ]}
     >
-      <PlatformBadge platform={data.platform as Platform} size="md" />
-      <Text style={[styles.marketPrice, { color: colors.textPrimary }]}>${data.price}</Text>
-      <View style={styles.trendRow}>
-        {isUp
-          ? <TrendingUp size={12} color={colors.accent} />
-          : <TrendingDown size={12} color={colors.destructive} />
-        }
-        <Text style={[styles.trendText, { color: isUp ? colors.accent : colors.destructive }]}>
-          {isUp ? '+' : ''}{data.trend}%
-        </Text>
+      <Text style={[styles.marketName, { color: colors.textPrimary }]}>{platformName}</Text>
+      <View style={styles.marketPriceRow}>
+        <View>
+          <Text style={[styles.marketPriceLabel, { color: colors.textMuted }]}>Buy</Text>
+          <Text style={[styles.marketPrice, { color: colors.accent }]}>${data.bestBuyPrice}</Text>
+        </View>
+        <View style={[styles.marketDivider, { backgroundColor: colors.border }]} />
+        <View>
+          <Text style={[styles.marketPriceLabel, { color: colors.textMuted }]}>Sell</Text>
+          <Text style={[styles.marketPrice, { color: colors.textPrimary }]}>${data.bestSellPrice}</Text>
+        </View>
       </View>
       <Text style={[styles.volumeText, { color: colors.textMuted }]}>{data.volume} listings</Text>
     </View>
@@ -208,17 +264,23 @@ function ConvRow({ conv, onPress }: { conv: Conversation; onPress: () => void })
   const { colors } = useTheme();
   return (
     <TouchableOpacity style={styles.convRow} onPress={onPress} activeOpacity={0.7}>
-      <PlatformBadge platform={conv.platform} size="md" />
       <View style={styles.convInfo}>
         <View style={styles.convNameRow}>
           <Text style={[styles.convUsername, { color: colors.textPrimary }]}>
             {conv.username}
           </Text>
-          {conv.unread && (
-            <View style={[styles.unreadDot, { backgroundColor: colors.primary }]} />
-          )}
+          <Text style={[styles.convPlatform, { color: colors.textMuted }]}>
+            {PLATFORM_NAMES[conv.platform]}
+          </Text>
         </View>
-        <Text style={[styles.convPreview, { color: colors.textMuted }]} numberOfLines={1}>
+        <Text
+          style={[
+            styles.convPreview,
+            { color: conv.unread ? colors.textPrimary : colors.textMuted },
+            conv.unread && styles.convPreviewUnread,
+          ]}
+          numberOfLines={1}
+        >
           {conv.lastMessage}
         </Text>
       </View>
@@ -243,10 +305,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   backBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
-    borderWidth: 1,
+    width: 36,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -273,15 +333,25 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginTop: 20,
   },
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.8,
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
   sectionHeader: {
     paddingHorizontal: 16,
     marginTop: 20,
+    marginBottom: 0,
   },
   sectionTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    letterSpacing: 0.1,
-    marginBottom: 10,
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+    paddingHorizontal: 4,
   },
   cardBody: {
     borderRadius: 14,
@@ -289,37 +359,26 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
 
-  itemName: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 6,
-    paddingHorizontal: 14,
-    paddingTop: 14,
-  },
-  description: {
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 12,
-    paddingHorizontal: 14,
-  },
-  metaRow: {
+  infoRow: {
     flexDirection: 'row',
-    gap: 8,
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
     paddingHorizontal: 14,
-    paddingBottom: 14,
+    paddingVertical: 11,
+    gap: 12,
   },
-  metaChip: {
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    alignItems: 'center',
-  },
-  metaLabel: {
-    fontSize: 10,
+  infoDivider: { height: 1 },
+  infoLabel: {
+    fontSize: 14,
     fontWeight: '500',
+    flex: 1,
   },
-  metaValue: {
-    fontSize: 13,
+  infoValue: {
+    fontSize: 14,
+    flex: 2,
+    textAlign: 'right',
+  },
+  infoValueHighlight: {
     fontWeight: '700',
   },
 
@@ -329,8 +388,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 14,
     paddingVertical: 13,
-    borderBottomWidth: 1,
   },
+  settingDivider: { height: 1 },
   settingLabel: {
     fontSize: 14,
     fontWeight: '500',
@@ -338,36 +397,47 @@ const styles = StyleSheet.create({
   settingValue: {
     fontSize: 14,
     fontWeight: '400',
+    maxWidth: '55%',
+    textAlign: 'right',
   },
 
   marketScroll: {
     paddingHorizontal: 16,
     gap: 10,
+    paddingBottom: 4,
   },
   marketCard: {
     borderRadius: 12,
     borderWidth: 1,
     padding: 14,
-    minWidth: 110,
-    gap: 4,
+    minWidth: 120,
+    gap: 8,
   },
-  marketPrice: {
-    fontSize: 22,
-    fontWeight: '800',
-    marginTop: 6,
+  marketName: {
+    fontSize: 13,
+    fontWeight: '700',
   },
-  trendRow: {
+  marketPriceRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
+    gap: 10,
   },
-  trendText: {
-    fontSize: 12,
-    fontWeight: '600',
+  marketDivider: {
+    width: 1,
+    height: 32,
+  },
+  marketPriceLabel: {
+    fontSize: 10,
+    fontWeight: '500',
+    marginBottom: 2,
+  },
+  marketPrice: {
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: -0.3,
   },
   volumeText: {
     fontSize: 11,
-    marginTop: 2,
   },
 
   emptyText: {
@@ -399,13 +469,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  unreadDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
+  convPlatform: {
+    fontSize: 12,
   },
   convPreview: {
     fontSize: 13,
+  },
+  convPreviewUnread: {
+    fontWeight: '500',
   },
   convRight: {
     flexDirection: 'row',
@@ -414,5 +485,20 @@ const styles = StyleSheet.create({
   },
   convTime: {
     fontSize: 11,
+  },
+
+  dangerZone: {
+    marginHorizontal: 16,
+    marginTop: 32,
+  },
+  archiveBtn: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  archiveBtnText: {
+    fontSize: 15,
+    fontWeight: '600',
   },
 });
