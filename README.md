@@ -1,7 +1,7 @@
 # DiamondHacks
 
 FastAPI backend scaffold for the DiamondHacks resale-agent demo. The current repo state is a working backend shell with in-memory sessions, SSE streaming, 10 agent services, and an automated test suite.
-Agent inputs and outputs are now validated against step-specific schemas so pipeline contracts stay structurally stable as real logic is added. The full `SELL` pipeline and the four `BUY` search agents now run deterministic non-stub logic.
+Agent inputs and outputs are validated against step-specific schemas so pipeline contracts stay structurally stable as real logic is added. All 10 agents now run deterministic non-stub logic, and the orchestrator includes timeout, retry, and structured failure-event handling for demo resilience.
 
 ## Quick Start
 

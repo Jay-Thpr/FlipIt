@@ -16,15 +16,15 @@ This scaffold gives the team a stable local contract before Browser Use, Gemini,
 ## Current Behavior
 
 - Sessions are stored in memory only.
-- Pipelines run in the background; the full `SELL` pipeline plus `depop_search_agent`, `ebay_search_agent`, `mercari_search_agent`, and `offerup_search_agent` now run deterministic logic, while `ranking_agent` and `negotiation_agent` remain scaffolded.
+- Pipelines run in the background; all 10 agents now run deterministic logic for local development and test coverage.
 - Each agent input is validated against a step-specific schema before the orchestrator calls that step.
 - Each agent output is validated against a step-specific schema before it is emitted to SSE or saved in `/result`.
+- The orchestrator applies per-step timeouts, emits `agent.failed` and `agent.retrying` events, retries transient `BUY` search failures once by default, and stores partial results on pipeline failure.
 - `AGENT_EXECUTION_MODE=local_functions` keeps the app runnable without launching separate agent processes.
 - `python -m backend.run_agents` starts one FastAPI process per agent scaffold when you want to validate the per-agent `/task` apps.
 - `make check` is the current local verification path and mirrors CI.
 
 ## Next Backend Tasks
 
-- Replace the remaining stub agent logic with real Browser Use and Gemini logic, starting with `ranking_agent` and `negotiation_agent`.
-- Add actual Fetch.ai uAgent and Chat Protocol registration.
-- Add richer result schemas and retry/error policies.
+- Replace the deterministic local logic with real Browser Use and Gemini integrations behind the same contracts.
+- Add actual Fetch.ai uAgent and Chat Protocol registration plus Agentverse verification.

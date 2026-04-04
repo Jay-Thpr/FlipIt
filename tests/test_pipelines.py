@@ -183,7 +183,8 @@ def test_buy_pipeline_emits_expected_event_order_and_result(client: TestClient) 
     RankingOutput.model_validate(result["result"]["outputs"]["ranking"])
     NegotiationOutput.model_validate(result["result"]["outputs"]["negotiation"])
     assert result["result"]["outputs"]["ranking"]["top_choice"]["reason"]
-    assert result["result"]["outputs"]["negotiation"]["offer_messages"][0]["target_price"] == 32.0
+    assert result["result"]["outputs"]["ranking"]["top_choice"]["platform"] == "mercari"
+    assert result["result"]["outputs"]["negotiation"]["offer_messages"][0]["target_price"] == 40.38
 
 
 def test_internal_event_requires_valid_token(client: TestClient) -> None:
@@ -247,6 +248,8 @@ async def test_failed_agent_marks_session_failed(monkeypatch: pytest.MonkeyPatch
     assert session is not None
     assert session.status == "failed"
     assert session.error == "vision_agent broke"
+    assert session.result == {"pipeline": "sell", "outputs": {}}
+    assert session.events[-2].event_type == "agent.failed"
     assert session.events[-1].event_type == "pipeline.failed"
 
 
@@ -278,4 +281,5 @@ async def test_invalid_agent_output_marks_session_failed(monkeypatch: pytest.Mon
     assert session is not None
     assert session.status == "failed"
     assert "validation" in session.error.lower()
+    assert session.events[-2].event_type == "agent.failed"
     assert session.events[-1].event_type == "pipeline.failed"
