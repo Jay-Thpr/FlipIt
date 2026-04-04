@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+from typing import Any
+
 from backend.agents.base import BaseAgent, build_agent_app
 from backend.schemas import AgentTaskRequest, EbaySoldCompsOutput
 
@@ -63,6 +66,20 @@ class EbaySoldCompsAgent(BaseAgent):
         detected_item = vision_analysis["detected_item"]
         brand = vision_analysis["brand"]
         condition = vision_analysis["condition"]
+        descriptor = f"{brand} {detected_item}".strip() if brand != "Unknown" else detected_item
+
+        browser_use_result = await self.try_browser_use_research(brand=brand, detected_item=detected_item, condition=condition)
+        if browser_use_result is not None:
+            sample_size = int(browser_use_result["sample_size"])
+            return {
+                "agent": self.slug,
+                "display_name": self.display_name,
+                "summary": f"Extracted {sample_size} sold eBay comps for {descriptor} with Browser Use",
+                "median_sold_price": browser_use_result["median_sold_price"],
+                "low_sold_price": browser_use_result["low_sold_price"],
+                "high_sold_price": browser_use_result["high_sold_price"],
+                "sample_size": sample_size,
+            }
 
         base_price = self.CATEGORY_BASE_PRICES.get(detected_item, self.CATEGORY_BASE_PRICES["item"])
         brand_multiplier = self.BRAND_MULTIPLIERS.get(brand, 1.0)
@@ -74,17 +91,86 @@ class EbaySoldCompsAgent(BaseAgent):
         high_price = round(median_price * (1 + spread_ratio), 2)
         sample_size = self.CONDITION_SAMPLE_SIZES.get(condition, 12)
 
-        descriptor = f"{brand} {detected_item}".strip() if brand != "Unknown" else detected_item
-
         return {
             "agent": self.slug,
             "display_name": self.display_name,
-            "summary": f"Estimated {sample_size} sold eBay comps for {descriptor}",
+            "summary": f"Estimated {sample_size} sold eBay comps for {descriptor} using local fallback",
             "median_sold_price": median_price,
             "low_sold_price": low_price,
             "high_sold_price": high_price,
             "sample_size": sample_size,
         }
+
+    async def try_browser_use_research(self, *, brand: str, detected_item: str, condition: str) -> dict[str, Any] | None:
+        try:
+            from browser_use import Agent, BrowserSession
+            from browser_use.browser import BrowserProfile
+            from langchain_google_genai import ChatGoogleGenerativeAI
+            from pydantic import BaseModel
+        except Exception:
+            return None
+
+        if not os.getenv("GOOGLE_API_KEY"):
+            return None
+
+        query = "+".join(part for part in (brand, detected_item) if part and part != "Unknown") or detected_item
+        condition_code = {
+            "new": "1000",
+            "excellent": "1500",
+            "great": "3000",
+            "good": "3000",
+            "fair": "7000",
+        }.get(condition, "3000")
+        url = (
+            "https://www.ebay.com/sch/i.html"
+            f"?_nkw={query}"
+            "&LH_Sold=1"
+            "&LH_Complete=1"
+            f"&LH_ItemCondition={condition_code}"
+            "&_sop=13"
+            "&_ipg=24"
+        )
+
+        class SoldCompResearch(BaseModel):
+            median_sold_price: float
+            low_sold_price: float
+            high_sold_price: float
+            sample_size: int
+
+        llm = ChatGoogleGenerativeAI(model=os.getenv("BROWSER_USE_GEMINI_MODEL", "gemini-2.0-flash"))
+        profile = BrowserProfile(
+            headless=False,
+            stealth=True,
+            allowed_domains=["ebay.com", "www.ebay.com"],
+        )
+        session = BrowserSession(browser_profile=profile)
+        task = f"""
+Navigate to: {url}
+Wait for sold listing cards to load.
+From the first 10 sold listings that show a visible final sold price, calculate:
+- median_sold_price
+- low_sold_price
+- high_sold_price
+- sample_size
+Return only JSON matching the schema.
+"""
+
+        try:
+            agent = Agent(
+                task=task,
+                llm=llm,
+                browser_session=session,
+                output_model_schema=SoldCompResearch,
+                max_steps=12,
+                max_failures=3,
+            )
+            history = await agent.run()
+            result = history.final_result(SoldCompResearch)
+            return result.model_dump() if result else None
+        except Exception:
+            return None
+        finally:
+            await session.stop()
 
 
 agent = EbaySoldCompsAgent()

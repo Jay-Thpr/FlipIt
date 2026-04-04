@@ -66,16 +66,16 @@ def test_sell_pipeline_emits_expected_event_order_and_result(client: TestClient)
     )
 
     assert [event["event_type"] for event in events] == [
-        "pipeline.started",
-        "agent.started",
-        "agent.completed",
-        "agent.started",
-        "agent.completed",
-        "agent.started",
-        "agent.completed",
-        "agent.started",
-        "agent.completed",
-        "pipeline.completed",
+        "pipeline_started",
+        "agent_started",
+        "agent_completed",
+        "agent_started",
+        "agent_completed",
+        "agent_started",
+        "agent_completed",
+        "agent_started",
+        "agent_completed",
+        "pipeline_complete",
     ]
     assert [event["payload"]["step"] for event in events if event["payload"]["step"]] == [
         "vision_analysis",
@@ -136,20 +136,20 @@ def test_buy_pipeline_emits_expected_event_order_and_result(client: TestClient) 
     )
 
     assert [event["event_type"] for event in events] == [
-        "pipeline.started",
-        "agent.started",
-        "agent.completed",
-        "agent.started",
-        "agent.completed",
-        "agent.started",
-        "agent.completed",
-        "agent.started",
-        "agent.completed",
-        "agent.started",
-        "agent.completed",
-        "agent.started",
-        "agent.completed",
-        "pipeline.completed",
+        "pipeline_started",
+        "agent_started",
+        "agent_completed",
+        "agent_started",
+        "agent_completed",
+        "agent_started",
+        "agent_completed",
+        "agent_started",
+        "agent_completed",
+        "agent_started",
+        "agent_completed",
+        "agent_started",
+        "agent_completed",
+        "pipeline_complete",
     ]
     assert [event["payload"]["step"] for event in events if event["payload"]["step"]] == [
         "depop_search",
@@ -183,8 +183,8 @@ def test_buy_pipeline_emits_expected_event_order_and_result(client: TestClient) 
     RankingOutput.model_validate(result["result"]["outputs"]["ranking"])
     NegotiationOutput.model_validate(result["result"]["outputs"]["negotiation"])
     assert result["result"]["outputs"]["ranking"]["top_choice"]["reason"]
-    assert result["result"]["outputs"]["ranking"]["top_choice"]["platform"] == "mercari"
-    assert result["result"]["outputs"]["negotiation"]["offer_messages"][0]["target_price"] == 40.38
+    assert result["result"]["outputs"]["ranking"]["top_choice"]["platform"] == "ebay"
+    assert result["result"]["outputs"]["negotiation"]["offers"][0]["target_price"] == 45.35
 
 
 def test_internal_event_requires_valid_token(client: TestClient) -> None:
@@ -249,8 +249,8 @@ async def test_failed_agent_marks_session_failed(monkeypatch: pytest.MonkeyPatch
     assert session.status == "failed"
     assert session.error == "vision_agent broke"
     assert session.result == {"pipeline": "sell", "outputs": {}}
-    assert session.events[-2].event_type == "agent.failed"
-    assert session.events[-1].event_type == "pipeline.failed"
+    assert session.events[-2].event_type == "agent_error"
+    assert session.events[-1].event_type == "pipeline_failed"
 
 
 @pytest.mark.asyncio
@@ -281,5 +281,5 @@ async def test_invalid_agent_output_marks_session_failed(monkeypatch: pytest.Mon
     assert session is not None
     assert session.status == "failed"
     assert "validation" in session.error.lower()
-    assert session.events[-2].event_type == "agent.failed"
-    assert session.events[-1].event_type == "pipeline.failed"
+    assert session.events[-2].event_type == "agent_error"
+    assert session.events[-1].event_type == "pipeline_failed"

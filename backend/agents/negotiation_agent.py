@@ -22,6 +22,7 @@ class NegotiationAgent(BaseAgent):
     async def build_output(self, request: AgentTaskRequest) -> dict:
         previous_outputs = request.input["previous_outputs"]
         top_choice = previous_outputs["ranking"]["top_choice"]
+        median_price = float(previous_outputs["ranking"]["median_price"])
         search_outputs = previous_outputs
 
         all_candidates = [
@@ -40,6 +41,10 @@ class NegotiationAgent(BaseAgent):
                 "title": top_choice["title"],
                 "price": top_choice["price"],
                 "condition": "good",
+                "seller": top_choice["seller"],
+                "url": top_choice["url"],
+                "seller_score": top_choice.get("seller_score", 0),
+                "posted_at": top_choice["posted_at"],
             }
         ]
         for listing in all_candidates:
@@ -53,24 +58,33 @@ class NegotiationAgent(BaseAgent):
         offer_messages = []
         for listing in prioritized_candidates:
             platform = listing["platform"]
-            target_price = round(float(listing["price"]) * self.PLATFORM_DISCOUNTS.get(platform, 0.92), 2)
+            target_price = round(
+                max(median_price, float(listing["price"]) * self.PLATFORM_DISCOUNTS.get(platform, 0.92)),
+                2,
+            )
             offer_messages.append(
                 {
                     "platform": platform,
+                    "seller": listing["seller"],
+                    "listing_url": listing["url"],
                     "listing_title": listing["title"],
                     "target_price": target_price,
                     "message": (
                         f"Hi! I love this listing. Would you consider ${target_price} "
-                        f"for {listing['title']}?"
+                        f"for {listing['title']}? I can pay right away."
                     ),
+                    "status": "prepared",
                 }
             )
 
         return {
             "agent": self.slug,
             "display_name": self.display_name,
-            "summary": f"Prepared {len(offer_messages)} negotiation messages starting with {top_choice['platform']}",
-            "offer_messages": offer_messages,
+            "summary": (
+                f"Prepared {len(offer_messages)} negotiation attempts starting with "
+                f"{top_choice['seller']} on {top_choice['platform']}"
+            ),
+            "offers": offer_messages,
         }
 
 

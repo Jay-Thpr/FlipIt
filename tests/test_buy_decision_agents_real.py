@@ -34,6 +34,9 @@ def build_buy_previous_outputs() -> dict[str, Any]:
                     "price": 46.16,
                     "url": "https://depop.example/nike-tee-1",
                     "condition": "great",
+                    "seller": "depop_closet_1",
+                    "seller_score": 34,
+                    "posted_at": "2026-04-02",
                 },
                 {
                     "platform": "depop",
@@ -41,6 +44,9 @@ def build_buy_previous_outputs() -> dict[str, Any]:
                     "price": 50.66,
                     "url": "https://depop.example/nike-tee-2",
                     "condition": "great",
+                    "seller": "depop_closet_2",
+                    "seller_score": 29,
+                    "posted_at": "2026-03-31",
                 },
             ],
         },
@@ -55,6 +61,9 @@ def build_buy_previous_outputs() -> dict[str, Any]:
                     "price": 42.53,
                     "url": "https://ebay.example/nike-tee-1",
                     "condition": "good",
+                    "seller": "ebay_seller_1",
+                    "seller_score": 640,
+                    "posted_at": "2026-04-03",
                 },
                 {
                     "platform": "ebay",
@@ -62,6 +71,9 @@ def build_buy_previous_outputs() -> dict[str, Any]:
                     "price": 47.03,
                     "url": "https://ebay.example/nike-tee-2",
                     "condition": "good",
+                    "seller": "ebay_seller_2",
+                    "seller_score": 515,
+                    "posted_at": "2026-04-01",
                 },
             ],
         },
@@ -76,6 +88,9 @@ def build_buy_previous_outputs() -> dict[str, Any]:
                     "price": 43.89,
                     "url": "https://mercari.example/nike-tee-1",
                     "condition": "excellent",
+                    "seller": "mercari_shop_1",
+                    "seller_score": 88,
+                    "posted_at": "2026-04-03",
                 },
                 {
                     "platform": "mercari",
@@ -83,6 +98,9 @@ def build_buy_previous_outputs() -> dict[str, Any]:
                     "price": 48.39,
                     "url": "https://mercari.example/nike-tee-2",
                     "condition": "good",
+                    "seller": "mercari_shop_2",
+                    "seller_score": 74,
+                    "posted_at": "2026-04-01",
                 },
             ],
         },
@@ -97,6 +115,9 @@ def build_buy_previous_outputs() -> dict[str, Any]:
                     "price": 39.82,
                     "url": "https://offerup.example/nike-tee-1",
                     "condition": "good",
+                    "seller": "offerup_local_1",
+                    "seller_score": 18,
+                    "posted_at": "2026-03-29",
                 },
                 {
                     "platform": "offerup",
@@ -104,6 +125,9 @@ def build_buy_previous_outputs() -> dict[str, Any]:
                     "price": 44.32,
                     "url": "https://offerup.example/nike-tee-2",
                     "condition": "good",
+                    "seller": "offerup_local_2",
+                    "seller_score": 12,
+                    "posted_at": "2026-03-28",
                 },
             ],
         },
@@ -130,11 +154,15 @@ def test_ranking_agent_selects_best_budget_and_condition_match() -> None:
     assert result["status"] == "completed"
     assert result["output"]["candidate_count"] == 8
     assert result["output"]["top_choice"] == {
-        "platform": "mercari",
-        "title": "Nike tee size M #1 on Mercari",
-        "price": 43.89,
-        "score": 0.93,
-        "reason": "Excellent condition with strong budget fit on mercari",
+        "platform": "ebay",
+        "title": "Nike tee size M #1 on eBay",
+        "price": 42.53,
+        "score": 0.94,
+        "reason": "Good condition, seller score 640, posted 2026-04-03 on ebay",
+        "url": "https://ebay.example/nike-tee-1",
+        "seller": "ebay_seller_1",
+        "seller_score": 640,
+        "posted_at": "2026-04-03",
     }
 
 
@@ -143,15 +171,33 @@ def test_negotiation_agent_generates_messages_for_top_candidates() -> None:
     previous_outputs["ranking"] = {
         "agent": "ranking_agent",
         "display_name": "Ranking Agent",
-        "summary": "Ranked 8 listings and selected mercari as the top choice",
+        "summary": "Ranked 8 listings and selected ebay as the top choice",
         "top_choice": {
-            "platform": "mercari",
-            "title": "Nike tee size M #1 on Mercari",
-            "price": 43.89,
-            "score": 0.93,
-            "reason": "Excellent condition with strong budget fit on mercari",
+            "platform": "ebay",
+            "title": "Nike tee size M #1 on eBay",
+            "price": 42.53,
+            "score": 0.94,
+            "reason": "Good condition, seller score 640, posted 2026-04-03 on ebay",
+            "url": "https://ebay.example/nike-tee-1",
+            "seller": "ebay_seller_1",
+            "seller_score": 640,
+            "posted_at": "2026-04-03",
         },
         "candidate_count": 8,
+        "ranked_listings": [
+            {
+                "platform": "ebay",
+                "title": "Nike tee size M #1 on eBay",
+                "price": 42.53,
+                "score": 0.94,
+                "reason": "Good condition, seller score 640, posted 2026-04-03 on ebay",
+                "url": "https://ebay.example/nike-tee-1",
+                "seller": "ebay_seller_1",
+                "seller_score": 640,
+                "posted_at": "2026-04-03",
+            }
+        ],
+        "median_price": 45.35,
     }
 
     payload = {
@@ -171,25 +217,34 @@ def test_negotiation_agent_generates_messages_for_top_candidates() -> None:
     assert response.status_code == 200
     result = response.json()
     assert result["status"] == "completed"
-    assert result["output"]["summary"] == "Prepared 3 negotiation messages starting with mercari"
-    assert result["output"]["offer_messages"] == [
+    assert result["output"]["summary"] == "Prepared 3 negotiation attempts starting with ebay_seller_1 on ebay"
+    assert result["output"]["offers"] == [
         {
-            "platform": "mercari",
-            "listing_title": "Nike tee size M #1 on Mercari",
-            "target_price": 40.38,
-            "message": "Hi! I love this listing. Would you consider $40.38 for Nike tee size M #1 on Mercari?",
+            "platform": "ebay",
+            "seller": "ebay_seller_1",
+            "listing_url": "https://ebay.example/nike-tee-1",
+            "listing_title": "Nike tee size M #1 on eBay",
+            "target_price": 45.35,
+            "message": "Hi! I love this listing. Would you consider $45.35 for Nike tee size M #1 on eBay? I can pay right away.",
+            "status": "prepared",
         },
         {
             "platform": "offerup",
+            "seller": "offerup_local_1",
+            "listing_url": "https://offerup.example/nike-tee-1",
             "listing_title": "Nike tee size M #1 on Offerup",
-            "target_price": 35.84,
-            "message": "Hi! I love this listing. Would you consider $35.84 for Nike tee size M #1 on Offerup?",
+            "target_price": 45.35,
+            "message": "Hi! I love this listing. Would you consider $45.35 for Nike tee size M #1 on Offerup? I can pay right away.",
+            "status": "prepared",
         },
         {
-            "platform": "ebay",
-            "listing_title": "Nike tee size M #1 on eBay",
-            "target_price": 38.7,
-            "message": "Hi! I love this listing. Would you consider $38.7 for Nike tee size M #1 on eBay?",
+            "platform": "mercari",
+            "seller": "mercari_shop_1",
+            "listing_url": "https://mercari.example/nike-tee-1",
+            "listing_title": "Nike tee size M #1 on Mercari",
+            "target_price": 45.35,
+            "message": "Hi! I love this listing. Would you consider $45.35 for Nike tee size M #1 on Mercari? I can pay right away.",
+            "status": "prepared",
         },
     ]
 
@@ -210,7 +265,7 @@ def test_buy_pipeline_uses_real_ranking_and_negotiation_outputs(client: TestClie
     ranking = result["result"]["outputs"]["ranking"]
     negotiation = result["result"]["outputs"]["negotiation"]
 
-    assert ranking["top_choice"]["platform"] == "mercari"
-    assert ranking["top_choice"]["score"] == 0.93
-    assert negotiation["offer_messages"][0]["target_price"] == 40.38
-    assert len(negotiation["offer_messages"]) == 3
+    assert ranking["top_choice"]["platform"] == "ebay"
+    assert ranking["top_choice"]["score"] == 0.94
+    assert negotiation["offers"][0]["target_price"] == 45.35
+    assert len(negotiation["offers"]) == 3

@@ -115,12 +115,12 @@ async def stream(session_id: str) -> StreamingResponse:
         try:
             for event in session.events:
                 yield format_sse(event)
-                if event.event_type in {"pipeline.completed", "pipeline.failed"}:
+                if event.event_type in {"pipeline_complete", "pipeline_failed"}:
                     return
             while True:
                 event = await queue.get()
                 yield format_sse(event)
-                if event.event_type in {"pipeline.completed", "pipeline.failed"}:
+                if event.event_type in {"pipeline_complete", "pipeline_failed"}:
                     break
         finally:
             await session_manager.unsubscribe(session_id, queue)

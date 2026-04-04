@@ -19,7 +19,7 @@ This scaffold gives the team a stable local contract before Browser Use, Gemini,
 - Pipelines run in the background; all 10 agents now run deterministic logic for local development and test coverage.
 - Each agent input is validated against a step-specific schema before the orchestrator calls that step.
 - Each agent output is validated against a step-specific schema before it is emitted to SSE or saved in `/result`.
-- The orchestrator applies per-step timeouts, emits `agent.failed` and `agent.retrying` events, retries transient `BUY` search failures once by default, and stores partial results on pipeline failure.
+- The orchestrator applies per-step timeouts, emits `agent_error` and `agent_retrying` events, retries transient `BUY` search failures once by default, and stores partial results on pipeline failure.
 - `AGENT_EXECUTION_MODE=local_functions` keeps the app runnable without launching separate agent processes.
 - `python -m backend.run_agents` starts one FastAPI process per agent scaffold when you want to validate the per-agent `/task` apps.
 - `make check` is the current local verification path and mirrors CI.

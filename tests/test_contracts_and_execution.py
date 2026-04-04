@@ -232,6 +232,9 @@ def test_search_results_schema_round_trips_expected_fields() -> None:
                     "price": 36.0,
                     "url": "https://offerup.example/listing-1",
                     "condition": "good",
+                    "seller": "offerup_local_1",
+                    "seller_score": 15,
+                    "posted_at": "2026-04-01",
                 }
             ],
         }
@@ -239,6 +242,7 @@ def test_search_results_schema_round_trips_expected_fields() -> None:
 
     assert output.results[0].platform == "offerup"
     assert output.results[0].url == "https://offerup.example/listing-1"
+    assert output.results[0].seller == "offerup_local_1"
 
 
 @pytest.mark.asyncio

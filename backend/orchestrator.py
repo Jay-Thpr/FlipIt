@@ -84,14 +84,20 @@ async def execute_step(
 
     for attempt in range(1, max_attempts + 1):
         if attempt == 1:
-            await publish(session_id, "agent.started", pipeline=pipeline, step=step_name, data={"agent": agent_slug, "attempt": attempt})
+            await publish(
+                session_id,
+                "agent_started",
+                pipeline=pipeline,
+                step=step_name,
+                data={"agent_name": agent_slug, "attempt": attempt, "mode": pipeline},
+            )
         else:
             await publish(
                 session_id,
-                "agent.retrying",
+                "agent_retrying",
                 pipeline=pipeline,
                 step=step_name,
-                data={"agent": agent_slug, "attempt": attempt, "max_attempts": max_attempts},
+                data={"agent_name": agent_slug, "attempt": attempt, "max_attempts": max_attempts},
             )
 
         try:
@@ -103,11 +109,11 @@ async def execute_step(
             error_category = classify_error(exc)
             await publish(
                 session_id,
-                "agent.failed",
+                "agent_error",
                 pipeline=pipeline,
                 step=step_name,
                 data={
-                    "agent": agent_slug,
+                    "agent_name": agent_slug,
                     "attempt": attempt,
                     "max_attempts": max_attempts,
                     "error": str(exc),
@@ -123,7 +129,7 @@ async def execute_step(
 async def run_pipeline(session_id: str, pipeline: str, request: PipelineStartRequest) -> None:
     steps = SELL_STEPS if pipeline == "sell" else BUY_STEPS
     await session_manager.update_status(session_id, status="running")
-    await publish(session_id, "pipeline.started", pipeline=pipeline, data={"input": request.input})
+    await publish(session_id, "pipeline_started", pipeline=pipeline, data={"input": request.input, "mode": pipeline})
 
     context: dict = {"request_metadata": request.metadata, "pipeline_input": request.input}
     outputs: dict = {}
@@ -154,16 +160,25 @@ async def run_pipeline(session_id: str, pipeline: str, request: PipelineStartReq
             context[step_name] = validated_output
             await publish(
                 session_id,
-                "agent.completed",
+                "agent_completed",
                 pipeline=pipeline,
                 step=step_name,
-                data={"agent": agent_slug, "output": validated_output},
+                data={
+                    "agent_name": agent_slug,
+                    "summary": validated_output.get("summary", ""),
+                    "output": validated_output,
+                },
             )
 
         result = {"pipeline": pipeline, "outputs": outputs}
         await session_manager.update_status(session_id, status="completed", result=result)
-        await publish(session_id, "pipeline.completed", pipeline=pipeline, data=result)
+        await publish(session_id, "pipeline_complete", pipeline=pipeline, data={"mode": pipeline, **result})
     except Exception as exc:
         partial_result = {"pipeline": pipeline, "outputs": outputs}
         await session_manager.update_status(session_id, status="failed", error=str(exc), result=partial_result)
-        await publish(session_id, "pipeline.failed", pipeline=pipeline, data={"error": str(exc), "partial_result": partial_result})
+        await publish(
+            session_id,
+            "pipeline_failed",
+            pipeline=pipeline,
+            data={"mode": pipeline, "error": str(exc), "partial_result": partial_result},
+        )

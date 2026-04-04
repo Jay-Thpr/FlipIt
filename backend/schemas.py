@@ -68,6 +68,9 @@ class SearchListing(BaseModel):
     price: float
     url: str
     condition: str
+    seller: str
+    seller_score: int = 0
+    posted_at: str
 
 
 class RankedListing(BaseModel):
@@ -76,13 +79,20 @@ class RankedListing(BaseModel):
     price: float
     score: float
     reason: str
+    url: str
+    seller: str
+    seller_score: int = 0
+    posted_at: str
 
 
-class NegotiationMessage(BaseModel):
+class NegotiationAttempt(BaseModel):
     platform: Literal["depop", "ebay", "mercari", "offerup"]
+    seller: str
+    listing_url: str
     listing_title: str
     target_price: float
     message: str
+    status: Literal["sent", "failed", "prepared"]
 
 
 class VisionAnalysisOutput(AgentOutputBase):
@@ -119,10 +129,12 @@ class SearchResultsOutput(AgentOutputBase):
 class RankingOutput(AgentOutputBase):
     top_choice: RankedListing
     candidate_count: int
+    ranked_listings: list[RankedListing] = Field(default_factory=list)
+    median_price: float
 
 
 class NegotiationOutput(AgentOutputBase):
-    offer_messages: list[NegotiationMessage] = Field(default_factory=list)
+    offers: list[NegotiationAttempt] = Field(default_factory=list)
 
 
 class VisionAgentInput(BaseModel):

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from typing import Iterable
 
 
@@ -38,6 +39,20 @@ PLATFORM_PRICE_OFFSETS = {
     "ebay": 0.94,
     "mercari": 0.97,
     "offerup": 0.88,
+}
+
+SELLER_SCORE_BASE = {
+    "depop": 23,
+    "ebay": 640,
+    "mercari": 58,
+    "offerup": 12,
+}
+
+POSTED_DAYS_AGO = {
+    "depop": (2, 5),
+    "ebay": (1, 4),
+    "mercari": (1, 3),
+    "offerup": (4, 9),
 }
 
 
@@ -83,6 +98,27 @@ def build_listing_url(platform: str, brand: str, item: str, ordinal: int) -> str
     return f"https://{platform}.example/{slug}"
 
 
+def build_seller(platform: str, brand: str, ordinal: int) -> str:
+    handle_brand = brand.lower().replace(" ", "")
+    suffix = {
+        "depop": "closet",
+        "ebay": "seller",
+        "mercari": "shop",
+        "offerup": "local",
+    }[platform]
+    return f"{handle_brand}_{suffix}_{ordinal}"
+
+
+def build_seller_score(platform: str, ordinal: int) -> int:
+    return SELLER_SCORE_BASE[platform] + (ordinal * 7)
+
+
+def build_posted_at(platform: str, ordinal: int) -> str:
+    day_offsets = POSTED_DAYS_AGO[platform]
+    posted_at = datetime.now(timezone.utc) - timedelta(days=day_offsets[ordinal - 1])
+    return posted_at.date().isoformat()
+
+
 def derive_base_price(query: str | None, budget: float | None, previous_prices: Iterable[float] = ()) -> float:
     tokens = tokenize_query(query)
     token_bonus = min(len(tokens), 8) * 0.75
@@ -119,6 +155,9 @@ def build_platform_results(
             "price": platform_price,
             "url": build_listing_url(platform, brand, item, 1),
             "condition": condition,
+            "seller": build_seller(platform, brand, 1),
+            "seller_score": build_seller_score(platform, 1),
+            "posted_at": build_posted_at(platform, 1),
         },
         {
             "platform": platform,
@@ -126,5 +165,8 @@ def build_platform_results(
             "price": second_price,
             "url": build_listing_url(platform, brand, item, 2),
             "condition": "good" if condition == "excellent" else condition,
+            "seller": build_seller(platform, brand, 2),
+            "seller_score": build_seller_score(platform, 2),
+            "posted_at": build_posted_at(platform, 2),
         },
     ]

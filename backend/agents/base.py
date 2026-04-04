@@ -25,14 +25,29 @@ class BaseAgent(ABC):
                 error=f"Input validation failed for {self.slug}: {exc}",
             )
 
-        output = await self.build_output(request)
-        validated_output = self.output_model.model_validate(output).model_dump()
-        return AgentTaskResponse(
-            session_id=request.session_id,
-            step=request.step,
-            status="completed",
-            output=validated_output,
-        )
+        try:
+            output = await self.build_output(request)
+            validated_output = self.output_model.model_validate(output).model_dump()
+            return AgentTaskResponse(
+                session_id=request.session_id,
+                step=request.step,
+                status="completed",
+                output=validated_output,
+            )
+        except ValidationError as exc:
+            return AgentTaskResponse(
+                session_id=request.session_id,
+                step=request.step,
+                status="failed",
+                error=f"Output validation failed for {self.slug}: {exc}",
+            )
+        except Exception as exc:
+            return AgentTaskResponse(
+                session_id=request.session_id,
+                step=request.step,
+                status="failed",
+                error=f"{self.slug} execution failed: {exc}",
+            )
 
     @abstractmethod
     async def build_output(self, request: AgentTaskRequest) -> dict:
