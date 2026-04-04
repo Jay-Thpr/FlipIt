@@ -43,7 +43,7 @@ For local development, copy `.env.example` to `.env` and set `INTERNAL_API_TOKEN
 - `GET /result/{session_id}`
 - `POST /internal/event/{session_id}`
 
-## Browser Use Runtime Notes
+## Browser Use Deployment Notes
 
 Browser Use-backed agents run inside the FastAPI pipeline and use headed Chromium via `patchright`. Local setup comes from `make install`; Render builds must also run `python -m patchright install chromium` so the browser binary exists before the service starts.
 

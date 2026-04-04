@@ -114,7 +114,7 @@ This is a Python/FastAPI backend for an autonomous resale agent system. There is
 
 `POST /{pipeline}/start` → creates a `SessionState` → fires `asyncio.create_task(run_pipeline(...))` → returns `{session_id, stream_url, result_url}` immediately.
 
-Client connects to `GET /stream/{session_id}` (SSE) to receive real-time events. Each agent step emits `agent_started`, `agent_completed` (or `agent_error`/`agent_retrying`), and the pipeline emits `pipeline_complete`/`pipeline_failed`.
+Client connects to `GET /stream/{session_id}` (SSE) to receive real-time events. The backend uses underscore-delimited SSE event names: `pipeline_started`, `pipeline_complete`, `pipeline_failed`, `agent_started`, `agent_completed`, `agent_error`, and `agent_retrying`.
 
 ### Schema Contracts (`backend/schemas.py`)
 
