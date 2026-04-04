@@ -1,383 +1,454 @@
-# PRD — Autonomous Resale Swarm Mobile (FILLER)
+# PRD — Autonomous Resale Agent (FILLER) v3
 **DiamondHacks 2026 | April 5–6 | UCSD**
 
 ---
 
 ## 1. Overview
 
-A mobile-first autonomous resale assistant built in React Native. A user snaps or uploads a photo of a thrift store item, the app identifies it, researches live resale comps, estimates margin, and helps the user decide whether the item is worth selling. If the numbers look good, the user taps `Sell This Item` and a Fetch.ai-powered agent swarm takes over: marketplace bots scrape live competitor listings, determine the lowest competitive price above a profit floor, generate haggle responses, and prepare marketplace drafts for the user to approve.
+A mobile-first autonomous resale agent that works from both sides of the secondhand market. Thrifters in-store scan items to instantly know if they're worth buying and get a ready-to-post listing. Buyers paste a link to any niche item and dedicated agents swarm resale platforms sequentially, find the best listings, and send optimized offer messages to haggle sellers down automatically.
 
-**One-liner:** Snap it. Price it. Let the swarm sell it.
+**One-liner:** The secondhand market, but with AI doing all the work on both sides.
+
+**Two modes:**
+- **SELL** — scan something at Goodwill, know your margin, list it in one tap
+- **BUY** — find something niche, agents hunt every resale platform and haggle people down for you
 
 ---
 
 ## 2. Goals
 
 - Win: Browser Use (primary sponsor), Fetch.ai, Gemini, Enchanted Commerce (main track), Best AI/ML, Best UI/UX, Best Mobile Hack, Best .Tech Domain
-- Deliver a mobile demo that feels native, fast, and reliable in under 3 minutes
-- Make every API load-bearing, with no decorative integrations
-- Center the core user decision: is this item worth selling right now?
-- Make the post-decision selling workflow explicitly multi-agent and Fetch-native
-- Price items to become the lowest competitive listing without violating a minimum profit threshold
-- Feel like a real resale product, not a hackathon toy
+- Demo works reliably in under 3 minutes — two 90-second arcs
+- Every API genuinely load-bearing
+- 10 registered Fetch.ai agents — explicitly maximizes Fetch.ai judging score
+- Feels like a real product someone uses daily
 
 ---
 
-## 3. Target User
+## 3. Target Users
 
-Someone who thrift-flips from their phone while shopping in person. They walk through Goodwill or Salvation Army, see an item, take a quick picture, and want an immediate answer on whether they should buy and resell it. Today they manually search comps, estimate fees in their head, compare competing listings across apps, and later create listings by hand. This app compresses that workflow into a mobile decision tool plus a selling swarm that prices and prepares listings competitively.
+**Seller (thrift flipper):** Walks into Goodwill, sees something interesting, has no idea what it's worth. Currently: Googles manually, checks eBay sold listings by hand, takes bad photos, types listings. This replaces all of that in under 60 seconds in-store.
+
+**Buyer (niche item hunter):** Wants a specific item — rare sneaker, vintage camera, limited streetwear. Currently: manually checks Depop, eBay, Mercari one by one, messages sellers hoping they'll budge, usually pays asking. This agent does all of that autonomously.
 
 ---
 
-## 4. Core User Flow
+## 4. Core User Flows
 
+### SELL Flow
 ```
-User opens mobile app and takes or uploads a photo
+User opens app → taps SELL → takes photo
         ↓
-Vision Agent identifies item and condition (Gemini Vision)
+VisionAgent: identifies item (Gemini Vision) + clean photo (Nano Banana)
         ↓
-Research Agent pulls sold comps from eBay (Browser Use)
+EbayResearchAgent: pulls sold comps (Browser Use)
         ↓
-Pricing Agent computes median price, fees, and profit margin
+PricingAgent: computes median price + profit margin (Gemini)
         ↓
-Sell Item component shows:
-- recommended listing price
-- estimated profit
-- confidence + comp breakdown
-- Sell This Item / Skip This Item decision
+DepopListingAgent: populates Depop form (Browser Use)
         ↓
-If user taps Sell This Item:
-Swarm Orchestrator dispatches marketplace agents
+Screen: before/after photo + comp breakdown + profit margin + Depop form preview
+User taps Post (manual final step)
+```
+
+### BUY Flow
+```
+User opens app → taps BUY → pastes link or describes item
         ↓
-Marketplace Scout Agents scrape active competitor listings
+DepopSearchAgent: finds active Depop listings (Browser Use)
         ↓
-Price Optimizer Agent sets lowest competitive live price above floor
+EbaySearchAgent: finds active eBay listings (Browser Use)
         ↓
-Negotiation + Listing Agent prepares haggle strategy and marketplace draft(s)
+MercariSearchAgent: finds active Mercari listings (Browser Use)
         ↓
-Mobile app shows swarm actions, pricing strategy, and Ready to Post state
+OfferUpSearchAgent: finds active OfferUp listings (Browser Use) [best effort]
+        ↓
+RankingAgent: scores + ranks all listings (Gemini)
+        ↓
+HagglingAgent × N: sends one optimized offer per seller (Browser Use, called once per seller)
+        ↓
+Screen: ranked listing feed + offer status tracker per seller
 ```
 
 ---
 
 ## 5. Agent Architecture
 
-### 5.1 Agent Breakdown
+### 5.1 The Orchestration Layer
 
-Six distinct uAgents registered on Agentverse, each implementing the Chat Protocol:
+**ASI:One is the orchestrator.** This is Fetch.ai's own LLM — not a custom agent you build. ASI:One discovers your registered agents on Agentverse and routes tasks to them. Your job is building the specialist agents, registering them, and implementing the Chat Protocol. ASI:One handles coordination automatically.
 
-| Agent | Responsibility | Key APIs |
-|---|---|---|
-| Vision Agent | Item identification and condition detection | Gemini Vision |
-| Research Agent | eBay sold comp scraping and data extraction | Browser Use |
-| Pricing Agent | Median price calculation, fee breakdown, profit margin | Python logic, Gemini |
-| Swarm Orchestrator Agent | Coordinates downstream selling agents and shared state | Fetch.ai uAgents |
-| Marketplace Scout Agents | Scrape live active listings across marketplaces | Browser Use |
-| Negotiation + Listing Agent | Generates haggle logic and populates draft(s) up to submit | Browser Use, Gemini |
+FastAPI sits alongside this as the bridge between the mobile app and the agent network, receiving SSE events and streaming them to the frontend.
 
-### 5.2 Sequencing
+### 5.2 Full Agent Roster — 10 Agents
 
+All agents: local Python uAgents, running on Render, registered on Agentverse via Mailbox, implementing Chat Protocol, discoverable by ASI:One.
+
+| # | Agent | Mode | Responsibility | Key APIs |
+|---|---|---|---|---|
+| 1 | VisionAgent | SELL | Item identification + clean photo | Gemini Vision, Nano Banana |
+| 2 | EbayResearchAgent | SELL | eBay sold comp scraping | Browser Use |
+| 3 | PricingAgent | SELL | Median price + profit margin | Gemini, Python |
+| 4 | DepopListingAgent | SELL | Depop form population | Browser Use |
+| 5 | DepopSearchAgent | BUY | Active Depop listing search | Browser Use |
+| 6 | EbaySearchAgent | BUY | Active eBay listing search | Browser Use |
+| 7 | MercariSearchAgent | BUY | Active Mercari listing search | Browser Use |
+| 8 | OfferUpSearchAgent | BUY | Active OfferUp listing search | Browser Use |
+| 9 | RankingAgent | BUY | Score + rank all listings | Gemini |
+| 10 | HagglingAgent | BUY | Generate + send one offer per seller | Browser Use, Gemini |
+
+### 5.3 SELL Sequencing
 ```
-Vision Agent → Research Agent → Pricing Agent → Sell Item component
-                                                ↓
-                                   Swarm Orchestrator Agent
-                                                ↓
-                            [Marketplace Scouts + Price Optimizer]
-                                                ↓
-                              Negotiation + Listing Agent(s)
+VisionAgent → EbayResearchAgent → PricingAgent → DepopListingAgent
 ```
+Strictly sequential. Each agent completes fully before the next fires. EbayResearchAgent output feeds PricingAgent; PricingAgent output feeds DepopListingAgent.
 
-- Vision completes before research begins
-- Pricing starts after research returns comps
-- The `Sell Item` component is the human decision checkpoint
-- The selling swarm begins only if the user explicitly chooses to sell
-- Marketplace scouts can run in parallel across target platforms
-- Price optimization computes the lowest competitive live listing that still clears the profit floor
-- Negotiation logic prepares counteroffers or haggle scripts per marketplace
-- Each agent emits status events to the mobile frontend as it progresses
+### 5.4 BUY Sequencing
+```
+DepopSearchAgent → EbaySearchAgent → MercariSearchAgent → OfferUpSearchAgent
+        → RankingAgent
+        → HagglingAgent (×N, once per target seller)
+```
+Search agents run sequentially — one platform at a time. Sequential-but-fast: each platform search takes 10-20 seconds, total search phase ~60 seconds. Results aggregate after all search agents complete, then pass to RankingAgent. HagglingAgent is called independently once per seller, sequentially.
 
-### 5.3 Fetch.ai Integration
+### 5.5 Fetch.ai Integration — Full Detail
 
-- All agents are built with the uAgents framework in Python
-- Agents are registered on Agentverse with Chat Protocol implemented
-- ASI:One is used for judge-facing validation and direct invocation of the swarm
-- The mobile app is the consumer-facing product surface
-- Agentverse profile URLs and ASI:One chat session URL are generated as Fetch.ai deliverables
+**Registration:** All 10 agents run locally on Render as uAgents. Each registers on Agentverse via the Mailbox feature. Mailbox buffers messages during any brief downtime and delivers them when agent reconnects. Once registered, each agent shows as Active in Agentverse Marketplace.
+
+**Chat Protocol:** Every agent implements `uagents_core.contrib.protocols.chat` — receives `ChatMessage`, sends `ChatAcknowledgement`, processes, returns `ChatMessage` with results.
+
+**Discoverability:** All 10 agents discoverable by ASI:One via Agentverse search. ASI:One can route user natural language requests to any of them directly.
+
+**Deliverables:**
+- 10 Agentverse profile URLs (one per agent)
+- ASI:One Chat session URL demonstrating agents working through ASI:One
+- README.md per agent with name, address, capability description
+- `![tag:innovationlab]` badge in each README
+
+**Fetch.ai judging story:** 10 distinct registered agents, genuine multi-agent coordination, Browser Use inside uAgents, ASI:One as discovery + orchestration layer. Directly hits "Quantity of Agents Created" and "multi-agent collaboration" judging criteria.
 
 ---
 
 ## 6. Feature Specifications
 
-### 6.1 Vision Agent
+### 6.1 VisionAgent (SELL)
 
-**Input:** Raw thrift-store photo from camera or gallery
+**Input:** Camera photo (base64, sent via Chat Protocol)
 
-**Behavior:**
-- Identify brand, product name, model or variant, and condition (`excellent`, `good`, `fair`)
-- Output a confidence score
-- If confidence is below 70%, prompt the user to correct the item name before continuing
+**Step 1 — Gemini Vision**
+- Identify: brand, product name, model/variant, condition (excellent/good/fair)
+- Output confidence score — shown in UI
+- If confidence < 70%: surface correction field, pipeline pauses
 
-**Output:** `{ item_name, brand, model, condition, confidence }`
+**Step 2 — Nano Banana**
+- Generate clean white-background product photo from raw input
+- Output: listing-ready image URL
+- Before/after shown side-by-side in UI
 
-### 6.2 Research Agent
+**Output:** `{ item_name, brand, model, condition, confidence, clean_photo_url }`
 
-**Input:** Item identification from Vision Agent
+---
 
-**Browser Use behavior:**
+### 6.2 EbayResearchAgent (SELL)
+
+**Input:** `{ item_name, brand, model, condition }` from VisionAgent
+
+**Browser Use task:**
 - Navigate to eBay sold listings
-- Search `[brand] [model] [condition]`
-- Extract sold price, sold date, condition, and result count
-- Filter to the last 90 days and condition-matching items
-- Wait for dynamic content before extraction
-- Run in headed mode with stealth protections enabled
+- Search `"[brand] [model]"` with sold + condition filter
+- Wait for results to render (explicit selector wait, not fixed timeout)
+- Extract per listing: sold price, date sold, condition, listing title
+- Filter: last 90 days only, condition match only
+- Cap at 20 results
+- Headed Chromium + playwright-stealth
 
-**Fallback:** If eBay blocks or fails, fall back to Mercari sold listings using the same extraction schema
+**Fallback:** If eBay blocks after 30s timeout → emit `fallback_triggered` SSE event → MercariResearchAgent logic fires instead (same agent, different task string)
 
-**Output:** `{ comps: [{ price, date, condition, title }], raw_count }`
+**Output:** `{ comps: [{ price, date, condition, title }], platform, raw_count }`
 
-### 6.3 Pricing Agent
+---
 
-**Input:** Vision output plus comps from Research Agent
+### 6.3 PricingAgent (SELL)
 
-**Logic:**
-- Remove outliers greater than 2 standard deviations from the mean
-- Compute median sold price from filtered comps
-- Apply condition adjustment: `excellent` (+5%), `good` (0%), `fair` (-15%)
-- Compute thrift cost using a default of $8, editable by the user in the app
-- Compute profit margin: `recommended_price - shipping_estimate - depop_fee - thrift_cost`
-- Depop fee assumption: 10%
-- Shipping estimate: flat $5 default for lightweight items
-
-**Output:**
-- Recommended listing price
-- Estimated profit margin
-- Fee breakdown
-- Comp table for display in the app
-
-### 6.4 Marketplace Scout Agents
-
-**Input:** Item details, recommended price, and user-confirmed `Sell This Item` action
-
-**Browser Use behavior:**
-- Open target marketplaces in separate browser contexts
-- Search active listings for the same or nearest comparable item
-- Extract current listing price, shipping, condition, title, recency, and platform
-- Normalize comparable active listings into a shared schema
-- Return the lowest competitive live listings per marketplace
-
-**Output:** `{ active_listings: [{ marketplace, title, price, shipping, condition, url }] }`
-
-### 6.5 Price Optimizer Agent
-
-**Input:** Sold comps, active listings, thrift cost, and required profit floor
+**Input:** Comps from EbayResearchAgent + item details from VisionAgent
 
 **Logic:**
-- Set a minimum profit floor, defaulting to $15 and editable by the user
-- Identify the cheapest relevant live listing on each marketplace
-- Undercut the cheapest relevant listing by a small configurable increment
-- Never recommend a price below the profit floor
-- If the market is too compressed, return `skip_listing` or `hold_price` instead of forcing a race to zero
+- Remove outliers (>2 std deviations from mean)
+- Compute median sold price from filtered set
+- Condition multiplier: excellent ×1.05, good ×1.00, fair ×0.85
+- Thrift cost: $8 default (editable in UI)
+- Shipping: $5 flat default
+- Depop fee: 10%
+- Profit = `median_price × condition_multiplier - shipping - (median_price × 0.10) - thrift_cost`
+- Gemini generates 2-sentence listing description from item details
 
-**Output:**
-- Best marketplace to list on first
-- Recommended live listing price
-- Undercut delta
-- Whether the item qualifies for aggressive pricing, hold pricing, or skip
+**Output:** `{ recommended_price, profit_margin, median_price, comp_table, listing_description }`
 
-### 6.6 Negotiation + Listing Agent
+---
 
-**Input:** Item details, optimized price, marketplace selection, and user-confirmed `Sell This Item` action
+### 6.4 DepopListingAgent (SELL)
 
-**Behavior:**
-- Generate a marketplace-specific title and description
-- Prepare negotiation rules: minimum accepted offer, ideal counteroffer, and response templates
-- If supported in the demo flow, prepare haggle messages or counteroffer text for incoming buyer offers
-- Open the target marketplace in a pre-warmed logged-in session
-- Populate the listing draft sequentially:
-  1. Upload listing photo
-  2. Select category
-  3. Fill title
-  4. Fill description
-  5. Set optimized price
+**Input:** VisionAgent output + PricingAgent output + clean_photo_url
+
+**Browser Use task:**
+- Open Depop in pre-warmed logged-in session
+- Navigate to listing creation
+- Populate form sequentially (fields appear conditionally):
+  1. Upload clean photo via file input
+  2. Select category → subcategory
+  3. Fill title: `[Brand] [Model] - [Condition]`
+  4. Fill description: from PricingAgent
+  5. Set price: recommended_price
   6. Select condition
   7. Fill size if applicable
-- Pause at submit and never post automatically
-- Capture a screenshot of the populated draft for the mobile UI
+- Pause at submit — do NOT click post
+- Screenshot populated form
 
-**Output:** Draft preview screenshot, negotiation settings, and `ready_to_post` status
+**Output:** `{ form_screenshot_url, listing_preview: { title, price, description } }`
 
-### 6.7 Sell Item Component
+---
 
-This is the core mobile decision component and the main user-facing conversion moment.
+### 6.5 DepopSearchAgent (BUY)
 
-**Purpose:**
-- Help the user decide whether the item is worth buying and reselling
-- Turn research output into a clear `sell / skip` action
-- Gate the selling swarm behind explicit user intent
+**Input:** Item name/description (extracted from pasted link or natural language)
 
-**Displayed data:**
-- Item identity and confidence
-- Recommended listing price
-- Estimated profit in large, high-contrast type
-- Thrift cost field, editable in place
-- Profit floor field, editable in place
-- Fee breakdown: sale price, Depop fee, shipping, net profit
-- Comp summary: median, lowest, highest, number of relevant sold listings
-- Live market summary: cheapest active listing by marketplace
-- Quick verdict badge: `Strong Flip`, `Borderline`, or `Skip`
+**Browser Use task:**
+- Navigate to `depop.com/search/?q=[query]`
+- Wait for listing grid to render
+- Extract top 15 listings: price, condition, seller username, listing URL, date posted, seller review count
+- Headed Chromium + playwright-stealth
 
-**Primary actions:**
-- `Sell This Item` starts the agent swarm
-- `Skip This Item` ends the flow without starting listing automation
-- `Adjust Cost` recalculates margin instantly
-- `Adjust Floor` recalculates swarm pricing instantly
+**Output:** `{ platform: "depop", listings: [{ price, condition, seller, url, date, reviews }] }`
+
+---
+
+### 6.6 EbaySearchAgent (BUY)
+
+**Input:** Same query as DepopSearchAgent
+
+**Browser Use task:**
+- Navigate to eBay active listings (Buy It Now filter)
+- Search with condition filter
+- Extract top 15 listings: price, condition, seller username, listing URL, seller feedback score
+- Headed Chromium + playwright-stealth
+
+**Output:** `{ platform: "ebay", listings: [{ price, condition, seller, url, feedback_score }] }`
+
+---
+
+### 6.7 MercariSearchAgent (BUY)
+
+**Input:** Same query
+
+**Browser Use task:**
+- Navigate to `mercari.com/search/?keyword=[query]`
+- Extract top 15 listings: price, condition, seller username, listing URL, seller rating
+- Lower bot detection than eBay — more reliable
+
+**Output:** `{ platform: "mercari", listings: [...] }`
+
+---
+
+### 6.8 OfferUpSearchAgent (BUY)
+
+**Input:** Same query
+
+**Browser Use task:**
+- Navigate to `offerup.com/search/?q=[query]`
+- Best effort — 30 second hard timeout
+- Extract whatever listings render before timeout
+- High bot detection risk — treat as nice-to-have
+
+**Failure mode:** Returns empty list + `{ status: "blocked" }`. Pipeline continues normally. Frontend shows "OfferUp unavailable" badge rather than crashing.
+
+**Output:** `{ platform: "offerup", listings: [...], status: "success" | "blocked" }`
+
+---
+
+### 6.9 RankingAgent (BUY)
+
+**Input:** Aggregated listings from all 4 search agents
+
+**Logic:**
+- Flatten + deduplicate (same seller + similar price = duplicate)
+- Score each listing (0-100):
+  - Price vs median: 40% weight (lower = better)
+  - Condition: 30% weight (excellent > good > fair)
+  - Seller credibility: 20% weight (review count / feedback score)
+  - Recency: 10% weight (newer = better)
+- Flag haggle targets: listings >15% above platform median with active seller
+- Gemini generates one-line summary per top 10 listing
+- Return top 10 ranked
+
+**Output:** `{ ranked_listings: [{ ...listing, score, haggle_flag, summary }], median_price }`
+
+---
+
+### 6.10 HagglingAgent (BUY) — called once per seller
+
+**Input:** Single listing `{ platform, seller, url, price, condition }` + `{ median_price }` from RankingAgent
+
+**Step 1 — Gemini offer generation:**
+- Calculate offer: 15-25% below listing price, floor at median
+- Generate platform-appropriate message:
+  - Polite, specific, reasoned
+  - References market data without being aggressive
+  - Example: "Hi! Love this piece. Similar ones have sold for around $[median] recently — would you consider $[offer]? Happy to pay right away."
+
+**Step 2 — Browser Use offer sending:**
+- Navigate to listing URL
+- Open seller message UI
+- Type and send generated message
+- Confirm sent status
+
+**Output:** `{ seller, platform, listing_url, offer_price, message_sent, status: "sent" | "failed" }`
 
 ---
 
 ## 7. Mobile App Specification
 
 ### 7.1 Stack
+- React Native (Expo)
+- NativeWind (Tailwind for React Native)
+- `react-native-sse` for SSE real-time agent feed
+- Python FastAPI backend via REST
 
-- React Native with Expo
-- Expo Router for navigation
-- TypeScript
-- NativeWind for styling
-- React Native Reanimated for motion
-- SSE client for live agent status updates
-- Python backend via REST API
+### 7.2 Screen Structure
 
-### 7.2 Core Screens
+**Home Screen:**
+Two large mode cards with clear CTAs:
+- **SELL** — "Scan something. Know your margin. List it."
+- **BUY** — "Find something. Agents hunt it down and haggle."
 
-**1. Capture Screen**
-- Full-screen camera or gallery picker
-- Single primary action: take photo or upload photo
-- Lightweight framing guide to encourage clean item shots
+**SELL Screen:**
+- Full-screen camera viewfinder
+- Tap to capture → pipeline starts immediately
+- Bottom sheet rises with agent activity feed
+- Results screen (after pipeline): before/after photo strip, comp table, profit margin hero number, Depop form preview screenshot
 
-**2. Analysis Screen**
-- Agent activity feed at the top
-- Item photo and identification state
-- Progressive comp loading and pricing updates
-- Transition into the Sell Item component as soon as pricing completes
-- Expand into swarm activity once the user starts selling
+**BUY Screen:**
+- Text input: paste link or describe item
+- Submit → pipeline starts
+- Agent activity feed: 4 platform search agents show sequentially with platform badges
+- Results: ranked listing cards (platform badge, price, condition, score, haggle flag)
+- "Send Offers" CTA → HagglingAgent fires per seller
+- Offer tracker: per-seller status badge (Sent / Replied / Accepted)
 
-**3. Draft Screen**
-- Shown only after `Sell This Item`
-- Swarm timeline showing scout, optimize, negotiate, and draft steps
-- Marketplace draft screenshot preview
-- Listing summary: marketplace, title, price, condition, haggle floor
-- `Ready to Post` state shown prominently
+### 7.3 Agent Activity Feed (both modes)
+- Persistent animated bottom sheet
+- One card per agent: name, status (idle / active / complete / error), live log line
+- Active agent: pulsing animation
+- Complete agent: green checkmark + one-line result summary
+- Error agent: red indicator + fallback note
 
-### 7.3 Interaction Model
+### 7.4 SSE Event Types
 
-- The app should be usable one-handed in a thrift store aisle
-- Important numbers are thumb-reachable and visually obvious
-- The estimated profit is the hero metric
-- The cheapest competitive live price above the profit floor is the key selling metric
-- Motion should clarify progression between capture, analysis, and sell decision
-- The user should never need to type before seeing whether an item is worth selling
+```
+agent_started      { agent_name, mode }
+agent_log          { agent_name, message }       # live log line
+agent_completed    { agent_name, summary }       # one-line result
+agent_error        { agent_name, error, fallback }
+listing_found      { platform, listing }         # BUY: streams as found
+offer_sent         { seller, platform, status }  # BUY: per seller
+pipeline_complete  { mode, session_id }
+```
 
-### 7.4 Sell Item UX
-
-The `Sell Item` component lives near the bottom of the Analysis Screen as a sticky action card once pricing is available.
-
-**Component structure:**
-- Header with item name and confidence
-- Profit hero number
-- Recommended listing price
-- Inline thrift cost editor
-- Inline profit floor editor
-- Comp carousel or compact table
-- Active marketplace price strip
-- Decision badge
-- Two large buttons: `Sell This Item` and `Skip`
-
-**Why it matters:**
-- This is the product's core value, not the draft generation alone
-- It makes the app useful even if the user never posts a listing
-- It cleanly supports the demo fallback: even if listing automation breaks, the app still answers the resale decision and proposes a swarm pricing strategy
-
-### 7.5 Real-Time Updates
-
-- Backend emits `agent_started`, `agent_log`, `agent_completed`, and `agent_error`
-- The app subscribes to a session-specific event stream
-- Agent states update live without polling, including per-agent swarm progress
-- If the stream drops, the app retries and can restore state via the result endpoint
+Frontend updates in real time on each event. No polling.
 
 ---
 
 ## 8. Backend Specification
 
 ### 8.1 Stack
-
-- Python with FastAPI
-- uAgents framework
-- Browser Use with Playwright
-- Hosted on Render or similar hackathon-friendly infra
+- Python (FastAPI)
+- uAgents framework (Fetch.ai) — all 10 agents
+- Browser Use (Playwright + playwright-stealth)
+- Hosted on Render (paid tier — free tier memory insufficient for headed Chromium)
 
 ### 8.2 API Endpoints
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/upload` | POST | Accepts mobile photo upload, triggers Vision Agent, returns session ID |
-| `/stream/{session_id}` | GET | SSE stream of agent status events |
-| `/result/{session_id}` | GET | Returns current or final session results |
-| `/sell/{session_id}` | POST | Confirms user intent to sell and triggers the Fetch swarm |
-| `/reprice/{session_id}` | POST | Recomputes margin after thrift cost adjustment |
-| `/swarm/config/{session_id}` | POST | Updates target marketplaces, undercut delta, and profit floor |
+| `/sell/start` | POST | Accepts photo (base64), triggers SELL pipeline, returns `{ session_id }` |
+| `/buy/start` | POST | Accepts `{ query }` or `{ url }`, triggers BUY pipeline, returns `{ session_id }` |
+| `/stream/{session_id}` | GET | SSE stream — stays open until `pipeline_complete` event |
+| `/result/{session_id}` | GET | Full final result for session |
+| `/health` | GET | Backend health check |
 
 ### 8.3 Session Management
+- Unique session ID per pipeline invocation (UUID)
+- Results stored in-memory dict keyed by session ID
+- SSE stream closes on `pipeline_complete` or 5-minute timeout
+- No database needed for hackathon
 
-- Each upload creates a unique session ID
-- Session state is stored in memory for the hackathon
-- Results include image metadata, comps, active listings, pricing output, negotiation settings, and draft status
+### 8.4 Agent-to-Backend Communication
+- Each agent emits SSE events to FastAPI via internal HTTP POST to `/internal/event/{session_id}`
+- FastAPI buffers events per session and streams them to connected mobile SSE client
+- Agents run as separate async processes alongside FastAPI on same Render instance
 
-### 8.4 Browser Use Configuration
+### 8.5 Browser Use Configuration
+- All Browser Use tasks: headed Chromium + playwright-stealth
+- Separate browser context per agent invocation (no shared state)
+- Realistic randomized delays between actions (500ms-2000ms)
+- Hard timeout per agent: 30 seconds
+- SELL agents: sequential, one context at a time
+- BUY search agents: sequential, one context at a time (sequential-but-fast)
 
-- Headed Chromium with stealth protections
-- Separate browser contexts for research, marketplace scouts, and listing
-- Depop session is pre-warmed and logged in before demo time
-- Listing actions run only after the mobile app sends explicit sell confirmation
-- Marketplace scout sessions can run in parallel for speed
+### 8.6 Agentverse Registration
+- All 10 agents: local uAgents registered via Agentverse Mailbox
+- Each agent runs with `mailbox=True` flag
+- Mailbox buffers messages during any brief unavailability
+- Each agent registered at startup, stays Active as long as Render instance is running
+- Agent addresses logged to README.md for Fetch.ai deliverables
 
 ---
 
 ## 9. Demo Script
 
 **Pre-demo setup:**
-- Depop account is logged in and session is warm
-- Demo item is something easy to identify with abundant comps
-- Backend is already running
-- Mobile build is installed on device or simulator
+- All 10 agents running on Render, Active on Agentverse
+- Depop seller account: logged in, session warm
+- OfferUp + Depop buyer accounts: logged in for messaging
+- SELL demo item: Air Jordan 1s / AirPods / North Face jacket (20+ eBay sold comps, clear margin)
+- BUY demo item: specific niche sneaker with active listings on Depop + Mercari + eBay
+- Test seller account pre-staged to show offer response during BUY demo
+- Backend health check confirmed
 
-**Demo arc:**
+**Demo Arc 1 — SELL (90 seconds):**
+1. Open app, tap SELL. "You just found this at Goodwill. Is it worth buying?"
+2. Take photo.
+3. VisionAgent: item identified on screen, clean product photo appears. "It knows exactly what this is."
+4. EbayResearchAgent: comp table populates. "Real sold prices from eBay."
+5. PricingAgent: profit margin appears large. "After fees, you make $Y."
+6. DepopListingAgent: Depop form screenshot appears, fully populated. "Your listing is ready. One tap to post."
 
-1. Open the mobile app and show the camera-first landing screen.
-2. Take or upload a photo of a demo item found at Goodwill.
-3. Vision Agent identifies the item and condition.
-4. Research and pricing complete, then the Sell Item component appears.
-5. Show the hero profit number, live market floor, and explain whether the item is worth flipping.
-6. Tap `Sell This Item`.
-7. The Fetch swarm fans out across marketplaces, finds the cheapest live competitor, and recommends the best price above the profit floor.
-8. The listing agent fills the marketplace draft and returns a `Ready to Post` preview plus haggle settings.
+**Demo Arc 2 — BUY (90 seconds):**
+1. Tap BUY. "You want these specific Jordan 1s but refuse to pay asking price."
+2. Paste product link.
+3. DepopSearchAgent, EbaySearchAgent, MercariSearchAgent fire sequentially — platform badges animate. "Checking every resale platform."
+4. RankingAgent: ranked listing cards appear, haggle targets flagged. "Found 31 listings. These 5 are below market."
+5. Tap Send Offers. HagglingAgent fires. "Sent personalized offers to 5 sellers."
+6. Show pre-staged reply from test account. "One already replied."
 
-**Fallback if eBay blocks:** Use Mercari fallback and continue the demo.
-
-**Fallback if listing automation fails:** End on the Sell Item component and swarm pricing dashboard. The resale decision workflow remains complete and useful.
+**Fallbacks:**
+- eBay blocks SELL → fallback event emits, Mercari fires, demo continues
+- OfferUp blocked BUY → "OfferUp unavailable" badge, other 3 platforms show
+- No live seller reply → pre-staged test account reply visible
 
 ---
 
 ## 10. Track Submission Requirements
 
-| Track | Requirement | How We Satisfy It |
+| Track | Requirement | How Satisfied |
 |---|---|---|
-| Browser Use | Core functionality must rely on Browser Use agents interacting with the web | Sold-comp research, active marketplace scouting, and draft creation all depend on Browser Use |
-| Fetch.ai | Agent registration, Chat Protocol, ASI:One demo | The selling flow is explicitly swarm-based and coordinated by Fetch.ai agents |
-| Gemini | Gemini must be load-bearing | Gemini Vision handles item identification and condition |
-| Enchanted Commerce | Build a standout commerce experience | Mobile resale assistant for real-time flipping and competitive marketplace selling |
-| Best AI/ML | Strong AI or ML depth | Multi-agent orchestration, vision, live market analysis, and pricing optimization |
-| Best UI/UX | Beautiful and intuitive product UX | Mobile-first flow, live swarm feedback, clear sell decision component |
-| Best Mobile Hack | Standout mobile experience | React Native app designed for on-the-go thrift shopping |
-| Best .Tech Domain | Register a .tech domain | Register on day one |
+| Browser Use | Core functionality relies on Browser Use | SELL: eBay scraping + Depop form. BUY: 4 platform searches + offer sending. 6 of 10 agents use Browser Use. |
+| Fetch.ai | Agents registered on Agentverse, Chat Protocol, ASI:One session URL | 10 registered agents, Chat Protocol on all, ASI:One session URL as deliverable, Mailbox registration |
+| Gemini | Gemini API as reasoning backbone | Gemini Vision (VisionAgent), Gemini reasoning (PricingAgent description, RankingAgent summaries, HagglingAgent offer generation) |
+| Enchanted Commerce | Revolutionize commerce | Full two-sided autonomous resale marketplace — buying and selling both automated end-to-end |
+| Best AI/ML | Push AI/ML boundaries | 10-agent orchestration, vision model, semantic ranking, generative negotiation |
+| Best UI/UX | Beautiful and intuitive UX | Native mobile polish, live agent feed, progressive results, before/after photo, ranked cards |
+| Best Mobile Hack | Standout mobile app | Full Expo React Native — camera integration, in-store use case, real mobile UX |
+| Best .Tech Domain | Register .tech domain | Register day one |
 
 ---
 
@@ -385,65 +456,93 @@ The `Sell Item` component lives near the bottom of the Analysis Screen as a stic
 
 | Risk | Severity | Mitigation |
 |---|---|---|
-| eBay bot detection | High | Stealth mode, realistic delays, Mercari fallback |
-| Marketplace anti-automation friction | High | Limit demo to draft creation, pre-warm sessions, and show swarm logs even if one platform fails |
-| Depop form changes | Medium | Pre-map draft flow for one demo category |
-| Mobile network instability | Medium | Session-based resume via `/result` and SSE reconnect |
-| Depop upload edge cases | Medium | Test image upload handling before demo day |
-| Over-undercutting harms margin | Medium | Enforce editable profit floor and hard stop below threshold |
-| Live haggling is not uniformly supported | Medium | Use generated counteroffer templates and marketplace-specific negotiation settings as the demo baseline |
-| Gemini misidentification | Medium | Show confidence and allow correction before research |
-| New Depop account restrictions | High | Verify account readiness before the event |
+| eBay bot detection (SELL research) | High | playwright-stealth + headed mode + delays; Mercari fallback built into EbayResearchAgent |
+| OfferUp bot detection (BUY search) | High | Hard 30s timeout, returns empty gracefully, frontend shows "unavailable" badge — not a crash |
+| Depop form photo upload via Browser Use | High | Test file input specifically first — known edge case. Pre-stage photo in fixed path. |
+| New account messaging restrictions | High | Verify Depop + OfferUp messaging works on new accounts TONIGHT before hackathon |
+| Render memory (headed Chromium) | High | Use paid Render tier. Each agent spins up/tears down context — don't keep 10 browsers open simultaneously |
+| Agent Mailbox registration latency | Medium | Register all agents at hackathon start, verify Active status before building anything else |
+| react-native-sse stability | Medium | Test SSE polyfill on both iOS + Android early. Have polling fallback via `/result` endpoint. |
+| HagglingAgent message flagged as spam | Medium | Gemini generates unique message per seller. Don't reuse identical text across sends. |
+| BUY search returning no results | Medium | Cap minimum — if all platforms return <3 results combined, surface "no listings found" gracefully |
+| Pre-staged seller reply timing | Low | Control test account yourself. Have reply pre-typed and ready to send at right moment in demo. |
 
 ---
 
 ## 12. Out of Scope
 
-- Automatic final posting to Depop
-- Fully autonomous buyer messaging on every marketplace
-- Multi-item batch scanning
-- User authentication
+- Actual Depop listing submission (pause at submit — intentional)
+- Real-time push notifications for offer replies
+- Multi-item batch scanning (SELL)
+- Facebook Marketplace (too aggressive for demo reliability)
+- Authentication / user accounts
 - Database persistence
-- Native marketplace integrations beyond the Browser Use listing flow
-- Guaranteed automatic cross-posting to multiple marketplaces
+- Price history over time
+- In-app payments
 
 ---
 
 ## 13. Build Priority Order
 
-**Must have:**
-1. React Native capture and upload flow
-2. Vision Agent with Gemini item identification
-3. Research Agent with eBay sold comps
-4. Pricing Agent with profit calculation
-5. Sell Item component with editable thrift cost
-6. Swarm orchestrator with at least one marketplace scout
-7. Live mobile session updates
+**Must have — demo blockers (build first):**
+1. Expo app shell: Home, SELL screen, BUY screen, camera
+2. FastAPI backend + SSE infrastructure
+3. VisionAgent — Gemini Vision identification
+4. EbayResearchAgent — sold comp scraping
+5. PricingAgent — margin calculation
+6. Agent activity feed in mobile UI (SSE-driven)
+7. DepopSearchAgent + EbaySearchAgent + MercariSearchAgent
 
 **Should have:**
-8. Price optimizer with undercut logic and profit floor
-9. Negotiation + listing agent for marketplace draft population
-10. Mercari fallback
-11. Fetch.ai registration and ASI:One validation
+8. DepopListingAgent — Depop form population
+9. RankingAgent — scored listing feed
+10. HagglingAgent — offer sending
+11. Nano Banana — clean photo generation
+12. All 10 agents registered on Agentverse via Mailbox
 
 **Nice to have:**
-12. Local history of scanned items
-13. Push notification when draft is ready
-14. Multi-marketplace sell recommendations
+13. OfferUpSearchAgent
+14. Mercari fallback inside EbayResearchAgent
+15. User-adjustable thrift cost field
+16. Offer status tracker with pre-staged reply demo
 
 ---
 
-## 14. Pre-Hackathon Checklist
+## 14. Team Split (Recommended)
 
-- [ ] Create and verify Depop account
-- [ ] Confirm Depop draft creation works for a new account
-- [ ] Pick a demo item with 20+ sold comps in the last 90 days
-- [ ] Verify target item has meaningful resale profit
-- [ ] Get Gemini API key
-- [ ] Install and validate Browser Use
-- [ ] Create Agentverse account and review Chat Protocol docs
-- [ ] Choose target marketplaces for the swarm and verify at least one draft flow
-- [ ] Define default undercut delta and profit floor for the demo
-- [ ] Set up mobile Expo project and confirm device build works
+| Person | Owns |
+|---|---|
+| 1 | Fetch.ai + agent architecture: uAgents setup, Mailbox registration, Chat Protocol, all agent scaffolding, ASI:One integration |
+| 2 | Browser Use: EbayResearchAgent, DepopListingAgent, all 4 BUY search agents, HagglingAgent — Browser Use specialist |
+| 3 | AI pipeline: VisionAgent (Gemini Vision + Nano Banana), PricingAgent, RankingAgent (Gemini), offer message generation |
+| 4 | Mobile frontend: Expo app, camera, SSE feed, agent activity UI, SELL results screen, BUY results + ranking cards |
+
+FastAPI backend split between persons 1 and 2 — 1 owns session management + SSE infrastructure, 2 owns Browser Use execution endpoints.
+
+---
+
+## 15. Checklist
+
+**Accounts:**
+- [ ] Create Depop seller account — verify listing creation works immediately (no identity gate)
+- [ ] Create Depop buyer account — verify messaging works on new account
+- [ ] Create OfferUp account — verify messaging works on new account
+- [ ] Create test seller account on Depop — will use to pre-stage offer reply during BUY demo
+
+**Demo validation:**
+- [ ] Select SELL demo item — verify 20+ eBay sold comps in last 90 days
+- [ ] Verify SELL demo item has >$20 profit margin at $8 thrift cost
+- [ ] Select BUY demo item — verify active listings on Depop + eBay + Mercari simultaneously
+- [ ] Pre-type offer reply in test seller account — ready to send during demo
+
+**API credentials:**
+- [ ] Gemini API key
+- [ ] Nano Banana API key
+- [ ] Agentverse account created
+
+**Environment:**
+- [ ] Browser Use installed, basic navigation test passes
+- [ ] playwright-stealth installed, tested on eBay sold listings
+- [ ] Expo CLI installed, blank app running on device
+- [ ] Render account set up (paid tier confirmed)
 - [ ] Register .tech domain
-- [ ] Set up backend hosting
