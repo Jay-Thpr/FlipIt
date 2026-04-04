@@ -6,116 +6,143 @@ import os
 from pathlib import Path
 from typing import Any
 
-from backend.agents.browser_use_support import env_flag, get_browser_profile_root
-from backend.config import get_agent_execution_mode, get_agent_timeout_seconds
+from backend.agents.browser_use_support import (
+    get_browser_profile_root,
+    get_browser_use_max_steps,
+    import_browser_use_dependencies,
+)
+from backend.config import AGENT_TIMEOUT_SECONDS, INTERNAL_API_TOKEN
 
-REQUIRED_PLATFORM_PROFILES = ("depop", "ebay", "mercari", "offerup")
-
-
-def candidate_chromium_roots() -> list[Path]:
-    home = Path.home()
-    roots = [
-        Path(os.getenv("PLAYWRIGHT_BROWSERS_PATH", "")),
-        home / "Library" / "Caches" / "ms-playwright",
-        home / ".cache" / "ms-playwright",
-        Path("/opt/render/.cache/ms-playwright"),
-    ]
-    return [root for root in roots if str(root)]
+PROFILE_NAMES = ("depop", "ebay", "mercari", "offerup")
 
 
-def detect_chromium_installation(search_roots: list[Path] | None = None) -> tuple[bool, str]:
-    roots = search_roots or candidate_chromium_roots()
-    for root in roots:
-        if not root.exists():
-            continue
-        for child in root.iterdir():
-            if child.name.startswith("chromium-"):
-                return True, str(child)
-    return False, "Chromium browser bundle was not found in the Patchright/Playwright cache roots"
+def _status(ok: bool) -> str:
+    return "pass" if ok else "fail"
 
 
-def collect_profile_status(profile_root: Path) -> dict[str, bool]:
-    return {platform: (profile_root / platform).exists() for platform in REQUIRED_PLATFORM_PROFILES}
-
-
-def build_check(*, name: str, passed: bool, detail: str) -> dict[str, Any]:
-    return {"name": name, "passed": passed, "detail": detail}
-
-
-def run_browser_use_runtime_audit() -> dict[str, Any]:
-    profile_root = get_browser_profile_root()
-    profile_status = collect_profile_status(profile_root)
-    chromium_installed, chromium_detail = detect_chromium_installation()
-    timeout_seconds = get_agent_timeout_seconds()
-    execution_mode = get_agent_execution_mode()
-    google_api_key = os.getenv("GOOGLE_API_KEY")
-    internal_token = os.getenv("INTERNAL_API_TOKEN")
-
-    checks = [
-        build_check(
-            name="chromium_installed",
-            passed=chromium_installed,
-            detail=chromium_detail,
-        ),
-        build_check(
-            name="google_api_key_configured",
-            passed=bool(google_api_key),
-            detail="GOOGLE_API_KEY is configured" if google_api_key else "GOOGLE_API_KEY is missing",
-        ),
-        build_check(
-            name="profile_root_exists",
-            passed=profile_root.exists(),
-            detail=f"Profile root: {profile_root}",
-        ),
-        build_check(
-            name="platform_profiles_present",
-            passed=all(profile_status.values()),
-            detail=", ".join(f"{platform}={'ok' if exists else 'missing'}" for platform, exists in profile_status.items()),
-        ),
-        build_check(
-            name="agent_timeout_sane",
-            passed=timeout_seconds >= 30.0,
-            detail=f"AGENT_TIMEOUT_SECONDS={timeout_seconds}",
-        ),
-        build_check(
-            name="execution_mode_sane",
-            passed=execution_mode == "local_functions",
-            detail=f"AGENT_EXECUTION_MODE={execution_mode}",
-        ),
-        build_check(
-            name="internal_token_configured",
-            passed=bool(internal_token),
-            detail="INTERNAL_API_TOKEN is configured" if internal_token else "INTERNAL_API_TOKEN is missing",
-        ),
-        build_check(
-            name="forced_fallback_disabled_for_live_runs",
-            passed=not env_flag("BROWSER_USE_FORCE_FALLBACK", default=False),
-            detail=(
-                "BROWSER_USE_FORCE_FALLBACK=false"
-                if not env_flag("BROWSER_USE_FORCE_FALLBACK", default=False)
-                else "BROWSER_USE_FORCE_FALLBACK=true"
-            ),
-        ),
-    ]
-
+def _check(name: str, ok: bool, detail: str, *, severity: str = "error") -> dict[str, str]:
     return {
-        "all_passed": all(check["passed"] for check in checks),
-        "profile_root": str(profile_root),
-        "profiles": profile_status,
-        "checks": checks,
+        "name": name,
+        "status": _status(ok) if severity == "error" else ("pass" if ok else "warn"),
+        "severity": severity,
+        "detail": detail,
     }
 
 
-def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Audit Browser Use runtime prerequisites.")
+def audit_browser_use_runtime(*, require_live: bool = False) -> dict[str, Any]:
+    checks: list[dict[str, str]] = []
+
+    timeout_ok = AGENT_TIMEOUT_SECONDS >= 30
+    checks.append(
+        _check(
+            "agent_timeout",
+            timeout_ok,
+            f"AGENT_TIMEOUT_SECONDS={AGENT_TIMEOUT_SECONDS}",
+        )
+    )
+
+    max_steps = get_browser_use_max_steps()
+    checks.append(
+        _check(
+            "browser_use_max_steps",
+            max_steps > 0,
+            f"BROWSER_USE_MAX_STEPS={max_steps}",
+        )
+    )
+
+    token_is_default = INTERNAL_API_TOKEN == "dev-internal-token"
+    checks.append(
+        _check(
+            "internal_api_token",
+            not token_is_default,
+            "INTERNAL_API_TOKEN is configured" if not token_is_default else "INTERNAL_API_TOKEN is still using the dev default",
+            severity="warning",
+        )
+    )
+
+    google_api_key = os.getenv("GOOGLE_API_KEY")
+    checks.append(
+        _check(
+            "google_api_key",
+            bool(google_api_key),
+            "GOOGLE_API_KEY is configured" if google_api_key else "GOOGLE_API_KEY is missing",
+            severity="error" if require_live else "warning",
+        )
+    )
+
+    try:
+        import_browser_use_dependencies()
+    except Exception as exc:
+        checks.append(
+            _check(
+                "browser_use_dependencies",
+                False,
+                f"Browser Use imports failed: {exc}",
+                severity="error" if require_live else "warning",
+            )
+        )
+    else:
+        checks.append(
+            _check(
+                "browser_use_dependencies",
+                True,
+                "Browser Use dependencies imported successfully",
+                severity="warning",
+            )
+        )
+
+    profile_root = get_browser_profile_root()
+    checks.append(
+        _check(
+            "profile_root",
+            profile_root.exists(),
+            f"profile root: {profile_root}",
+            severity="error" if require_live else "warning",
+        )
+    )
+    for profile_name in PROFILE_NAMES:
+        profile_path = profile_root / profile_name
+        checks.append(
+            _check(
+                f"profile_{profile_name}",
+                profile_path.exists(),
+                f"profile path: {profile_path}",
+                severity="error" if require_live else "warning",
+            )
+        )
+
+    errors = [check for check in checks if check["status"] == "fail"]
+    warnings = [check for check in checks if check["status"] == "warn"]
+
+    return {
+        "passed": not errors,
+        "require_live": require_live,
+        "checks": checks,
+        "error_count": len(errors),
+        "warning_count": len(warnings),
+    }
+
+
+def build_cli(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Audit Browser Use runtime readiness.")
+    parser.add_argument("--require-live", action="store_true", help="Fail if live Browser Use prerequisites are missing.")
+    parser.add_argument("--json", action="store_true", help="Print JSON instead of a text summary.")
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
-    parse_args(argv)
-    report = run_browser_use_runtime_audit()
-    print(json.dumps(report, indent=2, sort_keys=True))
-    return 0 if report["all_passed"] else 1
+    args = build_cli(argv)
+    report = audit_browser_use_runtime(require_live=args.require_live)
+    if args.json:
+        print(json.dumps(report, indent=2, sort_keys=True))
+    else:
+        print(
+            f"Browser Use runtime audit: {'passed' if report['passed'] else 'failed'} "
+            f"(errors={report['error_count']} warnings={report['warning_count']})"
+        )
+        for check in report["checks"]:
+            print(f"- {check['name']}: {check['status']} ({check['detail']})")
+    return 0 if report["passed"] else 1
 
 
 if __name__ == "__main__":

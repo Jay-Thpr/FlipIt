@@ -10,6 +10,13 @@ Browser Use now runs behind the FastAPI `/task` handlers in the DiamondHacks bac
 - Shared marketplace prompt/result helpers in [backend/agents/browser_use_marketplaces.py](/Users/jt/Desktop/diamondhacks/backend/agents/browser_use_marketplaces.py)
 - Backend-only validation harness in [backend/browser_use_validation.py](/Users/jt/Desktop/diamondhacks/backend/browser_use_validation.py)
 - Runtime audit in [backend/browser_use_runtime_audit.py](/Users/jt/Desktop/diamondhacks/backend/browser_use_runtime_audit.py)
+- Browser Use progress events in session history:
+  - `listing_found`
+  - `draft_created`
+  - `offer_prepared`
+  - `offer_sent`
+  - `offer_failed`
+  - `browser_use_fallback`
 - Live Browser Use with deterministic fallback in:
   - [backend/agents/ebay_sold_comps_agent.py](/Users/jt/Desktop/diamondhacks/backend/agents/ebay_sold_comps_agent.py)
   - [backend/agents/depop_search_agent.py](/Users/jt/Desktop/diamondhacks/backend/agents/depop_search_agent.py)
@@ -32,13 +39,14 @@ Phase gates passed:
 
 Harness:
 ```bash
-./.venv/bin/python -m backend.browser_use_validation --mode dry-run
-./.venv/bin/python -m backend.browser_use_validation --mode live --case buy_pipeline
+./.venv/bin/python -m backend.browser_use_validation --group buy_search
+./.venv/bin/python -m backend.browser_use_validation --require-live --group sell
 ```
 
 Runtime audit:
 ```bash
 ./.venv/bin/python -m backend.browser_use_runtime_audit
+./.venv/bin/python -m backend.browser_use_runtime_audit --require-live
 ```
 
 Full suite:
@@ -47,10 +55,9 @@ Full suite:
 ```
 
 Result:
-- `122 passed`
+- phase suites passed during implementation
 
 ## Remaining Gaps
 
-- Add frontend-facing Browser Use progress events like `listing_found` and `offer_sent` if the UI needs them.
 - Manually validate the live Browser Use flows against warmed marketplace profiles and real DOMs.
 - Implement real Fetch.ai Chat Protocol/uAgent runtime support without changing the `/task` contracts.
