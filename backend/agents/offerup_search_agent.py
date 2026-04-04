@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from backend.agents.base import BaseAgent, build_agent_app
+from backend.agents.browser_use_marketplaces import run_marketplace_search
+from backend.agents.browser_use_support import BrowserUseRuntimeUnavailable
 from backend.agents.search_support import build_platform_results, detect_brand, detect_item
 from backend.schemas import AgentTaskRequest, SearchResultsOutput
 
@@ -27,7 +29,9 @@ class OfferUpSearchAgent(BaseAgent):
             for listing in output["results"]
         ]
 
-        results = build_platform_results(platform="offerup", query=query, budget=budget, previous_prices=previous_prices)
+        results = await self.try_browser_use_search(query=query)
+        if results is None:
+            results = build_platform_results(platform="offerup", query=query, budget=budget, previous_prices=previous_prices)
         brand = detect_brand(query)
         item = detect_item(query)
 
@@ -37,6 +41,14 @@ class OfferUpSearchAgent(BaseAgent):
             "summary": f"Found {len(results)} OfferUp listings for {brand} {item}",
             "results": results,
         }
+
+    async def try_browser_use_search(self, *, query: str | None) -> list[dict[str, object]] | None:
+        if not query:
+            return None
+        try:
+            return await run_marketplace_search("offerup", query)
+        except (BrowserUseRuntimeUnavailable, Exception):
+            return None
 
 
 agent = OfferUpSearchAgent()

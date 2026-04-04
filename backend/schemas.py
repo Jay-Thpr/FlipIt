@@ -93,6 +93,8 @@ class NegotiationAttempt(BaseModel):
     target_price: float
     message: str
     status: Literal["sent", "failed", "prepared"]
+    failure_reason: str | None = None
+    conversation_url: str | None = None
 
 
 class VisionAnalysisOutput(AgentOutputBase):
@@ -115,11 +117,20 @@ class PricingOutput(AgentOutputBase):
     pricing_confidence: float
 
 
+class DepopListingPreview(BaseModel):
+    title: str
+    price: float
+    description: str
+
+
 class DepopListingOutput(AgentOutputBase):
     title: str
     description: str
     suggested_price: float
     category_path: str
+    draft_status: str | None = None
+    form_screenshot_url: str | None = None
+    listing_preview: DepopListingPreview | None = None
 
 
 class SearchResultsOutput(AgentOutputBase):

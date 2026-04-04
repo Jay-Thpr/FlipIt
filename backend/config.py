@@ -32,7 +32,7 @@ APP_BASE_URL = os.getenv("APP_BASE_URL", f"http://localhost:{APP_PORT}")
 AGENT_HOST = os.getenv("AGENT_HOST", "127.0.0.1")
 AGENT_EXECUTION_MODE = os.getenv("AGENT_EXECUTION_MODE", "local_functions")
 INTERNAL_API_TOKEN = os.getenv("INTERNAL_API_TOKEN", "dev-internal-token")
-AGENT_TIMEOUT_SECONDS = float(os.getenv("AGENT_TIMEOUT_SECONDS", "20"))
+AGENT_TIMEOUT_SECONDS = float(os.getenv("AGENT_TIMEOUT_SECONDS", "30"))
 BUY_AGENT_MAX_RETRIES = int(os.getenv("BUY_AGENT_MAX_RETRIES", "1"))
 
 

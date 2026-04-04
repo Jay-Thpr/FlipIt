@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from backend.agents.base import BaseAgent, build_agent_app
+from backend.agents.browser_use_marketplaces import BrowserUseNegotiationResult, build_negotiation_task
+from backend.agents.browser_use_support import BrowserUseRuntimeUnavailable, get_browser_profile_path, run_structured_browser_task
 from backend.schemas import AgentTaskRequest, NegotiationOutput
 
 
@@ -55,37 +59,92 @@ class NegotiationAgent(BaseAgent):
             if len(prioritized_candidates) == 3:
                 break
 
-        offer_messages = []
+        offers = []
         for listing in prioritized_candidates:
-            platform = listing["platform"]
-            target_price = round(
-                max(median_price, float(listing["price"]) * self.PLATFORM_DISCOUNTS.get(platform, 0.92)),
-                2,
+            prepared_offer = self.build_prepared_offer(listing=listing, median_price=median_price)
+            live_result = await self.try_send_offer(prepared_offer)
+            if live_result is not None:
+                prepared_offer.update(live_result)
+            offers.append(prepared_offer)
+
+        processed_statuses = {offer["status"] for offer in offers}
+        if processed_statuses == {"prepared"}:
+            summary = (
+                f"Prepared {len(offers)} negotiation attempts starting with "
+                f"{top_choice['seller']} on {top_choice['platform']}"
             )
-            offer_messages.append(
-                {
-                    "platform": platform,
-                    "seller": listing["seller"],
-                    "listing_url": listing["url"],
-                    "listing_title": listing["title"],
-                    "target_price": target_price,
-                    "message": (
-                        f"Hi! I love this listing. Would you consider ${target_price} "
-                        f"for {listing['title']}? I can pay right away."
-                    ),
-                    "status": "prepared",
-                }
+        else:
+            summary = (
+                f"Processed {len(offers)} negotiation attempts starting with "
+                f"{top_choice['seller']} on {top_choice['platform']}"
             )
 
         return {
             "agent": self.slug,
             "display_name": self.display_name,
-            "summary": (
-                f"Prepared {len(offer_messages)} negotiation attempts starting with "
-                f"{top_choice['seller']} on {top_choice['platform']}"
-            ),
-            "offers": offer_messages,
+            "summary": summary,
+            "offers": offers,
         }
+
+    def build_prepared_offer(self, *, listing: dict[str, object], median_price: float) -> dict[str, object]:
+        platform = str(listing["platform"])
+        target_price = round(
+            max(median_price, float(listing["price"]) * self.PLATFORM_DISCOUNTS.get(platform, 0.92)),
+            2,
+        )
+        return {
+            "platform": platform,
+            "seller": listing["seller"],
+            "listing_url": listing["url"],
+            "listing_title": listing["title"],
+            "target_price": target_price,
+            "message": (
+                f"Hi! I love this listing. Would you consider ${target_price} "
+                f"for {listing['title']}? I can pay right away."
+            ),
+            "status": "prepared",
+            "failure_reason": None,
+            "conversation_url": None,
+        }
+
+    async def try_send_offer(self, prepared_offer: dict[str, object]) -> dict[str, object] | None:
+        platform = str(prepared_offer["platform"])
+        profile_path = Path(get_browser_profile_path(platform))
+        if not profile_path.exists():
+            return None
+
+        task = build_negotiation_task(
+            platform=platform,
+            listing_url=str(prepared_offer["listing_url"]),
+            message=str(prepared_offer["message"]),
+            target_price=float(prepared_offer["target_price"]),
+        )
+        try:
+            return await run_structured_browser_task(
+                task=task,
+                output_model=BrowserUseNegotiationResult,
+                allowed_domains=self.allowed_domains_for_platform(platform),
+                user_data_dir=str(profile_path),
+                keep_alive=True,
+                max_steps=16,
+                max_failures=3,
+            )
+        except BrowserUseRuntimeUnavailable:
+            return None
+        except Exception as exc:
+            return {
+                "status": "failed",
+                "failure_reason": str(exc),
+                "conversation_url": None,
+            }
+
+    def allowed_domains_for_platform(self, platform: str) -> list[str]:
+        return {
+            "depop": ["depop.com", "www.depop.com"],
+            "ebay": ["ebay.com", "www.ebay.com"],
+            "mercari": ["mercari.com", "www.mercari.com"],
+            "offerup": ["offerup.com", "www.offerup.com"],
+        }[platform]
 
 
 agent = NegotiationAgent()

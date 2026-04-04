@@ -1,6 +1,14 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from backend.agents.base import BaseAgent, build_agent_app
+from backend.agents.browser_use_marketplaces import BrowserUseListingDraftResult, build_depop_listing_task
+from backend.agents.browser_use_support import (
+    BrowserUseRuntimeUnavailable,
+    get_browser_profile_path,
+    run_structured_browser_task,
+)
 from backend.schemas import AgentTaskRequest, DepopListingOutput
 
 
@@ -57,7 +65,15 @@ class DepopListingAgent(BaseAgent):
             f"Estimated profit: ${pricing['expected_profit']}."
         )
 
-        return {
+        browser_use_result = await self.try_browser_use_listing(
+            title=title,
+            description=description,
+            suggested_price=suggested_price,
+            category_path=category_path,
+            image_urls=original_input.get("image_urls") or [],
+        )
+
+        output = {
             "agent": self.slug,
             "display_name": self.display_name,
             "summary": f"Prepared Depop listing for {descriptor} at ${suggested_price}",
@@ -65,7 +81,59 @@ class DepopListingAgent(BaseAgent):
             "description": description,
             "suggested_price": suggested_price,
             "category_path": category_path,
+            "draft_status": "fallback",
+            "listing_preview": {
+                "title": title,
+                "description": description,
+                "price": suggested_price,
+            },
         }
+        if browser_use_result is not None:
+            output["draft_status"] = browser_use_result["draft_status"]
+            output["form_screenshot_url"] = browser_use_result.get("form_screenshot_url")
+        return output
+
+    async def try_browser_use_listing(
+        self,
+        *,
+        title: str,
+        description: str,
+        suggested_price: float,
+        category_path: str,
+        image_urls: list[str],
+    ) -> dict[str, str | None] | None:
+        profile_path = Path(get_browser_profile_path("depop"))
+        if not profile_path.exists():
+            return None
+        image_path = self.get_local_image_path(image_urls)
+        task = build_depop_listing_task(
+            title=title,
+            description=description,
+            suggested_price=suggested_price,
+            category_path=category_path,
+            image_path=image_path,
+        )
+        try:
+            return await run_structured_browser_task(
+                task=task,
+                output_model=BrowserUseListingDraftResult,
+                allowed_domains=["depop.com", "www.depop.com"],
+                user_data_dir=str(profile_path),
+                keep_alive=True,
+                max_steps=18,
+                max_failures=3,
+            )
+        except (BrowserUseRuntimeUnavailable, Exception):
+            return None
+
+    def get_local_image_path(self, image_urls: list[str]) -> str | None:
+        for candidate in image_urls:
+            if candidate.startswith(("http://", "https://")):
+                continue
+            path = Path(candidate)
+            if path.exists():
+                return str(path.resolve())
+        return None
 
 
 agent = DepopListingAgent()

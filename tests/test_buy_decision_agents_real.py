@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
+import backend.agents.negotiation_agent as negotiation_module
 from fastapi.testclient import TestClient
 
 from backend.agents.negotiation_agent import app as negotiation_app
@@ -227,6 +228,8 @@ def test_negotiation_agent_generates_messages_for_top_candidates() -> None:
             "target_price": 45.35,
             "message": "Hi! I love this listing. Would you consider $45.35 for Nike tee size M #1 on eBay? I can pay right away.",
             "status": "prepared",
+            "failure_reason": None,
+            "conversation_url": None,
         },
         {
             "platform": "offerup",
@@ -236,6 +239,8 @@ def test_negotiation_agent_generates_messages_for_top_candidates() -> None:
             "target_price": 45.35,
             "message": "Hi! I love this listing. Would you consider $45.35 for Nike tee size M #1 on Offerup? I can pay right away.",
             "status": "prepared",
+            "failure_reason": None,
+            "conversation_url": None,
         },
         {
             "platform": "mercari",
@@ -245,8 +250,130 @@ def test_negotiation_agent_generates_messages_for_top_candidates() -> None:
             "target_price": 45.35,
             "message": "Hi! I love this listing. Would you consider $45.35 for Nike tee size M #1 on Mercari? I can pay right away.",
             "status": "prepared",
+            "failure_reason": None,
+            "conversation_url": None,
         },
     ]
+
+
+def test_negotiation_agent_sends_offers_with_browser_use_when_profiles_exist(monkeypatch) -> None:
+    previous_outputs = build_buy_previous_outputs()
+    previous_outputs["ranking"] = {
+        "agent": "ranking_agent",
+        "display_name": "Ranking Agent",
+        "summary": "Ranked 8 listings and selected ebay as the top choice",
+        "top_choice": {
+            "platform": "ebay",
+            "title": "Nike tee size M #1 on eBay",
+            "price": 42.53,
+            "score": 0.94,
+            "reason": "Good condition, seller score 640, posted 2026-04-03 on ebay",
+            "url": "https://ebay.example/nike-tee-1",
+            "seller": "ebay_seller_1",
+            "seller_score": 640,
+            "posted_at": "2026-04-03",
+        },
+        "candidate_count": 8,
+        "ranked_listings": [],
+        "median_price": 45.35,
+    }
+
+    call_count = {"value": 0}
+
+    async def fake_run_structured_browser_task(**kwargs: Any) -> dict[str, Any]:
+        call_count["value"] += 1
+        return {
+            "status": "sent",
+            "failure_reason": None,
+            "conversation_url": f"https://messages.example/{call_count['value']}",
+        }
+
+    monkeypatch.setattr(negotiation_module, "run_structured_browser_task", fake_run_structured_browser_task)
+    monkeypatch.setattr(negotiation_module.Path, "exists", lambda self: True)
+
+    payload = {
+        "session_id": "negotiation-browser-session",
+        "pipeline": "buy",
+        "step": "negotiation",
+        "input": {
+            "original_input": {"query": "Nike vintage tee size M", "budget": 45},
+            "previous_outputs": previous_outputs,
+        },
+        "context": {},
+    }
+
+    with TestClient(negotiation_app) as client:
+        response = client.post("/task", json=payload)
+
+    assert response.status_code == 200
+    result = response.json()
+    assert result["status"] == "completed"
+    assert result["output"]["summary"] == "Processed 3 negotiation attempts starting with ebay_seller_1 on ebay"
+    assert all(offer["status"] == "sent" for offer in result["output"]["offers"])
+    assert result["output"]["offers"][0]["conversation_url"] == "https://messages.example/1"
+    assert call_count["value"] == 3
+
+
+def test_negotiation_agent_records_failed_live_send_without_breaking_batch(monkeypatch) -> None:
+    previous_outputs = build_buy_previous_outputs()
+    previous_outputs["ranking"] = {
+        "agent": "ranking_agent",
+        "display_name": "Ranking Agent",
+        "summary": "Ranked 8 listings and selected ebay as the top choice",
+        "top_choice": {
+            "platform": "ebay",
+            "title": "Nike tee size M #1 on eBay",
+            "price": 42.53,
+            "score": 0.94,
+            "reason": "Good condition, seller score 640, posted 2026-04-03 on ebay",
+            "url": "https://ebay.example/nike-tee-1",
+            "seller": "ebay_seller_1",
+            "seller_score": 640,
+            "posted_at": "2026-04-03",
+        },
+        "candidate_count": 8,
+        "ranked_listings": [],
+        "median_price": 45.35,
+    }
+
+    outcomes = iter(
+        [
+            {"status": "sent", "failure_reason": None, "conversation_url": "https://messages.example/1"},
+            RuntimeError("offer form changed"),
+            {"status": "sent", "failure_reason": None, "conversation_url": "https://messages.example/3"},
+        ]
+    )
+
+    async def fake_run_structured_browser_task(**kwargs: Any) -> dict[str, Any]:
+        outcome = next(outcomes)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+    monkeypatch.setattr(negotiation_module, "run_structured_browser_task", fake_run_structured_browser_task)
+    monkeypatch.setattr(negotiation_module.Path, "exists", lambda self: True)
+
+    payload = {
+        "session_id": "negotiation-mixed-session",
+        "pipeline": "buy",
+        "step": "negotiation",
+        "input": {
+            "original_input": {"query": "Nike vintage tee size M", "budget": 45},
+            "previous_outputs": previous_outputs,
+        },
+        "context": {},
+    }
+
+    with TestClient(negotiation_app) as client:
+        response = client.post("/task", json=payload)
+
+    assert response.status_code == 200
+    result = response.json()
+    assert result["status"] == "completed"
+    assert result["output"]["offers"][0]["status"] == "sent"
+    assert result["output"]["offers"][1]["status"] == "failed"
+    assert result["output"]["offers"][1]["failure_reason"] == "offer form changed"
+    assert result["output"]["offers"][2]["status"] == "sent"
 
 
 def test_buy_pipeline_uses_real_ranking_and_negotiation_outputs(client: TestClient) -> None:
@@ -269,3 +396,32 @@ def test_buy_pipeline_uses_real_ranking_and_negotiation_outputs(client: TestClie
     assert ranking["top_choice"]["score"] == 0.94
     assert negotiation["offers"][0]["target_price"] == 45.35
     assert len(negotiation["offers"]) == 3
+
+
+def test_buy_pipeline_processes_live_negotiation_results(monkeypatch, client: TestClient) -> None:
+    async def fake_run_structured_browser_task(**kwargs: Any) -> dict[str, Any]:
+        return {
+            "status": "sent",
+            "failure_reason": None,
+            "conversation_url": "https://messages.example/live",
+        }
+
+    monkeypatch.setattr(negotiation_module, "run_structured_browser_task", fake_run_structured_browser_task)
+    monkeypatch.setattr(negotiation_module.Path, "exists", lambda self: True)
+
+    response = client.post(
+        "/buy/start",
+        json={
+            "user_id": "buy-user",
+            "input": {"query": "Nike vintage tee size M", "budget": 45},
+            "metadata": {"source": "buy-live-negotiation-test"},
+        },
+    )
+    assert response.status_code == 200
+    session_id = response.json()["session_id"]
+
+    result = wait_for_terminal_result(client, session_id)
+    negotiation = result["result"]["outputs"]["negotiation"]
+
+    assert negotiation["offers"][0]["status"] == "sent"
+    assert negotiation["offers"][0]["conversation_url"] == "https://messages.example/live"

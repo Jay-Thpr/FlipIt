@@ -1,9 +1,8 @@
 from __future__ import annotations
-
-import os
 from typing import Any
 
 from backend.agents.base import BaseAgent, build_agent_app
+from backend.agents.browser_use_support import BrowserUseRuntimeUnavailable, run_structured_browser_task
 from backend.schemas import AgentTaskRequest, EbaySoldCompsOutput
 
 
@@ -94,7 +93,7 @@ class EbaySoldCompsAgent(BaseAgent):
         return {
             "agent": self.slug,
             "display_name": self.display_name,
-            "summary": f"Estimated {sample_size} sold eBay comps for {descriptor} using local fallback",
+            "summary": f"Estimated {sample_size} sold eBay comps for {descriptor}",
             "median_sold_price": median_price,
             "low_sold_price": low_price,
             "high_sold_price": high_price,
@@ -102,16 +101,7 @@ class EbaySoldCompsAgent(BaseAgent):
         }
 
     async def try_browser_use_research(self, *, brand: str, detected_item: str, condition: str) -> dict[str, Any] | None:
-        try:
-            from browser_use import Agent, BrowserSession
-            from browser_use.browser import BrowserProfile
-            from langchain_google_genai import ChatGoogleGenerativeAI
-            from pydantic import BaseModel
-        except Exception:
-            return None
-
-        if not os.getenv("GOOGLE_API_KEY"):
-            return None
+        from pydantic import BaseModel
 
         query = "+".join(part for part in (brand, detected_item) if part and part != "Unknown") or detected_item
         condition_code = {
@@ -137,13 +127,6 @@ class EbaySoldCompsAgent(BaseAgent):
             high_sold_price: float
             sample_size: int
 
-        llm = ChatGoogleGenerativeAI(model=os.getenv("BROWSER_USE_GEMINI_MODEL", "gemini-2.0-flash"))
-        profile = BrowserProfile(
-            headless=False,
-            stealth=True,
-            allowed_domains=["ebay.com", "www.ebay.com"],
-        )
-        session = BrowserSession(browser_profile=profile)
         task = f"""
 Navigate to: {url}
 Wait for sold listing cards to load.
@@ -156,21 +139,15 @@ Return only JSON matching the schema.
 """
 
         try:
-            agent = Agent(
+            return await run_structured_browser_task(
                 task=task,
-                llm=llm,
-                browser_session=session,
-                output_model_schema=SoldCompResearch,
+                output_model=SoldCompResearch,
+                allowed_domains=["ebay.com", "www.ebay.com"],
                 max_steps=12,
                 max_failures=3,
             )
-            history = await agent.run()
-            result = history.final_result(SoldCompResearch)
-            return result.model_dump() if result else None
-        except Exception:
+        except (BrowserUseRuntimeUnavailable, Exception):
             return None
-        finally:
-            await session.stop()
 
 
 agent = EbaySoldCompsAgent()

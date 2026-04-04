@@ -57,6 +57,12 @@ If you add custom Browser Use events such as `listing_found` or `offer_sent`, ma
 
 Also note that the PRD's BUY flow needs richer fields than the current scaffold exposes. Before implementing final ranking or haggling behavior, confirm the schema can carry seller identity, seller credibility metrics, recency, listing URL, and send status.
 
+The current shared Browser Use helpers live in:
+- `backend/agents/browser_use_support.py` for lazy runtime setup, profile paths, and structured Browser Use execution
+- `backend/agents/browser_use_marketplaces.py` for marketplace URL builders, task strings, and Browser Use-specific result schemas
+
+Prefer extending those helpers instead of re-embedding Browser Use setup inside each agent.
+
 ---
 
 ## Phase 0 — Installation (Do This First)
@@ -1204,6 +1210,8 @@ The PRD assumes a 30 second hard timeout per Browser Use agent. Make sure runtim
 ```bash
 export AGENT_TIMEOUT_SECONDS=30
 ```
+
+The repo now defaults `AGENT_TIMEOUT_SECONDS` to `30`, and Browser Use helper code enforces a 30-second floor for browser tasks.
 
 ### Handle external-process failures as structured agent failures
 When agents move from in-process local functions to separate HTTP task servers, unhandled exceptions become transport errors. Catch Browser Use failures and return structured failure payloads where possible instead of relying on uncaught 500s.
