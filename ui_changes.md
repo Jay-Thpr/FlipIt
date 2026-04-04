@@ -34,3 +34,37 @@
 7. **Make Usage section consistent** — Restyle the Usage section to match the visual style of the rest of the settings page (spacing, typography, card/container style, etc.).
 
 8. **Fix back navigation label** — The back button/link that navigates to the previous page currently shows "index" — rename it to "Back".
+
+## Listing Detail Page (per listing popup)
+
+1. **Remove box around back arrow** — The back arrow should not have a box/container around it. Just show the bare arrow.
+
+2. **Make Overview and Settings consistent with main settings page** — The per-listing overview and settings areas look inconsistent with the account/settings page. Restyle them to match the same visual language (spacing, typography, card style, etc.).
+
+3. **Remove repeated item name from Overview** — The item name already appears at the top of the page, so don't repeat it inside the overview section.
+
+4. **Default settings to account-level defaults** — All per-listing settings that are meant to override account defaults should be pre-filled with the values from account settings. They are overrides, not standalone configs.
+
+5. **Remove "Auto Relist" setting** — This setting is unnecessary. If an agent is active it should continuously attempt to sell/buy the item without needing a relist toggle.
+
+6. **Add AI active/paused toggle** — Add a switch to activate or stop the AI agent for this listing.
+
+7. **Add archive listing option** — Add a way to archive a listing, with a confirmation dialog before it takes effect.
+
+8. **Simplify Market Overview cards** — Each market overview should only display:
+   - Best buy price
+   - Best sell price (the spread)
+   - Number of listings
+   - Market name — use the actual company name (e.g., "eBay", "Facebook") or the official company logo. No custom widgets or abstract icons.
+
+9. **Unread conversation indicator** — Remove the purple dot for unread messages in the Active Conversations list. Instead, make the preview text **white** when unread and **grayed out** (current style) when already read.
+
+10. **Add "Best Current Offer" to Overview** — Include a best current offer field in the overview section.
+
+## Active Conversation Page (inside a conversation)
+
+1. **Consistent back arrow** — Style the back arrow the same way as everywhere else in the app (no box, bare arrow).
+
+2. **Replace platform widget with company logo or name** — Remove the little widget showing where the conversation is from. Replace it with the official company logo or company name (consistent with the rest of the app). The logo should fill the space on the right side of the top bar.
+
+3. **Remove the subbar under the contact name** — Delete the secondary bar beneath the user you're talking to (the one that shows "Log view only — all messages sent by your agent").
