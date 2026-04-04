@@ -39,7 +39,7 @@ supabase db push
 
 Or run the SQL in the Supabase SQL editor:
 
-- [20260404145000_init_session_persistence.sql](/Users/derek/.superset/worktrees/Diamond Hacks/helpful-sagittarius/supabase/migrations/20260404145000_init_session_persistence.sql)
+- [20260404145000_init_session_persistence.sql](migrations/20260404145000_init_session_persistence.sql)
 
 ## Backend Integration Sketch
 

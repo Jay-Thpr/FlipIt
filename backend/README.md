@@ -24,6 +24,12 @@ This scaffold gives the team a stable local contract before Browser Use, Gemini,
 - `python -m backend.run_agents` starts one FastAPI process per agent scaffold when you want to validate the per-agent `/task` apps.
 - `make check` is the current local verification path and mirrors CI.
 
+## Persistence Scaffolding
+
+- [supabase/README.md](../supabase/README.md) documents the intended persistence model.
+- [supabase/migrations/20260404145000_init_session_persistence.sql](../supabase/migrations/20260404145000_init_session_persistence.sql) creates the initial session, event, and result tables.
+- [supabase_repo.py](supabase_repo.py) contains the repository layer for future durable session storage integration.
+
 ## Next Backend Tasks
 
 - Manually validate the profile-gated Browser Use paths on real logged-in marketplace accounts.

@@ -92,7 +92,11 @@ class SupabaseRepository:
             "PATCH",
             "pipeline_sessions",
             params={"session_id": f"eq.{session_id}"},
-            json={"status": SESSION_STATUS_FAILED, "error_summary": error_summary},
+            json={
+                "status": SESSION_STATUS_FAILED,
+                "error_summary": error_summary,
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+            },
             prefer="return=minimal",
         )
 
@@ -169,7 +173,7 @@ class SupabaseRepository:
             "pipeline_session_events",
             params={
                 "session_id": f"eq.{session_id}",
-                "select": "event_type,payload,created_at",
+                "select": "event_type,agent_name,summary,payload,created_at",
                 "order": "created_at.asc",
             },
         )

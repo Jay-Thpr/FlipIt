@@ -1,15 +1,5 @@
 create extension if not exists pgcrypto;
 
-create or replace function public.set_updated_at()
-returns trigger
-language plpgsql
-as $$
-begin
-  new.updated_at = timezone('utc', now());
-  return new;
-end;
-$$;
-
 create table if not exists public.pipeline_sessions (
   session_id uuid primary key,
   mode text not null check (mode in ('sell', 'buy')),
@@ -59,20 +49,6 @@ create index if not exists pipeline_session_events_event_type_idx
 create unique index if not exists pipeline_session_events_session_id_dedupe_key_idx
   on public.pipeline_session_events (session_id, dedupe_key)
   where dedupe_key is not null;
-
-drop trigger if exists set_pipeline_sessions_updated_at on public.pipeline_sessions;
-
-create trigger set_pipeline_sessions_updated_at
-before update on public.pipeline_sessions
-for each row
-execute function public.set_updated_at();
-
-drop trigger if exists set_pipeline_session_results_updated_at on public.pipeline_session_results;
-
-create trigger set_pipeline_session_results_updated_at
-before update on public.pipeline_session_results
-for each row
-execute function public.set_updated_at();
 
 alter table public.pipeline_sessions enable row level security;
 alter table public.pipeline_session_events enable row level security;
