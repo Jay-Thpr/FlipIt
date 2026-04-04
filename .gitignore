@@ -1,5 +1,41 @@
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Virtual environments
 .venv/
+.venv-fetch/
+venv/
+env/
+
+# Python caches and build artifacts
 __pycache__/
 *.py[cod]
+*.pyo
+*.pyd
 .pytest_cache/
-.env
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Local browser/runtime data
+profiles/
+playwright-report/
+
+# IDE/editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+
+# Local Codex/agent assets
+.agents/
