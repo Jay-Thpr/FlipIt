@@ -40,6 +40,17 @@ class MercariSearchAgent(BaseAgent):
                 await self.emit_fallback_event(request=request, error=browser_use_error)
         brand = detect_brand(query)
         item = detect_item(query)
+        await emit_browser_use_event(
+            session_id=request.session_id,
+            pipeline=request.pipeline,
+            step=request.step,
+            event_type="search_method",
+            data={
+                "agent_name": self.slug,
+                "platform": "mercari",
+                "method": result_source,
+            },
+        )
         await self.emit_listing_found_events(request=request, results=results, result_source=result_source)
 
         return {
