@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, TypeVar
 
 from pydantic import BaseModel
+from pydantic import ValidationError
 
 from backend.config import get_agent_timeout_seconds
 
@@ -17,6 +18,39 @@ class BrowserUseRuntimeUnavailable(RuntimeError):
 
 class BrowserUseTaskExecutionError(RuntimeError):
     pass
+
+
+def classify_browser_use_failure(exc: Exception) -> str:
+    if isinstance(exc, BrowserUseRuntimeUnavailable):
+        return "runtime_unavailable"
+    if isinstance(exc, (BrowserUseTaskExecutionError, ValidationError, ValueError)):
+        return "validation"
+
+    message = str(exc).lower()
+    if "profile" in message or "login" in message or "session" in message:
+        return "profile_missing"
+    if "timeout" in message or "timed out" in message or "navigation" in message:
+        return "navigation"
+    return "unknown"
+
+
+def build_browser_use_metadata(
+    *,
+    mode: str,
+    attempted_live_run: bool,
+    profile_name: str | None = None,
+    profile_available: bool | None = None,
+    error_category: str | None = None,
+    detail: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "mode": mode,
+        "attempted_live_run": attempted_live_run,
+        "profile_name": profile_name,
+        "profile_available": profile_available,
+        "error_category": error_category,
+        "detail": detail,
+    }
 
 
 def env_flag(name: str, default: bool = False) -> bool:
@@ -83,6 +117,15 @@ def browser_use_runtime_ready() -> bool:
     except Exception:
         return False
     return True
+
+
+def summarize_browser_use_error(exc: Exception) -> str:
+    if isinstance(exc, BrowserUseRuntimeUnavailable):
+        return str(exc)
+    message = str(exc).strip()
+    if not message:
+        return exc.__class__.__name__
+    return message[:200]
 
 
 async def run_structured_browser_task(

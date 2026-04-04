@@ -3,7 +3,7 @@ from __future__ import annotations
 from backend.agents.base import BaseAgent, build_agent_app
 from backend.agents.browser_use_events import emit_browser_use_event
 from backend.agents.browser_use_marketplaces import run_marketplace_search
-from backend.agents.browser_use_support import BrowserUseRuntimeUnavailable
+from backend.agents.browser_use_support import BrowserUseRuntimeUnavailable, classify_browser_use_failure
 from backend.agents.search_support import build_platform_results, detect_brand, detect_item
 from backend.schemas import AgentTaskRequest, SearchResultsOutput
 
@@ -30,11 +30,13 @@ class OfferUpSearchAgent(BaseAgent):
             for listing in output["results"]
         ]
 
-        results = await self.try_browser_use_search(query=query)
+        results, browser_use_error = await self.try_browser_use_search(query=query)
         result_source = "browser_use"
         if results is None:
             results = build_platform_results(platform="offerup", query=query, budget=budget, previous_prices=previous_prices)
             result_source = "fallback"
+            if browser_use_error is not None:
+                await self.emit_fallback_event(request=request, error=browser_use_error)
         brand = detect_brand(query)
         item = detect_item(query)
         await self.emit_listing_found_events(request=request, results=results, result_source=result_source)
@@ -44,15 +46,17 @@ class OfferUpSearchAgent(BaseAgent):
             "display_name": self.display_name,
             "summary": f"Found {len(results)} OfferUp listings for {brand} {item}",
             "results": results,
+            "execution_mode": result_source,
+            "browser_use_error": browser_use_error,
         }
 
-    async def try_browser_use_search(self, *, query: str | None) -> list[dict[str, object]] | None:
+    async def try_browser_use_search(self, *, query: str | None) -> tuple[list[dict[str, object]] | None, str | None]:
         if not query:
-            return None
+            return None, None
         try:
-            return await run_marketplace_search("offerup", query)
-        except (BrowserUseRuntimeUnavailable, Exception):
-            return None
+            return await run_marketplace_search("offerup", query), None
+        except (BrowserUseRuntimeUnavailable, Exception) as exc:
+            return None, classify_browser_use_failure(exc)
 
     async def emit_listing_found_events(
         self,
@@ -79,6 +83,19 @@ class OfferUpSearchAgent(BaseAgent):
                     "source": result_source,
                 },
             )
+
+    async def emit_fallback_event(self, *, request: AgentTaskRequest, error: str) -> None:
+        await emit_browser_use_event(
+            session_id=request.session_id,
+            pipeline=request.pipeline,
+            step=request.step,
+            event_type="browser_use_fallback",
+            data={
+                "agent_name": self.slug,
+                "platform": "offerup",
+                "error": error,
+            },
+        )
 
 
 agent = OfferUpSearchAgent()

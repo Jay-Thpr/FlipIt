@@ -80,6 +80,8 @@ def test_depop_listing_agent_builds_listing_from_real_sell_outputs() -> None:
     assert "Recent eBay sold range: $55.11-$86.21 across 11 comps." in result["output"]["description"]
     assert result["output"]["summary"] == "Prepared Depop listing for Patagonia hoodie at $78.43"
     assert result["output"]["draft_status"] == "fallback"
+    assert result["output"]["execution_mode"] == "fallback"
+    assert result["output"]["browser_use_error"] == "profile_missing"
     assert result["output"]["form_screenshot_url"] is None
 
 
@@ -115,6 +117,8 @@ def test_depop_listing_agent_records_browser_use_confirmation(monkeypatch) -> No
     assert str(captured["user_data_dir"]).endswith("/profiles/depop")
     assert "Patagonia hoodie - Excellent Condition" in str(captured["task"])
     assert result["output"]["draft_status"] == "ready"
+    assert result["output"]["execution_mode"] == "browser_use"
+    assert result["output"]["browser_use_error"] is None
     assert result["output"]["form_screenshot_url"] == "artifact://depop-form-preview"
 
 
@@ -123,6 +127,7 @@ def test_depop_listing_agent_uses_fallback_copy_for_sparse_input(monkeypatch) ->
         raise RuntimeError("login expired")
 
     monkeypatch.setattr(depop_listing_module, "run_structured_browser_task", broken_run_structured_browser_task)
+    monkeypatch.setattr(depop_listing_module.Path, "exists", lambda self: True)
 
     payload = {
         "session_id": "depop-listing-fallback-session",
@@ -174,6 +179,8 @@ def test_depop_listing_agent_uses_fallback_copy_for_sparse_input(monkeypatch) ->
     assert "Clean item ready to list." in result["output"]["description"]
     assert result["output"]["summary"] == "Prepared Depop listing for Item at $32.0"
     assert result["output"]["draft_status"] == "fallback"
+    assert result["output"]["execution_mode"] == "fallback"
+    assert result["output"]["browser_use_error"] == "browser_error"
     assert result["output"]["form_screenshot_url"] is None
 
 
@@ -207,6 +214,8 @@ def test_sell_pipeline_uses_real_depop_listing_output(client: TestClient, monkey
     assert listing["suggested_price"] == 78.43
     assert listing["category_path"] == "Men/Tops/Hoodies"
     assert listing["draft_status"] == "ready"
+    assert listing["execution_mode"] == "browser_use"
+    assert listing["browser_use_error"] is None
     assert listing["form_screenshot_url"] == "artifact://sell-pipeline-preview"
 
 
@@ -232,4 +241,6 @@ def test_depop_listing_agent_defaults_to_fallback_metadata_without_live_run() ->
     result = response.json()
     assert result["status"] == "completed"
     assert result["output"]["draft_status"] == "fallback"
+    assert result["output"]["execution_mode"] == "fallback"
+    assert result["output"]["browser_use_error"] == "profile_missing"
     assert result["output"]["form_screenshot_url"] is None

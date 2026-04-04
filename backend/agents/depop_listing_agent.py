@@ -7,6 +7,7 @@ from backend.agents.browser_use_events import emit_browser_use_event
 from backend.agents.browser_use_marketplaces import BrowserUseListingDraftResult, build_depop_listing_task
 from backend.agents.browser_use_support import (
     BrowserUseRuntimeUnavailable,
+    classify_browser_use_failure,
     get_browser_profile_path,
     run_structured_browser_task,
 )
@@ -66,7 +67,7 @@ class DepopListingAgent(BaseAgent):
             f"Estimated profit: ${pricing['expected_profit']}."
         )
 
-        browser_use_result = await self.try_browser_use_listing(
+        browser_use_result, browser_use_error = await self.try_browser_use_listing(
             title=title,
             description=description,
             suggested_price=suggested_price,
@@ -88,10 +89,25 @@ class DepopListingAgent(BaseAgent):
                 "description": description,
                 "price": suggested_price,
             },
+            "execution_mode": "fallback",
+            "browser_use_error": browser_use_error,
         }
         if browser_use_result is not None:
             output["draft_status"] = browser_use_result["draft_status"]
             output["form_screenshot_url"] = browser_use_result.get("form_screenshot_url")
+            output["execution_mode"] = "browser_use"
+        elif browser_use_error is not None:
+            await emit_browser_use_event(
+                session_id=request.session_id,
+                pipeline=request.pipeline,
+                step=request.step,
+                event_type="browser_use_fallback",
+                data={
+                    "agent_name": self.slug,
+                    "platform": "depop",
+                    "error": browser_use_error,
+                },
+            )
         await emit_browser_use_event(
             session_id=request.session_id,
             pipeline=request.pipeline,
@@ -105,7 +121,7 @@ class DepopListingAgent(BaseAgent):
                 "category_path": category_path,
                 "draft_status": output["draft_status"],
                 "form_screenshot_url": output.get("form_screenshot_url"),
-                "source": "browser_use" if browser_use_result is not None else "fallback",
+                "source": output["execution_mode"],
             },
         )
         return output
@@ -118,10 +134,10 @@ class DepopListingAgent(BaseAgent):
         suggested_price: float,
         category_path: str,
         image_urls: list[str],
-    ) -> dict[str, str | None] | None:
+    ) -> tuple[dict[str, str | None] | None, str | None]:
         profile_path = Path(get_browser_profile_path("depop"))
         if not profile_path.exists():
-            return None
+            return None, "profile_missing"
         image_path = self.get_local_image_path(image_urls)
         task = build_depop_listing_task(
             title=title,
@@ -131,17 +147,20 @@ class DepopListingAgent(BaseAgent):
             image_path=image_path,
         )
         try:
-            return await run_structured_browser_task(
-                task=task,
-                output_model=BrowserUseListingDraftResult,
-                allowed_domains=["depop.com", "www.depop.com"],
-                user_data_dir=str(profile_path),
-                keep_alive=True,
-                max_steps=18,
-                max_failures=3,
+            return (
+                await run_structured_browser_task(
+                    task=task,
+                    output_model=BrowserUseListingDraftResult,
+                    allowed_domains=["depop.com", "www.depop.com"],
+                    user_data_dir=str(profile_path),
+                    keep_alive=True,
+                    max_steps=18,
+                    max_failures=3,
+                ),
+                None,
             )
-        except (BrowserUseRuntimeUnavailable, Exception):
-            return None
+        except (BrowserUseRuntimeUnavailable, Exception) as exc:
+            return None, classify_browser_use_failure(exc)
 
     def get_local_image_path(self, image_urls: list[str]) -> str | None:
         for candidate in image_urls:

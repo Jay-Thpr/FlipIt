@@ -62,6 +62,15 @@ class AgentOutputBase(BaseModel):
     summary: str
 
 
+class BrowserUseMetadata(BaseModel):
+    mode: Literal["browser_use", "fallback", "skipped"]
+    attempted_live_run: bool = False
+    profile_name: str | None = None
+    profile_available: bool | None = None
+    error_category: str | None = None
+    detail: str | None = None
+
+
 class SearchListing(BaseModel):
     platform: Literal["depop", "ebay", "mercari", "offerup"]
     title: str
@@ -95,6 +104,10 @@ class NegotiationAttempt(BaseModel):
     status: Literal["sent", "failed", "prepared"]
     failure_reason: str | None = None
     conversation_url: str | None = None
+    execution_mode: Literal["browser_use", "deterministic"] = "deterministic"
+    browser_use_error: str | None = None
+    attempt_source: Literal["prepared", "browser_use"] = "prepared"
+    failure_category: str | None = None
 
 
 class VisionAnalysisOutput(AgentOutputBase):
@@ -109,6 +122,9 @@ class EbaySoldCompsOutput(AgentOutputBase):
     low_sold_price: float
     high_sold_price: float
     sample_size: int
+    execution_mode: Literal["browser_use", "fallback"] = "fallback"
+    browser_use_error: str | None = None
+    browser_use: BrowserUseMetadata | None = None
 
 
 class PricingOutput(AgentOutputBase):
@@ -131,10 +147,16 @@ class DepopListingOutput(AgentOutputBase):
     draft_status: str | None = None
     form_screenshot_url: str | None = None
     listing_preview: DepopListingPreview | None = None
+    execution_mode: Literal["browser_use", "fallback"] = "fallback"
+    browser_use_error: str | None = None
+    browser_use: BrowserUseMetadata | None = None
 
 
 class SearchResultsOutput(AgentOutputBase):
     results: list[SearchListing] = Field(default_factory=list)
+    execution_mode: Literal["browser_use", "fallback"] = "fallback"
+    browser_use_error: str | None = None
+    browser_use: BrowserUseMetadata | None = None
 
 
 class RankingOutput(AgentOutputBase):
@@ -146,6 +168,7 @@ class RankingOutput(AgentOutputBase):
 
 class NegotiationOutput(AgentOutputBase):
     offers: list[NegotiationAttempt] = Field(default_factory=list)
+    browser_use: BrowserUseMetadata | None = None
 
 
 class VisionAgentInput(BaseModel):

@@ -5,7 +5,13 @@ from pathlib import Path
 from backend.agents.base import BaseAgent, build_agent_app
 from backend.agents.browser_use_events import emit_browser_use_event
 from backend.agents.browser_use_marketplaces import BrowserUseNegotiationResult, build_negotiation_task
-from backend.agents.browser_use_support import BrowserUseRuntimeUnavailable, get_browser_profile_path, run_structured_browser_task
+from backend.agents.browser_use_support import (
+    BrowserUseRuntimeUnavailable,
+    classify_browser_use_failure,
+    get_browser_profile_path,
+    run_structured_browser_task,
+    summarize_browser_use_error,
+)
 from backend.schemas import AgentTaskRequest, NegotiationOutput
 
 
@@ -75,12 +81,12 @@ class NegotiationAgent(BaseAgent):
                     "listing_url": prepared_offer["listing_url"],
                     "listing_title": prepared_offer["listing_title"],
                     "target_price": prepared_offer["target_price"],
-                    "source": "deterministic",
+                    "source": prepared_offer["execution_mode"],
                 },
             )
             live_result = await self.try_send_offer(prepared_offer)
-            if live_result is not None:
-                prepared_offer.update(live_result)
+            prepared_offer.update(live_result)
+            if prepared_offer["execution_mode"] == "browser_use":
                 await emit_browser_use_event(
                     session_id=request.session_id,
                     pipeline=request.pipeline,
@@ -96,7 +102,21 @@ class NegotiationAgent(BaseAgent):
                         "status": prepared_offer["status"],
                         "conversation_url": prepared_offer["conversation_url"],
                         "failure_reason": prepared_offer["failure_reason"],
-                        "source": "browser_use",
+                        "source": prepared_offer["execution_mode"],
+                    },
+                )
+            elif prepared_offer["browser_use_error"] is not None:
+                await emit_browser_use_event(
+                    session_id=request.session_id,
+                    pipeline=request.pipeline,
+                    step=request.step,
+                    event_type="browser_use_fallback",
+                    data={
+                        "agent_name": self.slug,
+                        "platform": prepared_offer["platform"],
+                        "seller": prepared_offer["seller"],
+                        "listing_url": prepared_offer["listing_url"],
+                        "error": prepared_offer["browser_use_error"],
                     },
                 )
             offers.append(prepared_offer)
@@ -139,13 +159,18 @@ class NegotiationAgent(BaseAgent):
             "status": "prepared",
             "failure_reason": None,
             "conversation_url": None,
+            "execution_mode": "deterministic",
+            "browser_use_error": None,
         }
 
-    async def try_send_offer(self, prepared_offer: dict[str, object]) -> dict[str, object] | None:
+    async def try_send_offer(self, prepared_offer: dict[str, object]) -> dict[str, object]:
         platform = str(prepared_offer["platform"])
         profile_path = Path(get_browser_profile_path(platform))
         if not profile_path.exists():
-            return None
+            return {
+                "execution_mode": "deterministic",
+                "browser_use_error": "profile_missing",
+            }
 
         task = build_negotiation_task(
             platform=platform,
@@ -154,7 +179,7 @@ class NegotiationAgent(BaseAgent):
             target_price=float(prepared_offer["target_price"]),
         )
         try:
-            return await run_structured_browser_task(
+            result = await run_structured_browser_task(
                 task=task,
                 output_model=BrowserUseNegotiationResult,
                 allowed_domains=self.allowed_domains_for_platform(platform),
@@ -163,13 +188,23 @@ class NegotiationAgent(BaseAgent):
                 max_steps=16,
                 max_failures=3,
             )
-        except BrowserUseRuntimeUnavailable:
-            return None
+            return {
+                **result,
+                "execution_mode": "browser_use",
+                "browser_use_error": None,
+            }
+        except BrowserUseRuntimeUnavailable as exc:
+            return {
+                "execution_mode": "deterministic",
+                "browser_use_error": classify_browser_use_failure(exc),
+            }
         except Exception as exc:
             return {
                 "status": "failed",
-                "failure_reason": str(exc),
+                "failure_reason": summarize_browser_use_error(exc),
                 "conversation_url": None,
+                "execution_mode": "browser_use",
+                "browser_use_error": classify_browser_use_failure(exc),
             }
 
     def allowed_domains_for_platform(self, platform: str) -> list[str]:

@@ -174,7 +174,11 @@ def test_depop_search_agent_uses_browser_use_results_when_available(monkeypatch)
     result = response.json()
     assert result["status"] == "completed"
     assert result["output"]["summary"] == "Found 2 Depop listings for Nike tee"
+    assert result["output"]["execution_mode"] == "browser_use"
+    assert result["output"]["browser_use_error"] is None
     assert result["output"]["results"] == build_browser_results("depop")
+    assert result["output"]["execution_mode"] == "browser_use"
+    assert result["output"]["browser_use_error"] is None
 
 
 def test_ebay_search_agent_falls_back_when_browser_use_unavailable(monkeypatch) -> None:
@@ -201,6 +205,8 @@ def test_ebay_search_agent_falls_back_when_browser_use_unavailable(monkeypatch) 
     result = response.json()
     assert result["status"] == "completed"
     assert result["output"]["summary"] == "Found 2 eBay listings for Nike tee"
+    assert result["output"]["execution_mode"] == "fallback"
+    assert result["output"]["browser_use_error"] == "runtime_unavailable"
     assert result["output"]["results"][0]["price"] == 42.53
     assert result["output"]["results"][0]["seller"] == "nike_seller_1"
     assert result["output"]["results"][0]["posted_at"] == "2026-04-03"
@@ -233,6 +239,8 @@ def test_mercari_search_agent_falls_back_when_browser_use_raises(monkeypatch) ->
     result = response.json()
     assert result["status"] == "completed"
     assert result["output"]["summary"] == "Found 2 Mercari listings for Nike tee"
+    assert result["output"]["execution_mode"] == "fallback"
+    assert result["output"]["browser_use_error"] == "browser_error"
     assert result["output"]["results"][0]["price"] == 43.89
     assert result["output"]["results"][0]["condition"] == "excellent"
 
@@ -262,7 +270,11 @@ def test_offerup_search_agent_uses_browser_use_results_when_available(monkeypatc
     result = response.json()
     assert result["status"] == "completed"
     assert result["output"]["summary"] == "Found 2 OfferUp listings for Nike tee"
+    assert result["output"]["execution_mode"] == "browser_use"
+    assert result["output"]["browser_use_error"] is None
     assert result["output"]["results"] == build_browser_results("offerup")
+    assert result["output"]["execution_mode"] == "browser_use"
+    assert result["output"]["browser_use_error"] is None
 
 
 def test_buy_pipeline_accepts_live_search_results(monkeypatch, client: TestClient) -> None:
