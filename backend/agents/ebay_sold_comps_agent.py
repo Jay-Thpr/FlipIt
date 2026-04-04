@@ -2,7 +2,13 @@ from __future__ import annotations
 from typing import Any
 
 from backend.agents.base import BaseAgent, build_agent_app
-from backend.agents.browser_use_support import BrowserUseRuntimeUnavailable, run_structured_browser_task
+from backend.agents.browser_use_events import emit_browser_use_event
+from backend.agents.browser_use_support import (
+    BrowserUseRuntimeUnavailable,
+    build_browser_use_metadata,
+    classify_browser_use_failure,
+    run_structured_browser_task,
+)
 from backend.schemas import AgentTaskRequest, EbaySoldCompsOutput
 
 
@@ -67,7 +73,11 @@ class EbaySoldCompsAgent(BaseAgent):
         condition = vision_analysis["condition"]
         descriptor = f"{brand} {detected_item}".strip() if brand != "Unknown" else detected_item
 
-        browser_use_result = await self.try_browser_use_research(brand=brand, detected_item=detected_item, condition=condition)
+        browser_use_result, browser_use_error = await self.try_browser_use_research(
+            brand=brand,
+            detected_item=detected_item,
+            condition=condition,
+        )
         if browser_use_result is not None:
             sample_size = int(browser_use_result["sample_size"])
             return {
@@ -78,6 +88,13 @@ class EbaySoldCompsAgent(BaseAgent):
                 "low_sold_price": browser_use_result["low_sold_price"],
                 "high_sold_price": browser_use_result["high_sold_price"],
                 "sample_size": sample_size,
+                "execution_mode": "browser_use",
+                "browser_use_error": None,
+                "browser_use": build_browser_use_metadata(
+                    mode="browser_use",
+                    attempted_live_run=True,
+                    detail=f"Live Browser Use sold comps returned {sample_size} comparable sales.",
+                ),
             }
 
         base_price = self.CATEGORY_BASE_PRICES.get(detected_item, self.CATEGORY_BASE_PRICES["item"])
@@ -90,6 +107,19 @@ class EbaySoldCompsAgent(BaseAgent):
         high_price = round(median_price * (1 + spread_ratio), 2)
         sample_size = self.CONDITION_SAMPLE_SIZES.get(condition, 12)
 
+        if browser_use_error is not None:
+            await emit_browser_use_event(
+                session_id=request.session_id,
+                pipeline=request.pipeline,
+                step=request.step,
+                event_type="browser_use_fallback",
+                data={
+                    "agent_name": self.slug,
+                    "platform": "ebay",
+                    "error": browser_use_error,
+                },
+            )
+
         return {
             "agent": self.slug,
             "display_name": self.display_name,
@@ -98,9 +128,23 @@ class EbaySoldCompsAgent(BaseAgent):
             "low_sold_price": low_price,
             "high_sold_price": high_price,
             "sample_size": sample_size,
+            "execution_mode": "fallback",
+            "browser_use_error": browser_use_error,
+            "browser_use": build_browser_use_metadata(
+                mode="fallback",
+                attempted_live_run=browser_use_error not in {None, "runtime_unavailable"},
+                error_category=browser_use_error,
+                detail="Used deterministic sold comps estimator.",
+            ),
         }
 
-    async def try_browser_use_research(self, *, brand: str, detected_item: str, condition: str) -> dict[str, Any] | None:
+    async def try_browser_use_research(
+        self,
+        *,
+        brand: str,
+        detected_item: str,
+        condition: str,
+    ) -> tuple[dict[str, Any] | None, str | None]:
         from pydantic import BaseModel
 
         query = "+".join(part for part in (brand, detected_item) if part and part != "Unknown") or detected_item
@@ -139,15 +183,18 @@ Return only JSON matching the schema.
 """
 
         try:
-            return await run_structured_browser_task(
+            return (
+                await run_structured_browser_task(
                 task=task,
                 output_model=SoldCompResearch,
                 allowed_domains=["ebay.com", "www.ebay.com"],
                 max_steps=12,
                 max_failures=3,
+                ),
+                None,
             )
-        except (BrowserUseRuntimeUnavailable, Exception):
-            return None
+        except (BrowserUseRuntimeUnavailable, Exception) as exc:
+            return None, classify_browser_use_failure(exc)
 
 
 agent = EbaySoldCompsAgent()

@@ -7,6 +7,7 @@ from backend.agents.browser_use_events import emit_browser_use_event
 from backend.agents.browser_use_marketplaces import BrowserUseNegotiationResult, build_negotiation_task
 from backend.agents.browser_use_support import (
     BrowserUseRuntimeUnavailable,
+    build_browser_use_metadata,
     classify_browser_use_failure,
     get_browser_profile_path,
     run_structured_browser_task,
@@ -138,6 +139,7 @@ class NegotiationAgent(BaseAgent):
             "display_name": self.display_name,
             "summary": summary,
             "offers": offers,
+            "browser_use": self.build_runtime_metadata(offers),
         }
 
     def build_prepared_offer(self, *, listing: dict[str, object], median_price: float) -> dict[str, object]:
@@ -161,6 +163,8 @@ class NegotiationAgent(BaseAgent):
             "conversation_url": None,
             "execution_mode": "deterministic",
             "browser_use_error": None,
+            "attempt_source": "prepared",
+            "failure_category": None,
         }
 
     async def try_send_offer(self, prepared_offer: dict[str, object]) -> dict[str, object]:
@@ -170,6 +174,8 @@ class NegotiationAgent(BaseAgent):
             return {
                 "execution_mode": "deterministic",
                 "browser_use_error": "profile_missing",
+                "attempt_source": "prepared",
+                "failure_category": "profile_missing",
             }
 
         task = build_negotiation_task(
@@ -192,11 +198,15 @@ class NegotiationAgent(BaseAgent):
                 **result,
                 "execution_mode": "browser_use",
                 "browser_use_error": None,
+                "attempt_source": "browser_use",
+                "failure_category": None,
             }
         except BrowserUseRuntimeUnavailable as exc:
             return {
                 "execution_mode": "deterministic",
                 "browser_use_error": classify_browser_use_failure(exc),
+                "attempt_source": "prepared",
+                "failure_category": classify_browser_use_failure(exc),
             }
         except Exception as exc:
             return {
@@ -205,6 +215,8 @@ class NegotiationAgent(BaseAgent):
                 "conversation_url": None,
                 "execution_mode": "browser_use",
                 "browser_use_error": classify_browser_use_failure(exc),
+                "attempt_source": "browser_use",
+                "failure_category": classify_browser_use_failure(exc),
             }
 
     def allowed_domains_for_platform(self, platform: str) -> list[str]:
@@ -214,6 +226,29 @@ class NegotiationAgent(BaseAgent):
             "mercari": ["mercari.com", "www.mercari.com"],
             "offerup": ["offerup.com", "www.offerup.com"],
         }[platform]
+
+    def build_runtime_metadata(self, offers: list[dict[str, object]]) -> dict[str, object]:
+        if any(offer["execution_mode"] == "browser_use" for offer in offers):
+            live_count = sum(1 for offer in offers if offer["execution_mode"] == "browser_use")
+            return build_browser_use_metadata(
+                mode="browser_use",
+                attempted_live_run=True,
+                detail=f"Processed {live_count} live Browser Use negotiation attempts.",
+            )
+        first_error = next((offer for offer in offers if offer.get("browser_use_error")), None)
+        if first_error and first_error["browser_use_error"] == "profile_missing":
+            return build_browser_use_metadata(
+                mode="skipped",
+                attempted_live_run=False,
+                error_category="profile_missing",
+                detail="Skipped live negotiation because warmed marketplace profiles were missing.",
+            )
+        return build_browser_use_metadata(
+            mode="fallback",
+            attempted_live_run=False,
+            error_category=first_error["browser_use_error"] if first_error else None,
+            detail="Prepared deterministic negotiation offers without live Browser Use sends.",
+        )
 
 
 agent = NegotiationAgent()

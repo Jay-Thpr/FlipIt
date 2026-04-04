@@ -180,7 +180,7 @@ def test_depop_listing_agent_uses_fallback_copy_for_sparse_input(monkeypatch) ->
     assert result["output"]["summary"] == "Prepared Depop listing for Item at $32.0"
     assert result["output"]["draft_status"] == "fallback"
     assert result["output"]["execution_mode"] == "fallback"
-    assert result["output"]["browser_use_error"] == "browser_error"
+    assert result["output"]["browser_use_error"] == "profile_missing"
     assert result["output"]["form_screenshot_url"] is None
 
 

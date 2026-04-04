@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
+import backend.agents.ebay_sold_comps_agent as ebay_sold_comps_module
 from fastapi.testclient import TestClient
 
 from backend.agents.ebay_sold_comps_agent import app as ebay_sold_comps_app
@@ -68,6 +69,8 @@ def test_ebay_sold_comps_agent_prices_brand_item_and_condition() -> None:
     assert result["output"]["high_sold_price"] == 93.64
     assert result["output"]["sample_size"] == 10
     assert result["output"]["summary"] == "Estimated 10 sold eBay comps for Carhartt jacket"
+    assert result["output"]["execution_mode"] == "fallback"
+    assert result["output"]["browser_use_error"] == "runtime_unavailable"
 
 
 def test_ebay_sold_comps_agent_uses_unknown_brand_fallback() -> None:
@@ -103,6 +106,86 @@ def test_ebay_sold_comps_agent_uses_unknown_brand_fallback() -> None:
     assert result["output"]["high_sold_price"] == 41.6
     assert result["output"]["sample_size"] == 16
     assert result["output"]["summary"] == "Estimated 16 sold eBay comps for item"
+    assert result["output"]["execution_mode"] == "fallback"
+    assert result["output"]["browser_use_error"] == "runtime_unavailable"
+
+
+def test_ebay_sold_comps_agent_records_live_execution_metadata(monkeypatch) -> None:
+    async def fake_run_structured_browser_task(**kwargs: Any) -> dict[str, Any]:
+        return {
+            "median_sold_price": 64.0,
+            "low_sold_price": 58.0,
+            "high_sold_price": 71.0,
+            "sample_size": 7,
+        }
+
+    monkeypatch.setattr(ebay_sold_comps_module, "run_structured_browser_task", fake_run_structured_browser_task)
+
+    payload = {
+        "session_id": "test-session",
+        "pipeline": "sell",
+        "step": "ebay_sold_comps",
+        "input": {
+            "original_input": {"image_urls": [], "notes": None},
+            "previous_outputs": {
+                "vision_analysis": {
+                    "agent": "vision_agent",
+                    "display_name": "Vision Agent",
+                    "summary": "Inferred Patagonia hoodie in excellent condition",
+                    "detected_item": "hoodie",
+                    "brand": "Patagonia",
+                    "category": "outerwear",
+                    "condition": "excellent",
+                }
+            },
+        },
+        "context": {"request_metadata": {"source": "browser-use-live-test"}, "pipeline_input": {}},
+    }
+
+    with TestClient(ebay_sold_comps_app) as client:
+        response = client.post("/task", json=payload)
+
+    result = response.json()
+    assert result["status"] == "completed"
+    assert result["output"]["summary"] == "Extracted 7 sold eBay comps for Patagonia hoodie with Browser Use"
+    assert result["output"]["execution_mode"] == "browser_use"
+    assert result["output"]["browser_use_error"] is None
+
+
+def test_ebay_sold_comps_agent_reports_browser_use_fallback_error(monkeypatch) -> None:
+    async def broken_run_structured_browser_task(**kwargs: Any) -> dict[str, Any]:
+        raise RuntimeError("sold page changed")
+
+    monkeypatch.setattr(ebay_sold_comps_module, "run_structured_browser_task", broken_run_structured_browser_task)
+
+    payload = {
+        "session_id": "test-session",
+        "pipeline": "sell",
+        "step": "ebay_sold_comps",
+        "input": {
+            "original_input": {"image_urls": [], "notes": None},
+            "previous_outputs": {
+                "vision_analysis": {
+                    "agent": "vision_agent",
+                    "display_name": "Vision Agent",
+                    "summary": "Inferred Patagonia hoodie in excellent condition",
+                    "detected_item": "hoodie",
+                    "brand": "Patagonia",
+                    "category": "outerwear",
+                    "condition": "excellent",
+                }
+            },
+        },
+        "context": {"request_metadata": {"source": "browser-use-fallback-test"}, "pipeline_input": {}},
+    }
+
+    with TestClient(ebay_sold_comps_app) as client:
+        response = client.post("/task", json=payload)
+
+    result = response.json()
+    assert result["status"] == "completed"
+    assert result["output"]["execution_mode"] == "fallback"
+    assert result["output"]["browser_use_error"] == "unknown"
 
 
 def test_sell_pipeline_uses_real_ebay_sold_comps_output(client: TestClient) -> None:
@@ -128,3 +211,5 @@ def test_sell_pipeline_uses_real_ebay_sold_comps_output(client: TestClient) -> N
     assert sold_comps["high_sold_price"] == 86.21
     assert sold_comps["sample_size"] == 11
     assert sold_comps["summary"] == "Estimated 11 sold eBay comps for Patagonia hoodie"
+    assert sold_comps["execution_mode"] == "fallback"
+    assert sold_comps["browser_use_error"] == "runtime_unavailable"

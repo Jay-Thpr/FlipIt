@@ -3,7 +3,11 @@ from __future__ import annotations
 from backend.agents.base import BaseAgent, build_agent_app
 from backend.agents.browser_use_events import emit_browser_use_event
 from backend.agents.browser_use_marketplaces import run_marketplace_search
-from backend.agents.browser_use_support import BrowserUseRuntimeUnavailable, classify_browser_use_failure
+from backend.agents.browser_use_support import (
+    BrowserUseRuntimeUnavailable,
+    build_browser_use_metadata,
+    classify_browser_use_failure,
+)
 from backend.agents.search_support import build_platform_results, detect_brand, detect_item
 from backend.schemas import AgentTaskRequest, SearchResultsOutput
 
@@ -40,6 +44,12 @@ class EbaySearchAgent(BaseAgent):
             "results": results,
             "execution_mode": result_source,
             "browser_use_error": browser_use_error,
+            "browser_use": self.build_runtime_metadata(
+                query=query,
+                result_source=result_source,
+                browser_use_error=browser_use_error,
+                result_count=len(results),
+            ),
         }
 
     async def try_browser_use_search(self, *, query: str | None) -> tuple[list[dict[str, object]] | None, str | None]:
@@ -87,6 +97,34 @@ class EbaySearchAgent(BaseAgent):
                 "platform": "ebay",
                 "error": error,
             },
+        )
+
+    def build_runtime_metadata(
+        self,
+        *,
+        query: str | None,
+        result_source: str,
+        browser_use_error: str | None,
+        result_count: int,
+    ) -> dict[str, object]:
+        if not query:
+            return build_browser_use_metadata(
+                mode="skipped",
+                attempted_live_run=False,
+                detail="Skipped Browser Use search because no query was provided.",
+            )
+        if result_source == "browser_use":
+            return build_browser_use_metadata(
+                mode="browser_use",
+                attempted_live_run=True,
+                detail=f"Live Browser Use search returned {result_count} eBay listings.",
+            )
+        attempted_live_run = browser_use_error not in {None, "runtime_unavailable"}
+        return build_browser_use_metadata(
+            mode="fallback",
+            attempted_live_run=attempted_live_run,
+            error_category=browser_use_error,
+            detail="Used deterministic fallback results for eBay search.",
         )
 
 

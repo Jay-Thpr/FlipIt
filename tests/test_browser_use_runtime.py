@@ -126,3 +126,13 @@ def test_browser_task_timeout_respects_prd_floor(monkeypatch: pytest.MonkeyPatch
 
     monkeypatch.setenv("AGENT_TIMEOUT_SECONDS", "45")
     assert browser_use_support.get_browser_task_timeout_seconds() == 45.0
+
+
+def test_summarize_browser_use_error_handles_empty_and_runtime_errors() -> None:
+    assert browser_use_support.summarize_browser_use_error(RuntimeError("dom changed")) == "dom changed"
+    assert (
+        browser_use_support.summarize_browser_use_error(
+            browser_use_support.BrowserUseRuntimeUnavailable("missing key")
+        )
+        == "missing key"
+    )

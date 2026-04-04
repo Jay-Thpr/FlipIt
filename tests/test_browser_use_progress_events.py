@@ -68,9 +68,12 @@ def test_buy_pipeline_emits_fallback_listing_found_events(client: TestClient) ->
     )
 
     listing_events = [event for event in result["events"] if event["event_type"] == "listing_found"]
+    fallback_events = [event for event in result["events"] if event["event_type"] == "browser_use_fallback"]
     assert len(listing_events) == 8
+    assert len(fallback_events) == 7
     assert {event["data"]["source"] for event in listing_events} == {"fallback"}
     assert {event["data"]["platform"] for event in listing_events} == {"depop", "ebay", "mercari", "offerup"}
+    assert {event["data"]["platform"] for event in fallback_events} == {"depop", "ebay", "mercari", "offerup"}
 
 
 def test_buy_pipeline_emits_browser_use_listing_events_when_live_search_succeeds(
@@ -148,6 +151,34 @@ def test_sell_pipeline_emits_draft_created_event_with_live_metadata(client: Test
             "timestamp": draft_events[0]["timestamp"],
         }
     ]
+
+
+def test_sell_pipeline_emits_browser_use_fallback_event_when_listing_draft_fails(client: TestClient, monkeypatch) -> None:
+    async def broken_run_structured_browser_task(**kwargs: Any) -> dict[str, Any]:
+        raise RuntimeError("profile expired")
+
+    monkeypatch.setattr(depop_listing_module, "run_structured_browser_task", broken_run_structured_browser_task)
+    monkeypatch.setattr(depop_listing_module.Path, "exists", lambda self: True)
+
+    result = start_pipeline(
+        client,
+        "/sell/start",
+        {
+            "user_id": "sell-user",
+            "input": {
+                "image_urls": ["https://images.example.com/patagonia-hoodie-excellent.jpg"],
+                "notes": "Patagonia hoodie in excellent condition",
+            },
+            "metadata": {"source": "draft-fallback-event-test"},
+        },
+    )
+
+    fallback_events = [event for event in result["events"] if event["event_type"] == "browser_use_fallback"]
+    assert fallback_events[-1]["data"] == {
+        "agent_name": "depop_listing_agent",
+        "platform": "depop",
+        "error": "profile_missing",
+    }
 
 
 def test_buy_pipeline_emits_offer_sent_events_when_live_negotiation_succeeds(client: TestClient, monkeypatch) -> None:

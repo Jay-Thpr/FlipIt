@@ -7,6 +7,7 @@ from backend.agents.browser_use_events import emit_browser_use_event
 from backend.agents.browser_use_marketplaces import BrowserUseListingDraftResult, build_depop_listing_task
 from backend.agents.browser_use_support import (
     BrowserUseRuntimeUnavailable,
+    build_browser_use_metadata,
     classify_browser_use_failure,
     get_browser_profile_path,
     run_structured_browser_task,
@@ -91,6 +92,7 @@ class DepopListingAgent(BaseAgent):
             },
             "execution_mode": "fallback",
             "browser_use_error": browser_use_error,
+            "browser_use": self.build_runtime_metadata(browser_use_result=browser_use_result, browser_use_error=browser_use_error),
         }
         if browser_use_result is not None:
             output["draft_status"] = browser_use_result["draft_status"]
@@ -170,6 +172,38 @@ class DepopListingAgent(BaseAgent):
             if path.exists():
                 return str(path.resolve())
         return None
+
+    def build_runtime_metadata(
+        self,
+        *,
+        browser_use_result: dict[str, str | None] | None,
+        browser_use_error: str | None,
+    ) -> dict[str, object]:
+        if browser_use_result is not None:
+            return build_browser_use_metadata(
+                mode="browser_use",
+                attempted_live_run=True,
+                profile_name="depop",
+                profile_available=True,
+                detail="Live Depop draft creation completed through Browser Use.",
+            )
+        if browser_use_error == "profile_missing":
+            return build_browser_use_metadata(
+                mode="skipped",
+                attempted_live_run=False,
+                profile_name="depop",
+                profile_available=False,
+                error_category="profile_missing",
+                detail="Skipped live Depop draft creation because the warmed depop profile is missing.",
+            )
+        return build_browser_use_metadata(
+            mode="fallback",
+            attempted_live_run=browser_use_error not in {None, "runtime_unavailable"},
+            profile_name="depop",
+            profile_available=True,
+            error_category=browser_use_error,
+            detail="Used deterministic fallback listing metadata.",
+        )
 
 
 agent = DepopListingAgent()

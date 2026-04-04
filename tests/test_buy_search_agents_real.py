@@ -240,7 +240,7 @@ def test_mercari_search_agent_falls_back_when_browser_use_raises(monkeypatch) ->
     assert result["status"] == "completed"
     assert result["output"]["summary"] == "Found 2 Mercari listings for Nike tee"
     assert result["output"]["execution_mode"] == "fallback"
-    assert result["output"]["browser_use_error"] == "browser_error"
+    assert result["output"]["browser_use_error"] == "unknown"
     assert result["output"]["results"][0]["price"] == 43.89
     assert result["output"]["results"][0]["condition"] == "excellent"
 
