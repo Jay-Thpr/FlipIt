@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import asyncio
+import threading
 import time
 
 from fastapi.testclient import TestClient
+
+from backend.schemas import PipelineStartRequest, SessionEvent
+from backend.session import session_manager
 
 
 SELL_PAYLOAD = {
@@ -36,6 +41,48 @@ def test_healthcheck(client: TestClient) -> None:
         "agent_execution_mode": "local_functions",
         "agent_count": "10",
     }
+
+
+def test_healthcheck_includes_cors_headers_for_browser_clients(client: TestClient) -> None:
+    response = client.get("/health", headers={"Origin": "https://example.com"})
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] in {"*", "https://example.com"}
+
+
+def test_sell_start_preflight_returns_cors_headers(client: TestClient) -> None:
+    response = client.options(
+        "/sell/start",
+        headers={
+            "Origin": "https://example.com",
+            "Access-Control-Request-Method": "POST",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "https://example.com"
+    assert "POST" in response.headers["access-control-allow-methods"]
+
+
+def test_healthcheck_get_includes_cors_header_for_browser_origin(client: TestClient) -> None:
+    response = client.get("/health", headers={"Origin": "https://diamondhacks.app"})
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "*"
+
+
+def test_healthcheck_options_supports_cors_preflight(client: TestClient) -> None:
+    response = client.options(
+        "/health",
+        headers={
+            "Origin": "https://diamondhacks.app",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "https://diamondhacks.app"
+    assert "GET" in response.headers["access-control-allow-methods"]
 
 
 def test_sell_start_creates_session_and_result_url(client: TestClient) -> None:
@@ -86,3 +133,47 @@ def test_stream_unknown_session_returns_404(client: TestClient) -> None:
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Session not found"}
+
+
+def test_stream_emits_keepalive_ping_during_idle_gap(client: TestClient, monkeypatch) -> None:
+    session_id = "keepalive-session"
+    asyncio.run(
+        session_manager.create_session(
+            session_id=session_id,
+            pipeline="sell",
+            request=PipelineStartRequest(
+                user_id="keepalive-user",
+                input={"image_urls": ["https://example.com/item.jpg"]},
+            ),
+        )
+    )
+    monkeypatch.setattr("backend.main.KEEPALIVE_INTERVAL", 0.01, raising=False)
+
+    def emit_terminal_event() -> None:
+        time.sleep(0.03)
+        asyncio.run(
+            session_manager.append_event(
+                SessionEvent(
+                    session_id=session_id,
+                    event_type="pipeline_complete",
+                    pipeline="sell",
+                    data={"outputs": {}},
+                )
+            )
+        )
+
+    worker = threading.Thread(target=emit_terminal_event, daemon=True)
+    worker.start()
+
+    with client.stream("GET", f"/stream/{session_id}") as response:
+        assert response.status_code == 200
+        chunks: list[str] = []
+        for chunk in response.iter_text():
+            chunks.append(chunk)
+            if "event: pipeline_complete" in "".join(chunks):
+                break
+
+    worker.join(timeout=1)
+    body = "".join(chunks)
+    assert ": ping" in body
+    assert "event: pipeline_complete" in body

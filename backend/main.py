@@ -4,6 +4,7 @@ import asyncio
 import json
 
 from fastapi import FastAPI, Header, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from backend.config import AGENTS, APP_BASE_URL, INTERNAL_API_TOKEN, get_agent_execution_mode
@@ -17,6 +18,15 @@ from backend.schemas import (
 from backend.session import session_manager
 
 app = FastAPI(title="DiamondHacks Backend", version="0.1.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+KEEPALIVE_INTERVAL = 15.0
 
 
 async def start_session(pipeline: str, request: PipelineStartRequest) -> PipelineStartResponse:
@@ -118,10 +128,13 @@ async def stream(session_id: str) -> StreamingResponse:
                 if event.event_type in {"pipeline_complete", "pipeline_failed"}:
                     return
             while True:
-                event = await queue.get()
-                yield format_sse(event)
-                if event.event_type in {"pipeline_complete", "pipeline_failed"}:
-                    break
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=KEEPALIVE_INTERVAL)
+                    yield format_sse(event)
+                    if event.event_type in {"pipeline_complete", "pipeline_failed"}:
+                        break
+                except asyncio.TimeoutError:
+                    yield ": ping\n\n"
         finally:
             await session_manager.unsubscribe(session_id, queue)
 

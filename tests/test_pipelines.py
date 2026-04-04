@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from backend import orchestrator
+from backend import main, orchestrator
 from backend.schemas import (
     AgentTaskResponse,
     DepopListingOutput,
@@ -16,8 +16,10 @@ from backend.schemas import (
     PricingOutput,
     RankingOutput,
     SearchResultsOutput,
+    SessionEvent,
     VisionAnalysisOutput,
 )
+from backend.session import session_manager
 
 
 def wait_for_terminal_result(client: TestClient, session_id: str, timeout: float = 3.0) -> dict[str, Any]:
@@ -217,6 +219,60 @@ def test_internal_event_is_appended_to_session_history(client: TestClient) -> No
     events = result.json()["events"]
     assert events[-1]["event_type"] == "custom.event"
     assert events[-1]["data"] == {"hello": "world"}
+
+
+def test_stream_emits_keepalive_ping_before_terminal_event(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session_id = "keepalive-session"
+
+    async def seed_session() -> None:
+        from backend.schemas import PipelineStartRequest
+
+        await session_manager.create_session(
+            session_id=session_id,
+            pipeline="sell",
+            request=PipelineStartRequest(input={}, metadata={}),
+        )
+
+    import asyncio
+
+    asyncio.run(seed_session())
+
+    queue: asyncio.Queue[SessionEvent] = asyncio.Queue()
+    queue.put_nowait(
+        SessionEvent(
+            session_id=session_id,
+            pipeline="sell",
+            event_type="pipeline_complete",
+            data={"done": True},
+        )
+    )
+
+    async def fake_subscribe(requested_session_id: str) -> asyncio.Queue[SessionEvent]:
+        assert requested_session_id == session_id
+        return queue
+
+    call_count = {"value": 0}
+    original_wait_for = main.asyncio.wait_for
+
+    async def fake_wait_for(awaitable: Any, timeout: float) -> Any:
+        call_count["value"] += 1
+        if call_count["value"] == 1:
+            awaitable.close()
+            raise asyncio.TimeoutError
+        return await original_wait_for(awaitable, timeout=timeout)
+
+    monkeypatch.setattr(main, "KEEPALIVE_INTERVAL", 0.01)
+    monkeypatch.setattr(session_manager, "subscribe", fake_subscribe)
+    monkeypatch.setattr(main.asyncio, "wait_for", fake_wait_for)
+
+    response = client.get(f"/stream/{session_id}")
+
+    assert response.status_code == 200
+    assert ": ping" in response.text
+    assert "event: pipeline_complete" in response.text
 
 
 @pytest.mark.asyncio
