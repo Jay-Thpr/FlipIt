@@ -9,6 +9,7 @@ This scaffold gives the team a stable local contract before Browser Use, Gemini,
 - `GET /pipelines`
 - `POST /sell/start`
 - `POST /buy/start`
+- `POST /sell/correct`
 - `GET /stream/{session_id}`
 - `GET /result/{session_id}`
 - `POST /internal/event/{session_id}`

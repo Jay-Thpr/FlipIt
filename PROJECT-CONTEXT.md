@@ -59,7 +59,7 @@ An autonomous resale agent app called **FILLER**. A user photographs a thrift st
 
 `AGENT_EXECUTION_MODE` controls how the orchestrator calls agents:
 - `local_functions` — all 10 agents run in-process, no subprocesses (default, use this for demo)
-- `local_http` — orchestrator POSTs to each agent's FastAPI app on its fixed port (9101–9110)
+- `http` — orchestrator POSTs to each agent's FastAPI app on its fixed port (9101–9110); start agents with `make run-agents`
 
 ### SELL Pipeline (sequential)
 
@@ -143,7 +143,7 @@ Each event payload includes `session_id`, `pipeline`, `step`, `data`, and `times
 
 ### No Browser Use (AI logic, not automation)
 
-- `vision_agent` — Gemini Vision item identification
+- `vision_agent` — item identification (heuristic scaffold today; Gemini integration in progress)
 - `pricing_agent` — median price + profit calculation
 - `ranking_agent` — multi-signal listing scorer
 
@@ -153,8 +153,8 @@ Each event payload includes `session_id`, `pipeline`, `step`, `data`, and `times
 
 1. **Browser Use profile dependency** — live Depop listing and live negotiation sending require warmed persisted profiles under `BROWSER_USE_PROFILE_ROOT`. Without them, those agents intentionally fall back.
 2. **Marketplace DOM drift** — live Browser Use paths still need real-site rehearsal on eBay, Depop, Mercari, and OfferUp before demo use.
-3. **No CORS middleware** in `main.py`. Frontend will be blocked. **Tracked in `JAY-PLAN.md`.**
-4. **No SSE keepalive**. Long Browser Use tasks can outlast idle proxy limits. **Tracked in `JAY-PLAN.md`.**
+3. **CORS** — `backend/main.py` mounts `CORSMiddleware` with `allow_origins=["*"]` for development. Tighten origins for production if needed.
+4. **SSE keepalive** — `GET /stream/{session_id}` emits periodic `: ping\n\n` (see `KEEPALIVE_INTERVAL` in `main.py`) so proxies do not drop idle connections.
 5. **Fetch.ai runtime not implemented** — `/chat` remains a placeholder and Agentverse/ASI:One wiring is still separate work.
 
 ---
