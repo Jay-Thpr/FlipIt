@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 
 import yaml
 
@@ -33,8 +34,22 @@ def test_env_example_contains_required_runtime_variables() -> None:
         "AGENT_HOST=",
         "AGENT_EXECUTION_MODE=",
         "INTERNAL_API_TOKEN=",
+        "AGENT_TIMEOUT_SECONDS=",
+        "BUY_AGENT_MAX_RETRIES=",
+        "GOOGLE_API_KEY=",
+        "ANONYMIZED_TELEMETRY=",
+        "BROWSER_USE_GEMINI_MODEL=",
+        "BROWSER_USE_PROFILE_ROOT=",
+        "BROWSER_USE_MAX_STEPS=",
+        "BROWSER_USE_FORCE_FALLBACK=",
     ):
         assert variable in env_example
+
+
+def test_gitignore_excludes_local_env_files() -> None:
+    gitignore = (REPO_ROOT / ".gitignore").read_text()
+
+    assert ".env" in gitignore
 
 
 def test_render_config_matches_backend_runtime_contract() -> None:
@@ -46,16 +61,39 @@ def test_render_config_matches_backend_runtime_contract() -> None:
     service = render_config["services"][0]
     assert service["type"] == "web"
     assert service["runtime"] == "python"
-    assert service["buildCommand"] == "pip install -r requirements.txt"
+    assert "pip install -r requirements.txt" in service["buildCommand"]
+    assert "python -m patchright install chromium" in service["buildCommand"]
     assert service["startCommand"] == "./start.sh"
 
-    env_vars = {item["key"]: item["value"] for item in service["envVars"]}
-    assert env_vars == {
-        "APP_HOST": "0.0.0.0",
-        "APP_PORT": "10000",
-        "APP_BASE_URL": "https://diamondhacks-backend.onrender.com",
-        "AGENT_EXECUTION_MODE": "local_functions",
-    }
+    env_vars = {item["key"]: item for item in service["envVars"]}
+    assert env_vars["APP_HOST"]["value"] == "0.0.0.0"
+    assert env_vars["APP_PORT"]["value"] == "10000"
+    assert env_vars["APP_BASE_URL"]["value"] == "https://diamondhacks-backend.onrender.com"
+    assert env_vars["AGENT_EXECUTION_MODE"]["value"] == "local_functions"
+    assert env_vars["INTERNAL_API_TOKEN"]["sync"] is False
+    assert env_vars["AGENT_TIMEOUT_SECONDS"]["value"] == "60"
+    assert env_vars["BUY_AGENT_MAX_RETRIES"]["value"] == "1"
+    assert env_vars["GOOGLE_API_KEY"]["sync"] is False
+    assert env_vars["ANONYMIZED_TELEMETRY"]["value"] == "false"
+    assert env_vars["BROWSER_USE_GEMINI_MODEL"]["value"] == "gemini-2.0-flash"
+    assert env_vars["BROWSER_USE_MAX_STEPS"]["value"] == "15"
+    assert env_vars["BROWSER_USE_FORCE_FALLBACK"]["value"] == "false"
+
+
+def test_requirements_pin_browser_use_runtime_dependencies() -> None:
+    requirements = (REPO_ROOT / "requirements.txt").read_text()
+
+    assert re.search(r"^browser-use==[^\s]+$", requirements, flags=re.MULTILINE)
+    assert re.search(r"^langchain-google-genai==[^\s]+$", requirements, flags=re.MULTILINE)
+    assert re.search(r"^patchright==[^\s]+$", requirements, flags=re.MULTILINE)
+
+
+def test_readme_documents_render_browser_runtime_requirements() -> None:
+    readme = (REPO_ROOT / "README.md").read_text()
+
+    assert "Render" in readme
+    assert "paid" in readme.lower()
+    assert "Chromium" in readme
 
 
 def test_ci_workflow_runs_repo_verification_steps() -> None:
