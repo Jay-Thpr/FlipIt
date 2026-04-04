@@ -91,9 +91,21 @@ def test_requirements_pin_browser_use_runtime_dependencies() -> None:
 def test_readme_documents_render_browser_runtime_requirements() -> None:
     readme = (REPO_ROOT / "README.md").read_text()
 
+    assert "Browser Use Deployment Notes" in readme
     assert "Render" in readme
     assert "paid" in readme.lower()
     assert "Chromium" in readme
+    assert "GOOGLE_API_KEY" in readme
+
+
+def test_claude_documents_current_sse_event_names() -> None:
+    claude = (REPO_ROOT / "CLAUDE.md").read_text()
+
+    assert "underscore-delimited SSE event names" in claude
+    assert "`pipeline_started`, `pipeline_complete`, `pipeline_failed`" in claude
+    assert "`agent_started`, `agent_completed`, `agent_error`, `agent_retrying`" in claude
+    assert "pipeline.started" not in claude
+    assert "agent.failed" not in claude
 
 
 def test_ci_workflow_runs_repo_verification_steps() -> None:
