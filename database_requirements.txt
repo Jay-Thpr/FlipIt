@@ -1,1 +1,26 @@
+Database Requirements
 
+Current requirement:
+- No database is needed for the hackathon build.
+
+Planned storage model:
+- Store active SSE session queues in memory.
+- Store final pipeline results in an in-memory dictionary keyed by `session_id`.
+- Generate a unique UUID `session_id` for each SELL or BUY pipeline invocation.
+- Close and clean up session state when the pipeline completes or times out.
+
+Related backend behavior:
+- `GET /stream/{session_id}` streams SSE events for the active session.
+- `GET /result/{session_id}` returns the final result as a fallback if SSE drops.
+- Agents post internal events back to FastAPI per session.
+
+Known limitations:
+- In-memory state is ephemeral.
+- Any process restart drops active sessions and stored results.
+- This is acceptable for the current hackathon scope.
+
+If persistence is added later, the database would need to support:
+- session metadata
+- final pipeline results
+- optional event logs / audit history
+- retry-safe writes keyed by `session_id`
