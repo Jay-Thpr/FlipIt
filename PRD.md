@@ -521,7 +521,7 @@ FastAPI backend split between persons 1 and 2 — 1 owns session management + SS
 
 ---
 
-## 15. Checklist
+## 15. Hackathon Checklist
 
 **Accounts:**
 - [ ] Create Depop seller account — verify listing creation works immediately (no identity gate)
