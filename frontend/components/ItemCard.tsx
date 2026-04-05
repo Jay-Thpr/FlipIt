@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, Image, StyleSheet, TouchableOpacity } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { Item } from '../data/mockData';
 
@@ -8,44 +8,71 @@ interface Props {
   onPress: () => void;
 }
 
-const STATUS_TEXT_COLOR: Record<string, string> = {
-  active: '#4ADE80',
-  paused: '#A1A1AA',
-  archived: '#A1A1AA',
-};
-
 export default function ItemCard({ item, cardWidth, onPress }: Props) {
-  const { colors } = useTheme();
-  const cardHeight = Math.round(cardWidth / 0.68);
+  const { colors, isDark } = useTheme();
 
   const offerDisplay = item.bestOffer
     ? `$${item.bestOffer}`
-    : 'Finding...';
+    : 'None';
 
   const statusLabel = item.status === 'active' ? 'Active' : 'Paused';
-  const statusColor = STATUS_TEXT_COLOR[item.status] ?? '#A1A1AA';
+  const statusColor = item.status === 'active' ? colors.accent : colors.destructive;
+  const hasPhoto = item.photos.length > 0;
+  const imageHeight = Math.round(cardWidth * 0.6);
 
   return (
     <TouchableOpacity
-      style={[styles.card, { width: cardWidth, height: cardHeight, borderColor: colors.border }]}
+      style={[
+        styles.card,
+        {
+          width: cardWidth,
+          backgroundColor: colors.surface,
+        },
+      ]}
       onPress={onPress}
-      activeOpacity={0.88}
+      activeOpacity={0.7}
     >
-      {/* Background */}
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: item.imageColor }]} />
-
-      {/* Watermark initial */}
-      <Text style={styles.watermark}>{item.name[0]}</Text>
-
-      {/* Top-left: status text label */}
-      <View style={styles.topLeft}>
-        <Text style={[styles.statusLabel, { color: statusColor }]}>{statusLabel}</Text>
+      {/* Photo preview or colored placeholder */}
+      <View style={[styles.imageContainer, { height: imageHeight }]}>
+        {hasPhoto ? (
+          <Image
+            source={{ uri: item.photos[0] }}
+            style={styles.image}
+            resizeMode="cover"
+          />
+        ) : (
+          <View style={[styles.imagePlaceholder, { backgroundColor: item.imageColor }]}>
+            <Text style={styles.placeholderInitial}>{item.name[0]}</Text>
+          </View>
+        )}
+        {/* Status label over image */}
+        <View style={styles.statusOverlay}>
+          <Text style={[styles.statusOverlayText, { color: statusColor }]}>{statusLabel}</Text>
+        </View>
       </View>
 
-      {/* Bottom overlay */}
-      <View style={styles.overlay}>
-        <Text style={styles.overlayName} numberOfLines={2}>{item.name}</Text>
-        <Text style={styles.overlayOffer}>{offerDisplay}</Text>
+      {/* Content below image */}
+      <View style={styles.content}>
+        {/* Item name */}
+        <Text style={[styles.name, { color: colors.textPrimary }]} numberOfLines={2}>
+          {item.name}
+        </Text>
+
+        {/* Bottom row: offer + target */}
+        <View style={styles.bottomRow}>
+          <View>
+            <Text style={[styles.priceLabel, { color: colors.textMuted }]}>Best Offer</Text>
+            <Text style={[styles.priceValue, { color: item.bestOffer ? colors.accent : colors.textPrimary }]}>
+              {offerDisplay}
+            </Text>
+          </View>
+          <View style={styles.targetBlock}>
+            <Text style={[styles.priceLabel, { color: colors.textMuted }]}>Target</Text>
+            <Text style={[styles.targetValue, { color: colors.textPrimary }]}>
+              ${item.targetPrice}
+            </Text>
+          </View>
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -53,55 +80,83 @@ export default function ItemCard({ item, cardWidth, onPress }: Props) {
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 16,
+    borderRadius: 12,
     overflow: 'hidden',
-    borderWidth: 1,
-  },
-  watermark: {
-    position: 'absolute',
-    fontSize: 120,
-    fontWeight: '900',
-    color: 'rgba(255,255,255,0.12)',
-    top: '10%',
-    alignSelf: 'center',
   },
 
-  topLeft: {
-    position: 'absolute',
-    top: 10,
-    left: 10,
+  imageContainer: {
+    width: '100%',
+    overflow: 'hidden',
   },
-  statusLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.2,
-    textShadowColor: 'rgba(0,0,0,0.5)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+  image: {
+    width: '100%',
+    height: '100%',
   },
-
-  overlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: 'rgba(0,0,0,0.62)',
-    paddingHorizontal: 11,
-    paddingTop: 10,
-    paddingBottom: 12,
-    gap: 3,
+  imagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  overlayName: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    lineHeight: 17,
-    letterSpacing: -0.1,
-  },
-  overlayOffer: {
-    fontSize: 15,
+  placeholderInitial: {
+    fontSize: 48,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: 'rgba(255,255,255,0.5)',
+  },
+  statusOverlay: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  statusOverlayText: {
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+
+  content: {
+    padding: 14,
+    gap: 10,
+  },
+
+  name: {
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+    lineHeight: 20,
+  },
+
+  bottomRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    marginTop: 2,
+  },
+  priceLabel: {
+    fontSize: 10,
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    marginBottom: 2,
+  },
+  priceValue: {
+    fontSize: 18,
+    fontWeight: '800',
     letterSpacing: -0.3,
+    fontVariant: ['tabular-nums'],
+  },
+  targetBlock: {
+    alignItems: 'flex-end',
+  },
+  targetValue: {
+    fontSize: 15,
+    fontWeight: '600',
+    letterSpacing: -0.2,
+    fontVariant: ['tabular-nums'],
   },
 });

@@ -31,8 +31,6 @@ export default function ChatLogScreen() {
               ? { backgroundColor: colors.primary, borderBottomRightRadius: 4 }
               : {
                   backgroundColor: colors.surface,
-                  borderWidth: 1,
-                  borderColor: colors.border,
                   borderBottomLeftRadius: 4,
                 },
           ]}
@@ -57,18 +55,13 @@ export default function ChatLogScreen() {
       edges={['top', 'bottom']}
     >
       {/* Header */}
-      <View
-        style={[
-          styles.header,
-          { borderBottomColor: colors.border, backgroundColor: colors.surface },
-        ]}
-      >
+      <View style={[styles.header, { backgroundColor: colors.surface }]}>
         <TouchableOpacity
           onPress={() => router.back()}
           style={styles.backBtn}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <ArrowLeft size={22} color={colors.textPrimary} />
+          <ArrowLeft size={20} color={colors.textPrimary} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={[styles.headerContact, { color: colors.textPrimary }]} numberOfLines={1}>
@@ -106,7 +99,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     gap: 10,
-    borderBottomWidth: 1,
   },
   backBtn: {
     width: 36,
@@ -121,13 +113,16 @@ const styles = StyleSheet.create({
   headerContact: {
     fontSize: 15,
     fontWeight: '700',
+    letterSpacing: -0.2,
   },
   headerItem: {
     fontSize: 12,
   },
   platformName: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
   },
 
   messageList: {
@@ -137,8 +132,8 @@ const styles = StyleSheet.create({
   },
 
   bubbleWrapper: {
-    maxWidth: '80%',
-    gap: 3,
+    maxWidth: '78%',
+    gap: 4,
   },
   wrapperRight: {
     alignSelf: 'flex-end',
@@ -150,7 +145,7 @@ const styles = StyleSheet.create({
   },
 
   bubble: {
-    borderRadius: 16,
+    borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
@@ -162,6 +157,7 @@ const styles = StyleSheet.create({
 
   timestamp: {
     fontSize: 11,
+    fontVariant: ['tabular-nums'],
   },
 
   emptyText: {

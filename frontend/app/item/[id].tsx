@@ -1,19 +1,20 @@
 import React, { useState } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, TouchableOpacity, Switch, Alert,
+  View, Text, ScrollView, StyleSheet, TouchableOpacity, Switch, Alert, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
-import { ArrowLeft, ChevronRight } from 'lucide-react-native';
+import { ArrowLeft, ChevronRight, ChevronLeft, Plus, X } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { mockItems, MarketData, Conversation, PLATFORM_NAMES } from '../../data/mockData';
 import StatusBadge from '../../components/StatusBadge';
 
 export default function ItemDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const item = mockItems.find(i => i.id === id);
   const [aiActive, setAiActive] = useState(item?.status === 'active');
+  const [photos, setPhotos] = useState<string[]>(item?.photos ?? []);
 
   if (!item) {
     return (
@@ -21,6 +22,26 @@ export default function ItemDetailScreen() {
         <Text style={{ padding: 24, color: colors.textMuted }}>Item not found.</Text>
       </SafeAreaView>
     );
+  }
+
+  function movePhoto(index: number, direction: 'up' | 'down') {
+    const newPhotos = [...photos];
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= newPhotos.length) return;
+    [newPhotos[index], newPhotos[targetIndex]] = [newPhotos[targetIndex], newPhotos[index]];
+    setPhotos(newPhotos);
+  }
+
+  function removePhoto(index: number) {
+    Alert.alert('Remove Photo', 'Are you sure you want to remove this photo?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Remove', style: 'destructive', onPress: () => setPhotos(p => p.filter((_, i) => i !== index)) },
+    ]);
+  }
+
+  function handleAddPhoto() {
+    // Placeholder — would use expo-image-picker in production
+    Alert.alert('Add Photo', 'Image picker would open here. (Not wired to a real picker yet.)');
   }
 
   function handleArchive() {
@@ -44,13 +65,13 @@ export default function ItemDetailScreen() {
       edges={['top', 'bottom']}
     >
       {/* Header */}
-      <View style={[styles.header, { borderBottomColor: colors.border }]}>
+      <View style={styles.header}>
         <TouchableOpacity
           onPress={() => router.back()}
           style={styles.backBtn}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <ArrowLeft size={22} color={colors.textPrimary} />
+          <ArrowLeft size={20} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]} numberOfLines={1}>
           {item.name}
@@ -59,37 +80,152 @@ export default function ItemDetailScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {/* Hero */}
-        <View style={[styles.heroImage, { backgroundColor: item.imageColor }]}>
-          <Text style={styles.heroInitial}>{item.name[0]}</Text>
+        {/* Hero — compact colored strip with key metrics */}
+        <View style={[styles.heroStrip, { backgroundColor: colors.surface }]}>
+          <View style={[styles.heroAccent, { backgroundColor: isDark ? colors.primary : colors.muted }]} />
+          <View style={styles.heroContent}>
+            <View style={styles.heroMetric}>
+              <Text style={[styles.heroMetricLabel, { color: colors.textMuted }]}>BEST OFFER</Text>
+              <Text style={[styles.heroMetricValue, { color: item.bestOffer ? colors.accent : colors.textPrimary }]}>
+                {item.bestOffer ? `$${item.bestOffer}` : 'None'}
+              </Text>
+            </View>
+            <View style={[styles.heroDivider, { backgroundColor: colors.divider }]} />
+            <View style={styles.heroMetric}>
+              <Text style={[styles.heroMetricLabel, { color: colors.textMuted }]}>TARGET</Text>
+              <Text style={[styles.heroMetricValue, { color: colors.textPrimary }]}>
+                ${item.targetPrice}
+              </Text>
+            </View>
+            <View style={[styles.heroDivider, { backgroundColor: colors.divider }]} />
+            <View style={styles.heroMetric}>
+              <Text style={[styles.heroMetricLabel, { color: colors.textMuted }]}>MODE</Text>
+              <Text style={[styles.heroMetricValue, { color: colors.primary }]}>
+                {item.type === 'buy' ? 'Buy' : 'Sell'}
+              </Text>
+            </View>
+          </View>
         </View>
 
-        {/* Overview */}
-        <SectionCard title="Overview">
-          <InfoRow label="Description" value={item.description} />
-          <InfoDivider />
-          <InfoRow label="Condition" value={item.condition} />
-          <InfoDivider />
-          <InfoRow label="Quantity" value={`×${item.quantity}`} />
-          <InfoDivider />
-          <InfoRow label="Mode" value={item.type === 'buy' ? 'Buying' : 'Selling'} />
-          {item.bestOffer != null && (
-            <>
-              <InfoDivider />
-              <InfoRow label="Best Current Offer" value={`$${item.bestOffer}`} highlight />
-            </>
+        {/* Photos — scrollable gallery with reorder + delete */}
+        <View style={styles.sectionCard}>
+          <View style={styles.photoHeaderRow}>
+            <Text style={[styles.sectionLabel, { color: colors.textMuted, marginBottom: 0 }]}>
+              PHOTOS ({photos.length})
+            </Text>
+            <TouchableOpacity
+              style={[styles.addPhotoBtn, { backgroundColor: colors.surfaceRaised }]}
+              onPress={handleAddPhoto}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityLabel="Add photo"
+            >
+              <Plus size={16} color={colors.primary} />
+              <Text style={[styles.addPhotoBtnText, { color: colors.primary }]}>Add</Text>
+            </TouchableOpacity>
+          </View>
+          {photos.length === 0 ? (
+            <TouchableOpacity
+              style={[styles.emptyPhotos, { backgroundColor: colors.surface }]}
+              onPress={handleAddPhoto}
+              activeOpacity={0.7}
+            >
+              <Plus size={24} color={colors.textMuted} />
+              <Text style={[styles.emptyPhotosText, { color: colors.textMuted }]}>
+                Add photos for your listing
+              </Text>
+              <Text style={[styles.emptyPhotosHint, { color: colors.textMuted }]}>
+                Photos are uploaded in order when the AI creates listings
+              </Text>
+            </TouchableOpacity>
+          ) : (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.photoScroll}
+            >
+              {photos.map((uri, idx) => (
+                <View key={`${uri}-${idx}`} style={[styles.photoCard, { backgroundColor: colors.surface }]}>
+                  <View style={styles.photoImageWrap}>
+                    <Image source={{ uri }} style={styles.photoImage} resizeMode="cover" />
+                    {/* Position badge */}
+                    <View style={styles.photoBadge}>
+                      <Text style={styles.photoBadgeText}>{idx + 1}</Text>
+                    </View>
+                    {/* Delete button — large, top-right */}
+                    <TouchableOpacity
+                      style={styles.photoDeleteBtn}
+                      onPress={() => removePhoto(idx)}
+                      hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                      accessibilityLabel="Remove photo"
+                    >
+                      <X size={14} color="#FFFFFF" />
+                    </TouchableOpacity>
+                  </View>
+                  {/* Reorder arrows — large touch targets */}
+                  <View style={styles.photoReorderRow}>
+                    <TouchableOpacity
+                      onPress={() => movePhoto(idx, 'up')}
+                      disabled={idx === 0}
+                      style={[
+                        styles.reorderBtn,
+                        { backgroundColor: colors.surfaceRaised, opacity: idx === 0 ? 0.3 : 1 },
+                      ]}
+                      hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                      accessibilityLabel="Move left"
+                    >
+                      <ChevronLeft size={16} color={colors.textSecondary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => movePhoto(idx, 'down')}
+                      disabled={idx === photos.length - 1}
+                      style={[
+                        styles.reorderBtn,
+                        { backgroundColor: colors.surfaceRaised, opacity: idx === photos.length - 1 ? 0.3 : 1 },
+                      ]}
+                      hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                      accessibilityLabel="Move right"
+                    >
+                      <ChevronRight size={16} color={colors.textSecondary} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
           )}
+        </View>
+
+        {/* AI Agent toggle — below photos */}
+        <View style={[styles.aiToggleRow, { backgroundColor: colors.surface }]}>
+          <Text style={[styles.aiToggleLabel, { color: colors.textPrimary }]}>AI Agent Active</Text>
+          <Switch
+            value={aiActive}
+            onValueChange={() => setAiActive(v => !v)}
+            trackColor={{ true: colors.primary, false: colors.muted }}
+            thumbColor={colors.white}
+          />
+        </View>
+
+        {/* Overview — description stacked vertically, then compact rows */}
+        <SectionCard title="Overview">
+          <View style={styles.descriptionBlock}>
+            <Text style={[styles.descriptionLabel, { color: colors.textMuted }]}>Description</Text>
+            <Text style={[styles.descriptionValue, { color: colors.textPrimary }]}>{item.description}</Text>
+          </View>
+          <View style={[styles.infoDivider, { backgroundColor: colors.divider }]} />
+          <View style={styles.compactRow}>
+            <View style={styles.compactItem}>
+              <Text style={[styles.compactLabel, { color: colors.textMuted }]}>Condition</Text>
+              <Text style={[styles.compactValue, { color: colors.textPrimary }]}>{item.condition}</Text>
+            </View>
+            <View style={styles.compactItem}>
+              <Text style={[styles.compactLabel, { color: colors.textMuted }]}>Quantity</Text>
+              <Text style={[styles.compactValue, { color: colors.textPrimary }]}>{item.quantity}</Text>
+            </View>
+          </View>
         </SectionCard>
 
         {/* Settings */}
         <SectionCard title="Settings">
-          {/* AI Agent toggle */}
-          <SettingToggle
-            label="AI Agent Active"
-            value={aiActive}
-            onToggle={() => setAiActive(v => !v)}
-          />
-          <SettingDivider />
           <SettingRow label="Target Price" value={`$${item.targetPrice}`} />
           {item.minPrice != null && (
             <SettingRow label="Min Acceptable" value={`$${item.minPrice}`} />
@@ -113,7 +249,7 @@ export default function ItemDetailScreen() {
 
         {/* Market Overview */}
         <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Market Overview</Text>
+          <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Market Overview</Text>
         </View>
         <ScrollView
           horizontal
@@ -134,7 +270,7 @@ export default function ItemDetailScreen() {
           ) : (
             item.conversations.map((conv, idx) => (
               <React.Fragment key={conv.id}>
-                {idx > 0 && <View style={[styles.convDivider, { backgroundColor: colors.border }]} />}
+                {idx > 0 && <View style={[styles.convDivider, { backgroundColor: colors.divider }]} />}
                 <ConvRow
                   conv={conv}
                   onPress={() => router.push(`/chat/${conv.id}?itemId=${item.id}`)}
@@ -147,7 +283,7 @@ export default function ItemDetailScreen() {
         {/* Archive */}
         <View style={styles.dangerZone}>
           <TouchableOpacity
-            style={[styles.archiveBtn, { borderColor: colors.destructive }]}
+            style={[styles.archiveBtn, { backgroundColor: colors.surface }]}
             onPress={handleArchive}
             activeOpacity={0.7}
           >
@@ -168,44 +304,11 @@ function SectionCard({ title, children }: { title: string; children: React.React
   return (
     <View style={styles.sectionCard}>
       <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>{title.toUpperCase()}</Text>
-      <View
-        style={[
-          styles.cardBody,
-          { backgroundColor: colors.surface, borderColor: colors.border },
-        ]}
-      >
+      <View style={[styles.cardBody, { backgroundColor: colors.surface }]}>
         {children}
       </View>
     </View>
   );
-}
-
-function InfoDivider() {
-  const { colors } = useTheme();
-  return <View style={[styles.infoDivider, { backgroundColor: colors.border }]} />;
-}
-
-function InfoRow({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
-  const { colors } = useTheme();
-  return (
-    <View style={styles.infoRow}>
-      <Text style={[styles.infoLabel, { color: colors.textMuted }]}>{label}</Text>
-      <Text
-        style={[
-          styles.infoValue,
-          { color: highlight ? colors.primary : colors.textPrimary },
-          highlight && styles.infoValueHighlight,
-        ]}
-      >
-        {value}
-      </Text>
-    </View>
-  );
-}
-
-function SettingDivider() {
-  const { colors } = useTheme();
-  return <View style={[styles.settingDivider, { backgroundColor: colors.border }]} />;
 }
 
 function SettingRow({ label, value }: { label: string; value: string }) {
@@ -218,38 +321,18 @@ function SettingRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function SettingToggle({ label, value, onToggle }: { label: string; value: boolean; onToggle: () => void }) {
-  const { colors } = useTheme();
-  return (
-    <View style={styles.settingRow}>
-      <Text style={[styles.settingLabel, { color: colors.textPrimary }]}>{label}</Text>
-      <Switch
-        value={value}
-        onValueChange={onToggle}
-        trackColor={{ true: colors.primary, false: colors.border }}
-        thumbColor={colors.white}
-      />
-    </View>
-  );
-}
-
 function MarketCard({ data }: { data: MarketData }) {
   const { colors } = useTheme();
   const platformName = PLATFORM_NAMES[data.platform];
   return (
-    <View
-      style={[
-        styles.marketCard,
-        { backgroundColor: colors.surface, borderColor: colors.border },
-      ]}
-    >
+    <View style={[styles.marketCard, { backgroundColor: colors.surface }]}>
       <Text style={[styles.marketName, { color: colors.textPrimary }]}>{platformName}</Text>
       <View style={styles.marketPriceRow}>
         <View>
           <Text style={[styles.marketPriceLabel, { color: colors.textMuted }]}>Buy</Text>
           <Text style={[styles.marketPrice, { color: colors.accent }]}>${data.bestBuyPrice}</Text>
         </View>
-        <View style={[styles.marketDivider, { backgroundColor: colors.border }]} />
+        <View style={[styles.marketDivider, { backgroundColor: colors.divider }]} />
         <View>
           <Text style={[styles.marketPriceLabel, { color: colors.textMuted }]}>Sell</Text>
           <Text style={[styles.marketPrice, { color: colors.textPrimary }]}>${data.bestSellPrice}</Text>
@@ -285,8 +368,15 @@ function ConvRow({ conv, onPress }: { conv: Conversation; onPress: () => void })
         </Text>
       </View>
       <View style={styles.convRight}>
-        <Text style={[styles.convTime, { color: colors.textMuted }]}>{conv.timestamp}</Text>
-        <ChevronRight size={16} color={colors.textMuted} />
+        {/* #9: highlight timestamp when unread */}
+        <Text style={[
+          styles.convTime,
+          { color: conv.unread ? colors.textPrimary : colors.textMuted },
+          conv.unread && styles.convTimeUnread,
+        ]}>
+          {conv.timestamp}
+        </Text>
+        <ChevronRight size={14} color={colors.textMuted} />
       </View>
     </TouchableOpacity>
   );
@@ -302,7 +392,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     gap: 10,
-    borderBottomWidth: 1,
   },
   backBtn: {
     width: 36,
@@ -314,19 +403,43 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     fontWeight: '700',
+    letterSpacing: -0.2,
   },
   scrollContent: { paddingBottom: 48 },
 
-  heroImage: {
-    width: '100%',
-    height: 200,
-    alignItems: 'center',
-    justifyContent: 'center',
+  // Hero strip
+  heroStrip: {
+    overflow: 'hidden',
   },
-  heroInitial: {
-    fontSize: 72,
+  heroAccent: {
+    height: 3,
+    width: '100%',
+  },
+  heroContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+  },
+  heroMetric: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 4,
+  },
+  heroMetricLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 0.6,
+  },
+  heroMetricValue: {
+    fontSize: 20,
     fontWeight: '800',
-    color: 'rgba(255,255,255,0.75)',
+    letterSpacing: -0.3,
+    fontVariant: ['tabular-nums'],
+  },
+  heroDivider: {
+    width: 1,
+    height: 36,
   },
 
   sectionCard: {
@@ -354,32 +467,46 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   cardBody: {
-    borderRadius: 14,
-    borderWidth: 1,
+    borderRadius: 12,
     overflow: 'hidden',
   },
 
-  infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+  // Overview — stacked description (#7)
+  descriptionBlock: {
     paddingHorizontal: 14,
-    paddingVertical: 11,
-    gap: 12,
+    paddingVertical: 12,
+    gap: 6,
+  },
+  descriptionLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  descriptionValue: {
+    fontSize: 14,
+    lineHeight: 20,
   },
   infoDivider: { height: 1 },
-  infoLabel: {
-    fontSize: 14,
-    fontWeight: '500',
+  compactRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 16,
+  },
+  compactItem: {
     flex: 1,
+    gap: 4,
   },
-  infoValue: {
+  compactLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  compactValue: {
     fontSize: 14,
-    flex: 2,
-    textAlign: 'right',
-  },
-  infoValueHighlight: {
-    fontWeight: '700',
+    fontWeight: '600',
   },
 
   settingRow: {
@@ -399,6 +526,7 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     maxWidth: '55%',
     textAlign: 'right',
+    fontVariant: ['tabular-nums'],
   },
 
   marketScroll: {
@@ -408,9 +536,8 @@ const styles = StyleSheet.create({
   },
   marketCard: {
     borderRadius: 12,
-    borderWidth: 1,
     padding: 14,
-    minWidth: 120,
+    minWidth: 130,
     gap: 8,
   },
   marketName: {
@@ -428,16 +555,20 @@ const styles = StyleSheet.create({
   },
   marketPriceLabel: {
     fontSize: 10,
-    fontWeight: '500',
+    fontWeight: '600',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
     marginBottom: 2,
   },
   marketPrice: {
     fontSize: 18,
     fontWeight: '800',
     letterSpacing: -0.3,
+    fontVariant: ['tabular-nums'],
   },
   volumeText: {
     fontSize: 11,
+    fontWeight: '500',
   },
 
   emptyText: {
@@ -485,6 +616,126 @@ const styles = StyleSheet.create({
   },
   convTime: {
     fontSize: 11,
+    fontVariant: ['tabular-nums'],
+  },
+  convTimeUnread: {
+    fontWeight: '600',
+  },
+
+  // AI Agent toggle
+  aiToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: 16,
+    marginTop: 12,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+  },
+  aiToggleLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+
+  // Photos
+  photoHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 4,
+    marginBottom: 8,
+  },
+  addPhotoBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  addPhotoBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  emptyPhotos: {
+    borderRadius: 12,
+    paddingVertical: 32,
+    alignItems: 'center',
+    gap: 8,
+  },
+  emptyPhotosText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  emptyPhotosHint: {
+    fontSize: 12,
+    textAlign: 'center',
+    paddingHorizontal: 32,
+  },
+  photoScroll: {
+    gap: 12,
+    paddingBottom: 4,
+  },
+  photoCard: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    width: 150,
+  },
+  photoImageWrap: {
+    width: 150,
+    height: 150,
+    position: 'relative',
+  },
+  photoImage: {
+    width: 150,
+    height: 150,
+  },
+  photoBadge: {
+    position: 'absolute',
+    bottom: 6,
+    left: 6,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  photoBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    fontVariant: ['tabular-nums'],
+  },
+  photoDeleteBtn: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  photoReorderRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 8,
+  },
+  reorderBtn: {
+    width: 36,
+    height: 32,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addPhotoCard: {
+    borderRadius: 12,
+    width: 150,
+    height: 190,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   dangerZone: {
@@ -492,7 +743,6 @@ const styles = StyleSheet.create({
     marginTop: 32,
   },
   archiveBtn: {
-    borderWidth: 1,
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',

@@ -5,8 +5,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   Sun, Moon, Smartphone, User, Mail, Camera,
-  Bell, BellOff, Activity, Zap, MessageSquare, Tag, Clock,
-  ChevronRight, Check,
+  Bell, BellOff, Zap, MessageSquare, Tag, Clock,
+  ChevronRight, Check, Mic,
 } from 'lucide-react-native';
 import { useTheme, ThemePreference } from '../contexts/ThemeContext';
 
@@ -64,8 +64,9 @@ const USAGE_STATS = [
 export default function SettingsScreen() {
   const { colors, theme, setTheme, isDark } = useTheme();
   const [autoReply, setAutoReply] = useState(true);
-  const [responseDelay, setResponseDelay] = useState('5 min');
+  const [responseDelay] = useState('5 min');
   const [negotiationStyle, setNegotiationStyle] = useState<'aggressive' | 'moderate' | 'passive'>('moderate');
+  const [replyTone, setReplyTone] = useState<'professional' | 'casual' | 'firm'>('professional');
   const [platforms, setPlatforms] = useState<PlatformEntry[]>(PLATFORMS);
   const [notifs, setNotifs] = useState({
     newMessage: true,
@@ -104,20 +105,19 @@ export default function SettingsScreen() {
                   style={[
                     styles.themeOption,
                     {
-                      backgroundColor: isActive ? colors.surfaceRaised : colors.muted,
-                      borderColor: isActive ? colors.primary : 'transparent',
+                      backgroundColor: isActive ? colors.surfaceRaised : 'transparent',
                     },
                   ]}
                   onPress={() => setTheme(t)}
                 >
                   {t === 'light' && (
-                    <Sun size={15} color={isActive ? colors.primary : colors.textMuted} />
+                    <Sun size={14} color={isActive ? colors.primary : colors.textMuted} />
                   )}
                   {t === 'dark' && (
-                    <Moon size={15} color={isActive ? colors.primary : colors.textMuted} />
+                    <Moon size={14} color={isActive ? colors.primary : colors.textMuted} />
                   )}
                   {t === 'system' && (
-                    <Smartphone size={15} color={isActive ? colors.primary : colors.textMuted} />
+                    <Smartphone size={14} color={isActive ? colors.primary : colors.textMuted} />
                   )}
                   <Text
                     style={[
@@ -192,42 +192,23 @@ export default function SettingsScreen() {
             onPress={() => {}}
           />
           <Divider />
-          {/* Negotiation Style — stacked to prevent overflow */}
-          <View style={styles.negotiationSection}>
-            <View style={styles.negotiationLabelRow}>
-              <View style={[styles.iconWrap, { backgroundColor: colors.muted }]}>
-                <Zap size={15} color={colors.primary} />
-              </View>
-              <Text style={[styles.settingLabel, { color: colors.textPrimary }]}>
-                Negotiation Style
-              </Text>
-            </View>
-            <View style={[styles.segmented, { backgroundColor: colors.muted }]}>
-              {(['aggressive', 'moderate', 'passive'] as const).map(s => {
-                const isActive = negotiationStyle === s;
-                return (
-                  <TouchableOpacity
-                    key={s}
-                    style={[
-                      styles.segmentBtn,
-                      isActive && [styles.segmentBtnActive, { backgroundColor: colors.surface }],
-                    ]}
-                    onPress={() => setNegotiationStyle(s)}
-                  >
-                    <Text
-                      style={[
-                        styles.segmentText,
-                        { color: isActive ? colors.primary : colors.textMuted },
-                        isActive && styles.segmentTextActive,
-                      ]}
-                    >
-                      {s.charAt(0).toUpperCase() + s.slice(1)}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
+          {/* Negotiation Style — stacked */}
+          <SegmentedSettingRow
+            icon={<Zap size={15} color={colors.primary} />}
+            label="Negotiation Style"
+            options={['aggressive', 'moderate', 'passive']}
+            value={negotiationStyle}
+            onChange={(v) => setNegotiationStyle(v as typeof negotiationStyle)}
+          />
+          <Divider />
+          {/* Reply Tone — stacked (#8) */}
+          <SegmentedSettingRow
+            icon={<Mic size={15} color={colors.primary} />}
+            label="Reply Tone"
+            options={['professional', 'casual', 'firm']}
+            value={replyTone}
+            onChange={(v) => setReplyTone(v as typeof replyTone)}
+          />
         </SectionCard>
 
         {/* ── Notifications ──────────────────────────────────────────────────── */}
@@ -269,7 +250,7 @@ export default function SettingsScreen() {
             {USAGE_STATS.map(stat => (
               <View
                 key={stat.label}
-                style={[styles.usageTile, { borderRightColor: colors.border, borderBottomColor: colors.border }]}
+                style={[styles.usageTile, { borderRightColor: colors.divider, borderBottomColor: colors.divider }]}
               >
                 <Text style={[styles.usageValue, { color: colors.primary }]}>{stat.value}</Text>
                 <Text style={[styles.usageLabel, { color: colors.textMuted }]}>{stat.label}</Text>
@@ -298,12 +279,7 @@ function SectionHeader({ title }: { title: string }) {
 function SectionCard({ children }: { children: React.ReactNode }) {
   const { colors } = useTheme();
   return (
-    <View
-      style={[
-        styles.card,
-        { backgroundColor: colors.surface, borderColor: colors.border },
-      ]}
-    >
+    <View style={[styles.card, { backgroundColor: colors.surface }]}>
       {children}
     </View>
   );
@@ -311,7 +287,7 @@ function SectionCard({ children }: { children: React.ReactNode }) {
 
 function Divider() {
   const { colors } = useTheme();
-  return <View style={[styles.divider, { backgroundColor: colors.border }]} />;
+  return <View style={[styles.divider, { backgroundColor: colors.divider }]} />;
 }
 
 function SettingRow({
@@ -331,7 +307,7 @@ function SettingRow({
       </View>
       <View style={styles.settingRight}>
         <Text style={[styles.settingValue, { color: colors.textSecondary }]}>{value}</Text>
-        <ChevronRight size={15} color={colors.textMuted} />
+        <ChevronRight size={14} color={colors.textMuted} />
       </View>
     </TouchableOpacity>
   );
@@ -355,9 +331,54 @@ function SettingToggleRow({
       <Switch
         value={value}
         onValueChange={onToggle}
-        trackColor={{ true: colors.primary, false: colors.border }}
+        trackColor={{ true: colors.primary, false: colors.muted }}
         thumbColor={colors.white}
       />
+    </View>
+  );
+}
+
+function SegmentedSettingRow({
+  icon, label, options, value, onChange,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  options: string[];
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const { colors } = useTheme();
+  return (
+    <View style={styles.negotiationSection}>
+      <View style={styles.negotiationLabelRow}>
+        <View style={[styles.iconWrap, { backgroundColor: colors.muted }]}>{icon}</View>
+        <Text style={[styles.settingLabel, { color: colors.textPrimary }]}>{label}</Text>
+      </View>
+      <View style={[styles.segmented, { backgroundColor: colors.muted }]}>
+        {options.map(s => {
+          const isActive = value === s;
+          return (
+            <TouchableOpacity
+              key={s}
+              style={[
+                styles.segmentBtn,
+                isActive && [styles.segmentBtnActive, { backgroundColor: colors.surface }],
+              ]}
+              onPress={() => onChange(s)}
+            >
+              <Text
+                style={[
+                  styles.segmentText,
+                  { color: isActive ? colors.primary : colors.textMuted },
+                  isActive && styles.segmentTextActive,
+                ]}
+              >
+                {s.charAt(0).toUpperCase() + s.slice(1)}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
     </View>
   );
 }
@@ -376,6 +397,7 @@ function PlatformRow({
 
   return (
     <View style={styles.platformRow}>
+      {/* TODO (#5): Replace shortLabel placeholders with actual platform logo images */}
       <View style={[styles.platformIcon, { backgroundColor: iconBg }]}>
         <Text style={[styles.platformIconText, { color: iconColor }]}>
           {platform.shortLabel}
@@ -399,12 +421,7 @@ function PlatformRow({
             <Text style={[styles.connectedText, { color: connectedGreen }]}>Connected</Text>
           </View>
         ) : (
-          <View
-            style={[
-              styles.disconnectedBadge,
-              { backgroundColor: colors.muted, borderColor: colors.border },
-            ]}
-          >
+          <View style={[styles.disconnectedBadge, { backgroundColor: colors.muted }]}>
             <Text style={[styles.disconnectedText, { color: colors.textMuted }]}>Connect</Text>
           </View>
         )}
@@ -428,13 +445,12 @@ const styles = StyleSheet.create({
   },
 
   card: {
-    borderRadius: 14,
-    borderWidth: 1,
+    borderRadius: 12,
     overflow: 'hidden',
   },
   divider: { height: 1 },
 
-  themeRow: { flexDirection: 'row', padding: 10, gap: 8 },
+  themeRow: { flexDirection: 'row', padding: 8, gap: 6 },
   themeOption: {
     flex: 1,
     flexDirection: 'row',
@@ -442,8 +458,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 5,
     paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: 1.5,
+    borderRadius: 8,
   },
   themeLabel: { fontSize: 12, fontWeight: '500' },
   themeLabelActive: { fontWeight: '700' },
@@ -467,7 +482,7 @@ const styles = StyleSheet.create({
   settingLabel: { fontSize: 15, fontWeight: '500' },
   settingValue: { fontSize: 14 },
 
-  // Negotiation Style — stacked layout to prevent overflow
+  // Segmented controls — stacked layout
   negotiationSection: {
     paddingHorizontal: 14,
     paddingVertical: 13,
@@ -504,7 +519,7 @@ const styles = StyleSheet.create({
   platformIcon: {
     width: 36,
     height: 36,
-    borderRadius: 9,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -515,20 +530,19 @@ const styles = StyleSheet.create({
   platformNotConnected: { fontSize: 12 },
   platformRight: {},
   connectedBadge: {
-    borderRadius: 20,
+    borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
   connectedText: { fontSize: 11, fontWeight: '600' },
   disconnectedBadge: {
-    borderRadius: 20,
+    borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderWidth: 1,
   },
   disconnectedText: { fontSize: 11, fontWeight: '600' },
 
-  // Usage — grid inside SectionCard
+  // Usage grid
   usageGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -544,6 +558,7 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: '800',
     letterSpacing: -0.5,
+    fontVariant: ['tabular-nums'],
   },
   usageLabel: {
     fontSize: 12,

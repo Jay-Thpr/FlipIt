@@ -1,62 +1,32 @@
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Plus } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 
 interface Props {
-  cardWidth: number;
   onPress: () => void;
 }
 
-export default function AddNewCard({ cardWidth, onPress }: Props) {
+export default function AddNewCard({ onPress }: Props) {
   const { colors } = useTheme();
-  const cardHeight = Math.round(cardWidth / 0.68);
 
   return (
     <TouchableOpacity
-      style={[
-        styles.card,
-        {
-          width: cardWidth,
-          height: cardHeight,
-          borderColor: colors.border,
-          backgroundColor: colors.surface,
-        },
-      ]}
+      style={[styles.btn, { backgroundColor: colors.surface }]}
       onPress={onPress}
-      activeOpacity={0.7}
+      activeOpacity={0.6}
+      hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
     >
-      <View style={[styles.iconCircle, { backgroundColor: colors.muted, borderColor: colors.border }]}>
-        <Plus size={22} color={colors.primary} />
-      </View>
-      <Text style={[styles.label, { color: colors.textSecondary }]}>Add New</Text>
-      <Text style={[styles.hint, { color: colors.textMuted }]}>Set up an agent</Text>
+      <Plus size={14} color={colors.primary} strokeWidth={2.5} />
     </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: 16,
-    borderWidth: 1,
-    borderStyle: 'dashed',
+  btn: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-  },
-  iconCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 2,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  hint: {
-    fontSize: 11,
   },
 });
