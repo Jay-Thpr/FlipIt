@@ -74,19 +74,14 @@ This is an operator-ready backlog of the remaining backend problems after the Fe
     - [backend/orchestrator.py](/Users/jt/Desktop/diamondhacks/backend/orchestrator.py#L365)
     - [backend/schemas.py](/Users/jt/Desktop/diamondhacks/backend/schemas.py#L177)
 
-- [ ] Harden the SELL review loop.
-  - Current issue: `deadline_at` exists but is unused, `revision_count` is not enforced, and abandoned paused sessions are not cleaned up on a timer.
+- [ ] Add background cleanup for abandoned paused SELL review sessions.
+  - Current issue: expired or over-limit review decisions now fail deterministically when a user responds, but there is still no timer-driven cleanup job for sessions that remain paused indefinitely with no follow-up request.
   - References:
-    - [backend/schemas.py](/Users/jt/Desktop/diamondhacks/backend/schemas.py#L322)
-    - [backend/session.py](/Users/jt/Desktop/diamondhacks/backend/session.py#L14)
-    - [BROWSER-USE-SELL-CONFIRMATION-PLAN.md](/Users/jt/Desktop/diamondhacks/BROWSER-USE-SELL-CONFIRMATION-PLAN.md#L209)
+    - [backend/orchestrator.py](/Users/jt/Desktop/diamondhacks/backend/orchestrator.py#L95)
+    - [backend/orchestrator.py](/Users/jt/Desktop/diamondhacks/backend/orchestrator.py#L685)
+    - [backend/main.py](/Users/jt/Desktop/diamondhacks/backend/main.py#L142)
 
 ## P2 - Reliability Gaps
-
-- [ ] Turn empty BUY results into a graceful no-matches outcome instead of a pipeline failure.
-  - References:
-    - [backend/agents/ranking_agent.py](/Users/jt/Desktop/diamondhacks/backend/agents/ranking_agent.py#L65)
-    - [tests/test_fetch_runtime.py](/Users/jt/Desktop/diamondhacks/tests/test_fetch_runtime.py#L58)
 
 - [ ] Replace the placeholder local `/chat` surface with something Chat Protocol-capable.
   - Current issue: the separate `uAgents` layer exists, but the local per-agent FastAPI surface is still placeholder-only.

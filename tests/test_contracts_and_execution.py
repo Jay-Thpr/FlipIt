@@ -195,9 +195,15 @@ async def test_pipeline_passes_accumulated_outputs_to_each_step(monkeypatch: pyt
 async def test_execute_step_routes_through_fetch_runtime_when_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, object] = {}
 
-    async def fake_run_fetch_query(agent_slug: str, user_text: str) -> dict[str, object]:
+    async def fake_run_fetch_query(
+        agent_slug: str,
+        user_text: str = "",
+        *,
+        task_request: AgentTaskRequest | None = None,
+    ) -> dict[str, object]:
         captured["agent_slug"] = agent_slug
         captured["user_text"] = user_text
+        captured["task_request"] = task_request
         return VisionAnalysisOutput(
             agent="vision_agent",
             display_name="Vision Agent",
@@ -236,9 +242,12 @@ async def test_execute_step_routes_through_fetch_runtime_when_enabled(monkeypatc
         ),
     )
 
-    assert captured == {
-        "agent_slug": "vision_agent",
-        "user_text": "Vintage Nike tee https://example.com/item.jpg",
+    assert captured["agent_slug"] == "vision_agent"
+    assert captured["user_text"] == ""
+    assert isinstance(captured["task_request"], AgentTaskRequest)
+    assert captured["task_request"].input["original_input"] == {
+        "notes": "Vintage Nike tee",
+        "image_urls": ["https://example.com/item.jpg"],
     }
     assert result["agent"] == "vision_agent"
 
@@ -345,6 +354,12 @@ async def test_pipeline_rejects_invalid_initial_input_before_first_agent(monkeyp
 
     session = await session_manager.get_session(session_id)
     assert session is not None
-    assert session.status == "failed"
-    assert "validation" in session.error.lower()
+    assert session.status == "completed"
+    assert session.error is None
     assert agent_called["value"] is False
+    assert session.result is not None
+    assert session.result["outputs"]["ranking"]["candidate_count"] == 0
+    assert session.result["outputs"]["ranking"]["top_choice"]["price"] == 0.0
+    assert "no marketplace listings" in session.result["outputs"]["ranking"]["top_choice"]["reason"].lower()
+    assert session.events[-2].event_type == "buy_no_results"
+    assert session.events[-1].event_type == "pipeline_complete"
