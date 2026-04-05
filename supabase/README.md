@@ -1,75 +1,65 @@
 # Supabase Persistence Plan
 
-Use Supabase here as a managed Postgres database, not as a replacement for the existing FastAPI + SSE runtime.
+Use Supabase here as durable storage for the current FastAPI session contract. The live SSE stream still comes from FastAPI memory; Supabase is for polling, restart recovery, and event history.
 
-## Recommended Architecture
+## What Matches The Frontend Now
 
-- Mobile app talks to FastAPI.
-- FastAPI orchestrates agents and streams live SSE events.
-- FastAPI writes durable state to Supabase.
-- Supabase stores session metadata, event history, and final results.
+- `POST /sell/start` and `POST /buy/start` create a `SessionState`.
+- `GET /result/{session_id}` returns that same session object:
+  - `session_id`
+  - `pipeline`
+  - `status`
+  - `request`
+  - `result`
+  - `error`
+  - `events`
+- The Expo `new-listing` flow polls `GET /result/{session_id}` and reads:
+  - `status`
+  - `result.outputs`
+  - `result.pending`
+  - `error`
 
-This keeps the current contract in the planning docs intact:
-
-- `GET /stream/{session_id}` stays the live channel.
-- `GET /result/{session_id}` becomes durable instead of in-memory only.
-- Restarting FastAPI no longer destroys session history and final outputs.
+That means the durable schema should track the current backend/frontend session model, not the older `mode + input_payload + final_result` stub.
 
 ## Tables
 
 - `public.pipeline_sessions`
-  - one row per SELL or BUY invocation
-  - keyed by `session_id`
+  - one row per pipeline run
+  - stores the durable session state fields that back `GET /result/{session_id}`
+  - includes `request_payload`, `result_payload`, `status`, `error`, and timestamps
 - `public.pipeline_session_events`
-  - append-only log of agent and pipeline events
-- `public.pipeline_session_results`
-  - final result payload per session
+  - append-only event history for SSE replay, polling, and audit/debugging
+  - stores `event_type`, `pipeline`, `step`, `data`, and `timestamp`
 
-## Why This Scope
+## Scope Boundary
 
-The existing repo docs do not define user accounts, marketplace inventory ownership, or long-term product analytics yet. The schema only covers the persistence requirements already present in the SSE/backend plan.
+This persistence layer now covers the pipeline session contract used by the new frontend flow.
+
+It does not yet persist the `/items` catalog, item photos, or conversation history returned by the in-memory item store. Those APIs already match the frontend model, but they are still mock/in-memory data and should move to separate Supabase tables later instead of being forced into the pipeline session schema now.
 
 ## Apply The Schema
 
-If you use the Supabase CLI in the eventual app repo:
+If you use the Supabase CLI in this repo:
 
 ```bash
 supabase db push
 ```
 
-Or run the SQL in the Supabase SQL editor:
+Or run the SQL directly:
 
-- [20260404145000_init_session_persistence.sql](migrations/20260404145000_init_session_persistence.sql)
+- [20260404145000_init_session_persistence.sql](/Users/derek/.superset/worktrees/Diamond Hacks/helpful-sagittarius/supabase/migrations/20260404145000_init_session_persistence.sql)
 
-## Backend Integration Sketch
+## Backend Integration
 
-At pipeline start:
+The current backend persists directly from `SessionManager`:
 
-```python
-await create_session_row(session_id=session_id, mode="sell", input_payload=payload)
-```
-
-On each internal event:
-
-```python
-await insert_event(session_id=session_id, event_type="agent_started", payload=data)
-```
-
-When storing the final result:
-
-```python
-await upsert_result(session_id=session_id, result_payload=result)
-await mark_session_complete(session_id=session_id)
-```
-
-On failure:
-
-```python
-await mark_session_failed(session_id=session_id, error_summary="agent timeout")
-```
+- session creation writes a row to `pipeline_sessions`
+- status/result/error changes upsert the same row
+- each `SessionEvent` appends to `pipeline_session_events`
+- cache misses can be hydrated back from Supabase for `GET /result/{session_id}`
 
 ## Security Note
 
-- Use the `service_role` key from FastAPI only.
+- Use `SUPABASE_SERVICE_ROLE_KEY` from FastAPI only.
 - Do not expose write access from the mobile app.
-- If you later add direct client reads, add RLS policies deliberately instead of opening the tables broadly.
+- RLS is enabled so future client reads can be added intentionally with explicit read policies.

@@ -3,7 +3,7 @@
 FastAPI backend scaffold for the DiamondHacks resale-agent demo. The current repo state is a working backend with in-memory sessions, SSE streaming, 10 agent services, and an automated test suite.
 Agent inputs and outputs are validated against step-specific schemas so pipeline contracts stay structurally stable as real logic is added. The sell flow now supports image-to-product analysis through Gemini, optional Gemini image cleanup for listing photos, and low-confidence correction resumes through the orchestrator.
 
-Supabase persistence scaffolding is also present in the repo for the next backend phase:
+Supabase-backed session persistence is also present in the repo for the current pipeline contract:
 
 - [supabase/README.md](supabase/README.md)
 - [supabase/migrations/20260404145000_init_session_persistence.sql](supabase/migrations/20260404145000_init_session_persistence.sql)
@@ -28,7 +28,7 @@ Run the separate agent apps:
 make run-agents
 ```
 
-For local development, copy `.env.example` to `.env` and set `INTERNAL_API_TOKEN`. If the frontend runs on Expo Go or another device, set `PUBLIC_APP_BASE_URL` to a phone-reachable URL such as `http://192.168.x.x:8000` while leaving `APP_BASE_URL` on the backend address used by internal agent callbacks. Live Gemini image analysis requires `GEMINI_API_KEY` or `GOOGLE_API_KEY`; Gemini clean-photo generation also uses that same key and can be tuned with `GEMINI_IMAGE_MODEL`. Set `CLEAN_PHOTO_PROVIDER=nano_banana` to force the clean-photo step through a Nano Banana endpoint or local mock while keeping Gemini enabled for recognition. Live Browser Use flows still require warmed profiles under `profiles/` and Chromium installed by `make install`.
+For local development, copy `.env.example` to `.env` and set `INTERNAL_API_TOKEN`. If the frontend runs on Expo Go or another device, set `PUBLIC_APP_BASE_URL` to a phone-reachable URL such as `http://192.168.x.x:8000` while leaving `APP_BASE_URL` on the backend address used by internal agent callbacks. The current Expo frontend in this repo still reads mock data directly and does not yet include a checked-in `frontend/lib/backend.ts` integration layer. Live Gemini image analysis requires `GEMINI_API_KEY` or `GOOGLE_API_KEY`; Gemini clean-photo generation also uses that same key and can be tuned with `GEMINI_IMAGE_MODEL`. Set `CLEAN_PHOTO_PROVIDER=nano_banana` to force the clean-photo step through a Nano Banana endpoint or local mock while keeping Gemini enabled for recognition. Live Browser Use flows still require warmed profiles under `profiles/` and Chromium installed by `make install`.
 
 ## Core Commands
 
@@ -46,6 +46,10 @@ For local development, copy `.env.example` to `.env` and set `INTERNAL_API_TOKEN
 
 - `GET /health`
 - `GET /agents`
+- `GET /items`
+- `POST /items`
+- `GET /items/{item_id}`
+- `GET /items/{item_id}/conversations/{conversation_id}`
 - `GET /pipelines`
 - `POST /sell/start`
 - `POST /sell/correct`
@@ -63,3 +67,11 @@ For local development, copy `.env.example` to `.env` and set `INTERNAL_API_TOKEN
 - Set `INTERNAL_API_TOKEN` and `GOOGLE_API_KEY` or `GEMINI_API_KEY` in the Render dashboard as secrets instead of committing values into `render.yaml`.
 - Use the validation harness before demos: fallback mode checks contract stability, and `--require-live` confirms that selected flows actually executed through Browser Use.
 - Use `BrowserUse-Live-Validation.md` as the manual pre-demo checklist for warmed profiles and platform-specific smoke tests.
+
+## Frontend Mapping
+
+- Home-screen item carousels can read from `GET /items`, with `type=sell` or `type=buy` filtering when desired.
+- The new-listing screen maps to `POST /items`.
+- Item detail screens map to `GET /items/{item_id}`.
+- Chat detail screens map to `GET /items/{item_id}/conversations/{conversation_id}`.
+- Pipeline execution still uses `POST /sell/start`, `POST /buy/start`, `GET /stream/{session_id}`, and `GET /result/{session_id}`.

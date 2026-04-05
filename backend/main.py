@@ -8,6 +8,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from backend.config import AGENTS, INTERNAL_API_TOKEN, get_agent_execution_mode, get_public_app_base_url
+from backend.item_schemas import Conversation, Item, ItemCreateRequest, ItemCreateResponse
+from backend.item_store import item_store
 from backend.orchestrator import get_pipeline_steps, resume_sell_pipeline, run_pipeline
 from backend.schemas import (
     InternalEventRequest,
@@ -80,6 +82,32 @@ async def list_agents() -> dict[str, list[dict[str, str | int]]]:
             for agent in AGENTS
         ]
     }
+
+
+@app.get("/items", response_model=list[Item])
+async def list_items(type: str | None = None) -> list[Item]:
+    return item_store.list_items(item_type=type)
+
+
+@app.post("/items", response_model=ItemCreateResponse, status_code=201)
+async def create_item(request: ItemCreateRequest) -> ItemCreateResponse:
+    return ItemCreateResponse(**item_store.create_item(request).model_dump())
+
+
+@app.get("/items/{item_id}", response_model=Item)
+async def get_item(item_id: str) -> Item:
+    item = item_store.get_item(item_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Item not found")
+    return item
+
+
+@app.get("/items/{item_id}/conversations/{conversation_id}", response_model=Conversation)
+async def get_conversation(item_id: str, conversation_id: str) -> Conversation:
+    conversation = item_store.get_conversation(item_id, conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return conversation
 
 
 @app.get("/pipelines")
