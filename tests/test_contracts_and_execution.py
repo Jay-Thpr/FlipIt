@@ -22,7 +22,14 @@ from backend.fetch_runtime import FETCH_AGENT_SPECS
 from backend.session import session_manager
 
 
-def test_healthcheck_exposes_execution_metadata(client: TestClient) -> None:
+def test_healthcheck_exposes_execution_metadata(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    import backend.main as main
+
+    monkeypatch.setattr(
+        main,
+        "fetch_integration_flags",
+        lambda: {"fetch_enabled": False, "agentverse_credentials_present": False},
+    )
     response = client.get("/health")
 
     assert response.status_code == 200
@@ -64,13 +71,35 @@ def test_fetch_agents_manifest_lists_all_fetch_agents(
 
     assert response.status_code == 200
     payload = response.json()
-    assert len(payload["agents"]) == 10
-    assert payload["agents"][0] == {
+    assert len(payload["agents"]) == 11
+    assert payload["agents"][0]["name"] == "ResaleCopilotAgent"
+    assert payload["agents"][0]["slug"] == "resale_copilot_agent"
+    assert payload["agents"][0]["is_public"] is True
+    assert payload["agents"][0]["readme_path"]
+    assert payload["agents"][1] == {
         "name": "VisionAgent",
         "slug": "vision_agent",
         "port": 9201,
         "agentverse_address": "agent1qvisiondemo",
         "description": "Identifies a resale item from text or image URLs and summarizes its brand, category, and condition.",
+        "persona": "An item identification specialist for resale inventory triage.",
+        "capabilities": [
+            "Identify likely item type, brand, category, and condition",
+            "Extract useful resale notes from image URLs and short descriptions",
+            "Prepare structured vision output for downstream pricing and listing agents",
+        ],
+        "example_prompts": [
+            "Identify this vintage Nike tee from the photo",
+            "What kind of jacket is this https://example.com/jacket.jpg",
+            "Tell me the likely brand and condition of this item",
+        ],
+        "input_contract": "Short text description and optional image URLs for a single resale item.",
+        "output_contract": "Vision analysis with detected item, brand, category, condition, confidence, and summary.",
+        "tags": ["resale", "vision", "identification", "inventory"],
+        "task_family": "sell_identify",
+        "readme_path": FETCH_AGENT_SPECS["vision_agent"].readme_path,
+        "is_public": True,
+        "handoff_targets": ["pricing_agent", "resale_copilot_agent"],
     }
     assert payload["agents"][-1] == {
         "name": "NegotiationAgent",
@@ -78,6 +107,19 @@ def test_fetch_agents_manifest_lists_all_fetch_agents(
         "port": 9210,
         "agentverse_address": None,
         "description": "Runs the BUY flow through negotiation and returns prepared or sent offers.",
+        "persona": "An internal negotiation specialist for preparing or sending marketplace offers.",
+        "capabilities": [
+            "Prepare buy-side offers from ranked listings",
+            "Attempt marketplace negotiation when the environment supports it",
+        ],
+        "example_prompts": ["Negotiate on the best result"],
+        "input_contract": "Buy query with ranked candidates.",
+        "output_contract": "Prepared or sent offers with negotiation metadata.",
+        "tags": ["resale", "negotiation", "offers", "buy-side"],
+        "task_family": "buy_negotiate",
+        "readme_path": None,
+        "is_public": False,
+        "handoff_targets": ["resale_copilot_agent"],
     }
 
 

@@ -12,6 +12,7 @@ import pytest
 from backend import run_fetch_agents
 from backend.config import assert_fetch_agent_ports_do_not_overlap
 from backend.fetch_agents import builder, launch
+from backend.fetch_runtime import get_fetch_agent_spec
 
 
 class FakeChatAcknowledgement:
@@ -100,6 +101,19 @@ def test_build_fetch_agent_sets_mailbox_and_optional_local_endpoint(monkeypatch:
         "mailbox": True,
         "publish_agent_details": True,
         "endpoint": ["http://127.0.0.1:9205/submit"],
+        "metadata": {
+            "description": "Searches Depop for a resale query and returns active listings.",
+            "persona": "A marketplace-specific search specialist for active Depop inventory.",
+            "capabilities": [
+                "Search active Depop listings",
+                "Return listing candidates for buy-side resale sourcing",
+            ],
+            "example_prompts": ["Find this on Depop under $60"],
+            "tags": ["resale", "search", "depop", "buy-side"],
+            "task_family": "buy_search",
+            "is_public": False,
+            "handoff_targets": ["resale_copilot_agent"],
+        },
     }
     assert len(agent.included) == 1
     protocol, publish_manifest = agent.included[0]
@@ -217,7 +231,7 @@ def test_run_fetch_agents_spawns_every_slug_and_terminates_children(monkeypatch:
 
     def fake_sleep(seconds: float) -> None:
         sleep_calls["count"] += 1
-        if seconds == 1 and sleep_calls["count"] > len(run_fetch_agents.list_fetch_agent_slugs()):
+        if seconds == 1 and sleep_calls["count"] > len(run_fetch_agents.list_public_fetch_agent_slugs()):
             raise KeyboardInterrupt()
 
     monkeypatch.setattr(run_fetch_agents.subprocess, "Popen", fake_popen)
@@ -226,17 +240,17 @@ def test_run_fetch_agents_spawns_every_slug_and_terminates_children(monkeypatch:
     exit_code = run_fetch_agents.main()
 
     assert exit_code == 0
-    assert [item["slug"] for item in spawned] == run_fetch_agents.list_fetch_agent_slugs()
+    assert [item["slug"] for item in spawned] == run_fetch_agents.list_public_fetch_agent_slugs()
     assert spawned[0]["command"] == [
         sys.executable,
         "-m",
         "backend.fetch_agents.launch",
-        run_fetch_agents.list_fetch_agent_slugs()[0],
+        run_fetch_agents.list_public_fetch_agent_slugs()[0],
     ]
     assert all(item["env"]["PYTHONPATH"] == os.getcwd() for item in spawned)
     assert len(signals_sent) == len(spawned)
     assert all(sig == signal.SIGTERM for _, sig in signals_sent)
-    assert waits == run_fetch_agents.list_fetch_agent_slugs()
+    assert waits == run_fetch_agents.list_public_fetch_agent_slugs()
 
 
 def test_run_fetch_agents_checks_for_port_conflicts_before_starting(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -253,3 +267,12 @@ def test_run_fetch_agents_checks_for_port_conflicts_before_starting(monkeypatch:
 def test_config_rejects_overlapping_fetch_ports() -> None:
     with pytest.raises(RuntimeError, match="9101"):
         assert_fetch_agent_ports_do_not_overlap({9101, 9201})
+
+
+def test_build_fetch_agent_includes_readme_for_public_agent(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(builder, "_import_uagents", fake_uagents_tuple)
+    monkeypatch.setenv("VISION_FETCH_AGENT_SEED", "seed-vision")
+
+    agent = builder.build_fetch_agent("vision_agent")
+
+    assert agent.kwargs["readme_path"] == get_fetch_agent_spec("vision_agent").readme_path

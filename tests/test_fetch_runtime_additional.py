@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -221,3 +222,37 @@ async def test_run_fetch_query_for_ebay_search_agent_uses_empty_previous_outputs
             "previous_outputs": {},
         }
     ]
+
+
+def test_public_fetch_agents_have_specialization_metadata_and_readmes() -> None:
+    public_specs = [spec for spec in fetch_runtime.FETCH_AGENT_SPECS.values() if spec.is_public]
+
+    assert [spec.slug for spec in public_specs] == [
+        "resale_copilot_agent",
+        "vision_agent",
+        "pricing_agent",
+        "depop_listing_agent",
+    ]
+    for spec in public_specs:
+        assert spec.persona
+        assert spec.capabilities
+        assert spec.example_prompts
+        assert spec.readme_path
+        assert Path(spec.readme_path).is_file()
+
+
+def test_public_fetch_agent_readmes_cover_required_sections() -> None:
+    required_sections = (
+        "## Description",
+        "## Example Prompts",
+        "## Input Requirements",
+        "## Output Summary",
+        "## Limitations",
+    )
+
+    for spec in fetch_runtime.FETCH_AGENT_SPECS.values():
+        if not spec.is_public:
+            continue
+        readme = Path(spec.readme_path or "").read_text()
+        for section in required_sections:
+            assert section in readme

@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
-from backend.fetch_runtime import FETCH_AGENT_SPECS, format_fetch_response, run_fetch_query
+from backend.fetch_runtime import format_fetch_response, get_fetch_agent_spec, run_fetch_query
 
 
 def _utcnow() -> datetime:
@@ -48,9 +48,33 @@ def _env_flag(name: str, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _build_agent_metadata(spec: Any) -> dict[str, object]:
+    return {
+        "description": spec.description,
+        "persona": spec.persona,
+        "capabilities": list(spec.capabilities),
+        "example_prompts": list(spec.example_prompts),
+        "tags": list(spec.tags),
+        "task_family": spec.task_family,
+        "is_public": spec.is_public,
+        "handoff_targets": list(spec.handoff_targets),
+    }
+
+
+def _instantiate_agent(agent_cls: Any, agent_kwargs: dict[str, Any], spec: Any) -> Any:
+    enriched_kwargs = dict(agent_kwargs)
+    enriched_kwargs["metadata"] = _build_agent_metadata(spec)
+    if spec.readme_path:
+        enriched_kwargs["readme_path"] = spec.readme_path
+    try:
+        return agent_cls(**enriched_kwargs)
+    except TypeError:
+        return agent_cls(**agent_kwargs)
+
+
 def build_fetch_agent(agent_slug: str) -> Any:
     try:
-        spec = FETCH_AGENT_SPECS[agent_slug]
+        spec = get_fetch_agent_spec(agent_slug)
     except KeyError as exc:
         raise ValueError(f"Unknown Fetch agent slug: {agent_slug}") from exc
 
@@ -81,7 +105,7 @@ def build_fetch_agent(agent_slug: str) -> Any:
     if _env_flag("FETCH_USE_LOCAL_ENDPOINT", default=False):
         agent_kwargs["endpoint"] = [f"http://127.0.0.1:{spec.port}/submit"]
 
-    agent = Agent(**agent_kwargs)
+    agent = _instantiate_agent(Agent, agent_kwargs, spec)
     protocol = Protocol(spec=chat_protocol_spec)
 
     @protocol.on_message(ChatMessage)

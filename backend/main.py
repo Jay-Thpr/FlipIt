@@ -6,6 +6,10 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -126,7 +130,7 @@ async def list_agents() -> dict[str, list[dict[str, str | int]]]:
 
 
 @app.get("/fetch-agents")
-async def list_fetch_agents() -> dict[str, list[dict[str, str | int | None]]]:
+async def list_fetch_agents() -> dict[str, list[dict[str, object]]]:
     return {
         "agents": list_fetch_agent_specs(),
     }
