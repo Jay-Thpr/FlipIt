@@ -254,6 +254,10 @@ async def list_pipelines() -> dict[str, list[dict[str, str]]]:
     return get_pipeline_steps()
 
 
+# ---------------------------------------------------------------------------
+# Legacy compatibility endpoints — not the primary frontend contract.
+# Use /items/{item_id}/*/run and /runs/{run_id}/* for authenticated workflows.
+# ---------------------------------------------------------------------------
 @app.post("/sell/start")
 async def sell_start(request: PipelineStartRequest) -> PipelineStartResponse:
     return await start_session("sell", request)

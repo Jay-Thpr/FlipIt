@@ -311,3 +311,33 @@ Fired sequentially by `negotiation_agent` on the BUY pipeline.
   "source": "browser_use"
 }
 ```
+
+---
+
+## 3. Canonical Run Identifier (`session_id` / `run_id`)
+
+The **canonical external run identifier** surfaced to the frontend is `session_id` (referred to as `run_id` in the authenticated frontend contract — both names refer to the same value).
+
+- `POST /sell/start` and `POST /buy/start` return `session_id` in their response.
+- `POST /items/{item_id}/sell/run` and `POST /items/{item_id}/buy/run` return the same value as `run_id`.
+- All SSE payloads include `session_id` at the top level.
+- The authenticated endpoints (`GET /runs/{run_id}`, `GET /runs/{run_id}/stream`, `POST /runs/{run_id}/sell/correct`, `POST /runs/{run_id}/sell/listing-decision`) accept this value as the `run_id` path parameter.
+
+> **Important:** The `agent_runs.id` UUID stored in the database is an **internal storage identity** and must never be surfaced to the frontend. Always use `session_id` / `run_id`.
+
+---
+
+## 4. Legacy Endpoints
+
+The following endpoints remain available for backward compatibility, developer tooling, and tests. They are **NOT** the primary frontend contract. They bypass auth and item ownership enforcement.
+
+The primary frontend contract uses the `/items/{item_id}/...` and `/runs/{run_id}/...` authenticated endpoints.
+
+| Method | Path | Preferred replacement |
+|--------|------|-----------------------|
+| `POST` | `/sell/start` | `POST /items/{item_id}/sell/run` |
+| `POST` | `/buy/start` | `POST /items/{item_id}/buy/run` |
+| `POST` | `/sell/correct` | `POST /runs/{run_id}/sell/correct` |
+| `POST` | `/sell/listing-decision` | `POST /runs/{run_id}/sell/listing-decision` |
+| `GET` | `/result/{session_id}` | `GET /runs/{run_id}` |
+| `GET` | `/stream/{session_id}` | `GET /runs/{run_id}/stream` |

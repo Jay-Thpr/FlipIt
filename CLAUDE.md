@@ -179,3 +179,4 @@ Extend `BaseAgent` from `backend/agents/base.py`, implement `build_output(reques
 | `GOOGLE_API_KEY` | *(none)* | Required for live Gemini Vision and Browser Use flows |
 | `FETCH_ENABLED` | `false` | Enable Fetch.ai uAgents layer for buy search |
 | `RESALE_COPILOT_AGENT_ADDRESS` | `""` | Stable agent1q... address for resale_copilot_agent; used by frontend FAB to link to ASI:One chat |
+| `ALLOWED_ORIGINS` | *(none)* | Comma-separated list of allowed CORS origins (e.g. `https://app.example.com,https://staging.example.com`). Defaults to `*` (dev only). In production, set to your actual frontend origin(s). |
