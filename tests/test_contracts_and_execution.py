@@ -52,6 +52,33 @@ def test_agents_manifest_lists_all_agents(client: TestClient) -> None:
     }
 
 
+def test_fetch_agents_manifest_lists_all_fetch_agents(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("VISION_AGENT_AGENTVERSE_ADDRESS", "agent1qvisiondemo")
+
+    response = client.get("/fetch-agents")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload["agents"]) == 10
+    assert payload["agents"][0] == {
+        "name": "VisionAgent",
+        "slug": "vision_agent",
+        "port": 9201,
+        "agentverse_address": "agent1qvisiondemo",
+        "description": "Identifies a resale item from text or image URLs and summarizes its brand, category, and condition.",
+    }
+    assert payload["agents"][-1] == {
+        "name": "NegotiationAgent",
+        "slug": "negotiation_agent",
+        "port": 9210,
+        "agentverse_address": None,
+        "description": "Runs the BUY flow through negotiation and returns prepared or sent offers.",
+    }
+
+
 def test_pipelines_manifest_matches_step_contracts(client: TestClient) -> None:
     response = client.get("/pipelines")
 

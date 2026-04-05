@@ -1,6 +1,8 @@
 PYTHON ?= python3
 VENV ?= .venv
+VENV_FETCH ?= .venv-fetch
 ACTIVATE = . $(VENV)/bin/activate
+ACTIVATE_FETCH = . $(VENV_FETCH)/bin/activate
 
 .PHONY: install test test-verbose compile check run run-agents run-fetch-agents ci verify-browser
 
@@ -27,7 +29,7 @@ run-agents:
 	$(ACTIVATE) && python -m backend.run_agents
 
 run-fetch-agents:
-	$(ACTIVATE) && PYTHONPATH=$$PWD python -m backend.run_fetch_agents
+	$(ACTIVATE_FETCH) && PYTHONPATH=$$PWD python -m backend.run_fetch_agents
 
 ci: check
 

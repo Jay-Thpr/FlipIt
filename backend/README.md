@@ -6,6 +6,7 @@ This scaffold gives the team a stable local contract before Gemini work lands an
 
 - `GET /health`
 - `GET /agents`
+- `GET /fetch-agents`
 - `GET /pipelines`
 - `POST /sell/start`
 - `POST /buy/start`
@@ -65,14 +66,30 @@ make install
 4. Start one Fetch agent:
 
 ```bash
-PYTHONPATH=$PWD python -m backend.fetch_agents.launch depop_search_agent
+PYTHONPATH=$PWD .venv-fetch/bin/python -m backend.fetch_agents.launch depop_search_agent
 ```
 
 5. Start all Fetch agents:
 
 ```bash
-make run-fetch-agents
+PYTHONPATH=$PWD .venv-fetch/bin/python -m backend.run_fetch_agents
 ```
+
+6. Send a real chat message through Agentverse to a registered Fetch agent:
+
+```bash
+.venv-fetch/bin/python scripts/fetch_demo.py \
+  --address agent1q... \
+  --message "Find me a vintage Nike tee under $45"
+```
+
+`GET /fetch-agents` mirrors `GET /agents` but returns the Fetch-specific catalog:
+
+- `slug`
+- `name`
+- `port`
+- `agentverse_address` from `<SLUG>_AGENTVERSE_ADDRESS` env vars when recorded
+- `description`
 
 ### Chat-to-Agent Mapping
 

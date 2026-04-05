@@ -9,6 +9,8 @@ from backend.fetch_runtime import (
     extract_budget,
     extract_urls,
     format_fetch_response,
+    get_fetch_agentverse_address,
+    list_fetch_agent_specs,
     run_fetch_query,
 )
 
@@ -27,6 +29,24 @@ def test_build_inputs_keep_expected_fields() -> None:
     buy_input = build_buy_input("Need a Carhartt jacket budget 80")
     assert buy_input["query"] == "Need a Carhartt jacket budget 80"
     assert buy_input["budget"] == 80.0
+
+
+def test_list_fetch_agent_specs_includes_optional_agentverse_address(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("VISION_AGENT_AGENTVERSE_ADDRESS", "agent1qvisiondemo")
+
+    specs = list_fetch_agent_specs()
+
+    assert len(specs) == 10
+    assert specs[0] == {
+        "slug": "vision_agent",
+        "name": "VisionAgent",
+        "port": 9201,
+        "agentverse_address": "agent1qvisiondemo",
+        "description": "Identifies a resale item from text or image URLs and summarizes its brand, category, and condition.",
+    }
+    assert get_fetch_agentverse_address("depop_search_agent") is None
 
 
 @pytest.mark.asyncio

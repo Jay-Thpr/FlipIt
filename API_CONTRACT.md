@@ -24,6 +24,7 @@ This document defines the interface for the backend REST endpoints and the real-
 |--------|------|---------|
 | `GET` | `/health` | Liveness + execution mode + agent count |
 | `GET` | `/agents` | List agent display names, slugs, and HTTP ports |
+| `GET` | `/fetch-agents` | List Fetch/Agentverse agent names, slugs, ports, descriptions, and recorded Agentverse addresses |
 | `GET` | `/pipelines` | Ordered sell/buy steps (agent slug + step name) |
 | `POST` | `/sell/start` | Queue sell pipeline |
 | `POST` | `/buy/start` | Queue buy pipeline |
@@ -60,7 +61,27 @@ This document defines the interface for the backend REST endpoints and the real-
 }
 ```
 
-### 1.0.2 Pipelines manifest
+### 1.0.2 Fetch agents manifest
+
+**`GET /fetch-agents`**
+
+```json
+{
+  "agents": [
+    {
+      "name": "VisionAgent",
+      "slug": "vision_agent",
+      "port": 9201,
+      "agentverse_address": "agent1q...",
+      "description": "Identifies a resale item from text or image URLs and summarizes its brand, category, and condition."
+    }
+  ]
+}
+```
+
+`agentverse_address` is `null` until the real registered address is recorded in the corresponding `<SLUG>_AGENTVERSE_ADDRESS` environment variable.
+
+### 1.0.3 Pipelines manifest
 
 **`GET /pipelines`**
 
