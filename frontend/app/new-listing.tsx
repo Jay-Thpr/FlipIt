@@ -2,11 +2,16 @@ import React, { useState } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
   TextInput, Switch, Alert, Image, KeyboardAvoidingView, Platform as RNPlatform,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
 import { ArrowLeft, Plus, X, Check } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
+import { pickImage } from '../lib/imagePicker';
+import { emit } from '../lib/events';
 import { Platform, PLATFORM_NAMES, NegotiationStyle, ReplyTone } from '../data/mockData';
 
 const ALL_PLATFORMS: Platform[] = ['ebay', 'depop', 'mercari', 'offerup', 'facebook'];
@@ -14,7 +19,8 @@ const CONDITIONS = ['New', 'Like New', 'Good', 'Fair', 'Poor'];
 
 export default function NewListingScreen() {
   const { type } = useLocalSearchParams<{ type: string }>();
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
+  const { user } = useAuth();
   const listingType = type === 'buy' ? 'buy' : 'sell';
 
   // ─── Form State ─────────────────────────────────────────────────────────────
@@ -26,11 +32,13 @@ export default function NewListingScreen() {
   const [minPrice, setMinPrice] = useState('');
   const [maxPrice, setMaxPrice] = useState('');
   const [autoAcceptThreshold, setAutoAcceptThreshold] = useState('');
+  const [initialPrice, setInitialPrice] = useState('');
   const [selectedPlatforms, setSelectedPlatforms] = useState<Platform[]>([]);
   const [negotiationStyle, setNegotiationStyle] = useState<NegotiationStyle>('moderate');
   const [replyTone, setReplyTone] = useState<ReplyTone>('professional');
   const [aiActive, setAiActive] = useState(true);
   const [photos, setPhotos] = useState<string[]>([]);
+  const [creating, setCreating] = useState(false);
 
   function togglePlatform(p: Platform) {
     setSelectedPlatforms(prev =>
@@ -38,15 +46,18 @@ export default function NewListingScreen() {
     );
   }
 
-  function handleAddPhoto() {
-    Alert.alert('Add Photo', 'Image picker would open here. (Not wired to a real picker yet.)');
+  async function handleAddPhoto() {
+    const uris = await pickImage({ shape: 'rectangle', multiple: false });
+    if (uris.length > 0) {
+      setPhotos(prev => [...prev, ...uris]);
+    }
   }
 
   function removePhoto(idx: number) {
     setPhotos(prev => prev.filter((_, i) => i !== idx));
   }
 
-  function handleCreate() {
+  async function handleCreate() {
     if (!name.trim()) {
       Alert.alert('Missing Name', 'Please enter a listing name.');
       return;
@@ -59,10 +70,74 @@ export default function NewListingScreen() {
       Alert.alert('No Platforms', 'Please select at least one platform.');
       return;
     }
-    // In production this would create the item via API
-    Alert.alert('Listing Created', `"${name}" has been created as a ${listingType} listing.`, [
-      { text: 'OK', onPress: () => router.back() },
-    ]);
+    if (!user) return;
+
+    setCreating(true);
+    try {
+      // 1. Create item
+      const { data: item, error: itemError } = await supabase
+        .from('items')
+        .insert({
+          user_id: user.id,
+          type: listingType,
+          name: name.trim(),
+          description: description.trim(),
+          condition,
+          image_color: '#6EE7B7',
+          target_price: parseFloat(targetPrice),
+          min_price: minPrice ? parseFloat(minPrice) : null,
+          max_price: maxPrice ? parseFloat(maxPrice) : null,
+          auto_accept_threshold: autoAcceptThreshold ? parseFloat(autoAcceptThreshold) : null,
+          initial_price: initialPrice ? parseFloat(initialPrice) : null,
+          negotiation_style: negotiationStyle,
+          reply_tone: replyTone,
+          status: aiActive ? 'active' : 'paused',
+          quantity: parseInt(quantity) || 1,
+        })
+        .select()
+        .single();
+
+      if (itemError) throw itemError;
+
+      // 2. Insert platforms
+      await supabase
+        .from('item_platforms')
+        .insert(selectedPlatforms.map(p => ({ item_id: item.id, platform: p })));
+
+      // 3. Upload photos + insert photo records
+      for (const [i, uri] of photos.entries()) {
+        const ext = uri.split('.').pop()?.toLowerCase() || 'jpg';
+        const fileName = `${Date.now()}_${i}.${ext}`;
+        const path = `${user.id}/${item.id}/${fileName}`;
+
+        // React Native: use FormData for file uploads
+        const formData = new FormData();
+        formData.append('', {
+          uri,
+          name: fileName,
+          type: `image/${ext === 'jpg' ? 'jpeg' : ext}`,
+        } as any);
+
+        const { error: uploadError } = await supabase.storage
+          .from('item-photos')
+          .upload(path, formData, { contentType: 'multipart/form-data' });
+
+        if (!uploadError) {
+          const { data: urlData } = supabase.storage.from('item-photos').getPublicUrl(path);
+          await supabase.from('item_photos').insert({
+            item_id: item.id,
+            photo_url: urlData.publicUrl,
+            sort_order: i,
+          });
+        }
+      }
+
+      emit('item:created');
+      router.back();
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to create listing.');
+    }
+    setCreating(false);
   }
 
   return (
@@ -139,8 +214,8 @@ export default function NewListingScreen() {
                   style={[styles.addMorePhotosBtn, { backgroundColor: colors.surfaceRaised }]}
                   onPress={handleAddPhoto}
                 >
-                  <Plus size={14} color={colors.primary} />
-                  <Text style={[styles.addMorePhotosText, { color: colors.primary }]}>Add More</Text>
+                  <Plus size={14} color={colors.textPrimary} />
+                  <Text style={[styles.addMorePhotosText, { color: colors.textPrimary }]}>Add More</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -179,7 +254,7 @@ export default function NewListingScreen() {
                     >
                       <Text style={[
                         styles.segmentText,
-                        { color: active ? colors.primary : colors.textMuted },
+                        { color: active ? colors.textPrimary : colors.textMuted },
                         active && styles.segmentTextActive,
                       ]}>
                         {c}
@@ -203,6 +278,17 @@ export default function NewListingScreen() {
           {/* ── Pricing ────────────────────────────────────────────────────────── */}
           <SectionLabel label="Pricing" colors={colors} />
           <View style={[styles.card, { backgroundColor: colors.surface }]}>
+            <InputField
+              label="Initial Price (optional)"
+              value={initialPrice}
+              onChangeText={setInitialPrice}
+              placeholder="0"
+              keyboardType="decimal-pad"
+              prefix="$"
+              hint="What you paid — enables profit tracking"
+              colors={colors}
+            />
+            <Divider colors={colors} />
             <InputField
               label="Target Price *"
               value={targetPrice}
@@ -263,8 +349,8 @@ export default function NewListingScreen() {
                     <View style={[
                       styles.checkbox,
                       {
-                        backgroundColor: selected ? colors.primary : 'transparent',
-                        borderColor: selected ? colors.primary : colors.textMuted,
+                        backgroundColor: selected ? colors.accent : 'transparent',
+                        borderColor: selected ? colors.accent : colors.textMuted,
                       },
                     ]}>
                       {selected && <Check size={12} color="#FFF" strokeWidth={3} />}
@@ -285,7 +371,7 @@ export default function NewListingScreen() {
               <Switch
                 value={aiActive}
                 onValueChange={setAiActive}
-                trackColor={{ true: colors.primary, false: colors.muted }}
+                trackColor={{ true: colors.accent, false: colors.muted }}
                 thumbColor={colors.white}
               />
             </View>
@@ -303,7 +389,7 @@ export default function NewListingScreen() {
                     >
                       <Text style={[
                         styles.segmentText,
-                        { color: active ? colors.primary : colors.textMuted },
+                        { color: active ? colors.textPrimary : colors.textMuted },
                         active && styles.segmentTextActive,
                       ]}>
                         {s.charAt(0).toUpperCase() + s.slice(1)}
@@ -327,7 +413,7 @@ export default function NewListingScreen() {
                     >
                       <Text style={[
                         styles.segmentText,
-                        { color: active ? colors.primary : colors.textMuted },
+                        { color: active ? colors.textPrimary : colors.textMuted },
                         active && styles.segmentTextActive,
                       ]}>
                         {t.charAt(0).toUpperCase() + t.slice(1)}
@@ -341,11 +427,16 @@ export default function NewListingScreen() {
 
           {/* Create button */}
           <TouchableOpacity
-            style={[styles.createBtn, { backgroundColor: colors.primary }]}
+            style={[styles.createBtn, { backgroundColor: colors.accent, opacity: creating ? 0.7 : 1 }]}
             onPress={handleCreate}
             activeOpacity={0.7}
+            disabled={creating}
           >
-            <Text style={styles.createBtnText}>Create Listing</Text>
+            {creating ? (
+              <ActivityIndicator color="#FFFFFF" size="small" />
+            ) : (
+              <Text style={styles.createBtnText}>Create Listing</Text>
+            )}
           </TouchableOpacity>
 
           <View style={{ height: 32 }} />
@@ -370,7 +461,7 @@ function Divider({ colors }: { colors: any }) {
 }
 
 function InputField({
-  label, value, onChangeText, placeholder, multiline, keyboardType, prefix, colors,
+  label, value, onChangeText, placeholder, multiline, keyboardType, prefix, hint, colors,
 }: {
   label: string;
   value: string;
@@ -379,6 +470,7 @@ function InputField({
   multiline?: boolean;
   keyboardType?: 'default' | 'number-pad' | 'decimal-pad';
   prefix?: string;
+  hint?: string;
   colors: any;
 }) {
   return (
@@ -403,6 +495,7 @@ function InputField({
           returnKeyType={multiline ? 'default' : 'done'}
         />
       </View>
+      {hint && <Text style={[styles.fieldHint, { color: colors.textMuted }]}>{hint}</Text>}
     </View>
   );
 }
@@ -560,12 +653,16 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 0,
   },
+  fieldHint: {
+    fontSize: 12,
+    marginTop: 4,
+  },
   textInputMultiline: {
     minHeight: 60,
     textAlignVertical: 'top',
   },
 
-  // Segmented controls (stacked)
+  // Segmented controls
   fieldRow: {
     paddingHorizontal: 14,
     paddingVertical: 12,

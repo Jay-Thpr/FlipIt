@@ -1,4 +1,4 @@
-import { Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { StyleSheet, TouchableOpacity } from 'react-native';
 import { Plus } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -16,7 +16,7 @@ export default function AddNewCard({ onPress }: Props) {
       activeOpacity={0.6}
       hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
     >
-      <Plus size={14} color={colors.primary} strokeWidth={2.5} />
+      <Plus size={14} color={colors.textPrimary} strokeWidth={2.5} />
     </TouchableOpacity>
   );
 }

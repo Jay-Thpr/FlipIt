@@ -6,296 +6,250 @@ Last updated: 2026-04-04
 
 ## Overview
 
-A mobile marketplace agent app where users set up automated buy/sell agents across multiple platforms. The UI is professional and data-forward — purpose-built for a power user who wants to monitor and manage deals at a glance.
+A mobile marketplace agent app where users set up automated buy/sell agents across multiple resale platforms. Dark professional aesthetic — minimal color palette, no outlines, high contrast. Feels like a trading terminal.
 
 ---
 
 ## Design System
 
 ### Theme
-The app uses a **dynamic theme system** (`contexts/ThemeContext.tsx`) with three modes: **Light**, **Dark**, and **System**. Default is **System** (follows device setting).
-
-### Style
-**Dark professional** — minimal color palette, no unnecessary outlines, high contrast, clean typography. Feels closer to Linear or a trading terminal than a consumer marketplace.
+Dynamic theme system (`contexts/ThemeContext.tsx`): **Light**, **Dark**, **System** (default).
 
 ### Color Philosophy
-**3-4 colors per mode.** The palette is intentionally limited:
-- **Primary** (violet) — brand, active states, CTAs
-- **Accent** (green) — prices, success states
-- **Neutral** (background/surface) — structure and hierarchy via shade differences, not borders
-- **Destructive** (red) — errors, archive, sign out (minimal use)
+**3 colors per mode.** No purple anywhere in the UI (only the avatar placeholder uses `primary`).
+- **Accent** (green) — prices, success, active switches, CTA buttons, checkboxes
+- **Neutral** (background/surface) — hierarchy via shade differences, not borders
+- **Destructive** (red) — errors, archive, sign out, paused status
 
-**No outlines on cards.** Cards are differentiated from backgrounds by surface color alone. Dividers inside cards use a very subtle `divider` token (low-opacity white/black).
+**No outlines on cards.** Cards use `surface` bg on `background`. Internal dividers use very low-opacity `divider` token.
 
 ### Color Tokens (`constants/colors.ts`)
 
 #### Dark Mode
 | Token | Value | Usage |
 |-------|-------|-------|
-| `primary` | `#8B5CF6` | Primary actions, active accents, brand |
-| `onPrimary` | `#FFFFFF` | Text/icons on primary bg |
-| `accent` | `#22C55E` | Success, prices, active states |
+| `accent` | `#22C55E` | Prices, active states, switches, CTAs |
 | `background` | `#09090B` | Page background |
-| `surface` | `#151518` | Cards, elevated surfaces |
-| `surfaceRaised` | `#1E1E22` | Active/pressed surface state |
-| `muted` | `#1E1E22` | Subtle fills, icon backgrounds, inactive segments |
-| `destructive` | `#EF4444` | Errors, destructive actions |
+| `surface` | `#151518` | Cards, headers |
+| `surfaceRaised` | `#1E1E22` | Active segments, pressed states |
+| `muted` | `#1E1E22` | Icon backgrounds, inactive segments |
+| `destructive` | `#EF4444` | Errors, destructive actions, paused |
 | `textPrimary` | `#FAFAFA` | Body text |
-| `textSecondary` | `#A1A1AA` | Secondary labels |
-| `textMuted` | `#63636E` | Hints, timestamps, counts |
-| `divider` | `#ffffff0F` | Internal card dividers (very low opacity) |
+| `textSecondary` | `#A1A1AA` | Secondary labels, setting icons |
+| `textMuted` | `#63636E` | Hints, timestamps |
+| `divider` | `#ffffff0F` | Card dividers |
 
 #### Light Mode
-| Token | Value | Usage |
-|-------|-------|-------|
-| `primary` | `#7C3AED` | — |
-| `accent` | `#16A34A` | — |
-| `background` | `#F4F4F5` | Neutral off-white |
-| `surface` | `#FFFFFF` | — |
-| `surfaceRaised` | `#EDEDEF` | — |
-| `textPrimary` | `#18181B` | Dark gray |
-| `textMuted` | `#A1A1AA` | — |
-| `divider` | `#0000000A` | — |
+| Token | Value |
+|-------|-------|
+| `accent` | `#16A34A` |
+| `background` | `#F4F4F5` |
+| `surface` | `#FFFFFF` |
+| `textPrimary` | `#18181B` |
 
 ### Typography
-**Font:** Inter (system default, all weights via React Native)
-- App name: Inter 800, 20px, letterSpacing -0.5
-- Section headers: Inter 700, 16px, letterSpacing -0.3
+- Logo wordmark: Inter 700, 17px, letterSpacing -0.3
+- Section headers: Inter 700, 16px
 - Card item name: Inter 700, 15px
-- Price / offer: Inter 800, 18px, letterSpacing -0.3, tabular-nums
-- Labels/captions: Inter 600, 11–13px
+- Prices: Inter 800, 18px, tabular-nums
+- Labels: Inter 600, 11-13px
 - Section labels (uppercase): Inter 600, 11px, letterSpacing 0.8
 
-### Spacing
-Strict 4/8pt system. Common values: 4, 8, 10, 12, 14, 16, 20, 24, 32, 48.
-
 ### Icons
-Lucide (`lucide-react-native`) throughout. No emojis as icons. Standard size: 14–20pt. All icon-only buttons use `hitSlop` for 44×44pt touch targets.
-
-### Platform Colors
-Two color configs per platform (dark + light). Dark mode uses deep tinted backgrounds with lighter text. Light mode uses pastel backgrounds.
-
-| Platform | Dark text | Dark bg | Light text | Light bg |
-|----------|-----------|---------|------------|----------|
-| eBay | `#FC8181` | `#3D0F0F` | `#E53935` | `#FEE2E2` |
-| Depop | `#F472B6` | `#3D0A24` | `#D1156B` | `#FCE7F3` |
-| Mercari | `#60A5FA` | `#0F1E3D` | `#1E40AF` | `#DBEAFE` |
-| OfferUp | `#FBBF24` | `#3D2000` | `#D97706` | `#FEF3C7` |
-| Facebook | `#60A5FA` | `#0F1E3D` | `#1877F2` | `#EFF6FF` |
-
-**Note:** Platform icons currently use text-based shortLabel placeholders (e.g. "eB", "Dp"). These will be replaced with official brand logo images in a future update.
-
-### Status Badges (theme-aware, rounded rect with radius 6)
-
-| Status | Dark bg | Dark text | Light bg | Light text |
-|--------|---------|-----------|----------|------------|
-| Active | `#052E16` | `#4ADE80` | `#DCFCE7` | `#15803D` |
-| Paused | `surfaceRaised` | `textMuted` | `muted` | `textMuted` |
-| Archived | `#450A0A` | `#F87171` | `#FEE2E2` | `#DC2626` |
+Lucide (`lucide-react-native`). No emojis. 14-20pt. `hitSlop` for 44pt touch targets.
+- Setting icons use `textSecondary` (neutral gray, not colored)
+- Active segment text uses `textPrimary` (not accent)
+- `+` buttons use `textPrimary` (white)
 
 ---
 
 ## Pages
 
+### 0. Auth Pages (`app/auth/`)
+
+Two screens sharing the same layout and design language. Vertically centered content, 24px horizontal padding.
+
+#### Sign In (`auth/sign-in.tsx`)
+
+- **Hero:** Centered `<Logo>` (size 28) + "Welcome back" heading (24px, 700) + subtitle (15px, textSecondary)
+- **OAuth buttons:** Full-width surface-bg cards (48px tall, 12px radius), icon + label centered
+  - "Continue with Google" — multi-color Google "G" SVG icon
+  - "Continue with Apple" — Apple logo SVG, iOS only (`Platform.OS === 'ios'`)
+- **Divider:** Horizontal line + "or" text (textMuted) + horizontal line
+- **Email/password form:**
+  - Visible labels above inputs (13px, 600, textSecondary)
+  - Inputs: 48px tall, surface bg, 12px radius, 16px padding
+  - Password field: show/hide toggle (text button, right-aligned inside input)
+  - Error text below fields (13px, destructive color)
+- **Sign In button:** Full-width, accent bg, white text (16px, 700), 48px tall, 12px radius
+  - Loading state: button disabled at 0.7 opacity, ActivityIndicator replaces text
+- **Footer:** "Don't have an account? Sign Up" — accent-colored link navigates to `auth/sign-up`
+- **Keyboard:** `KeyboardAvoidingView` with `behavior='padding'` (iOS) / `'height'` (Android)
+
+#### Sign Up (`auth/sign-up.tsx`)
+
+Same layout as Sign In with these differences:
+- **Hero:** "Create your account" + "Set up your AI agents in minutes"
+- **Form fields:** Name (autoCapitalize words), Email, Password (min 6 chars hint in placeholder)
+- **Button:** "Create Account"
+- **Footer:** "Already have an account? Sign In" — navigates back
+
+#### Auth Design Rules
+- No header bar — full-screen centered layout on background color
+- OAuth buttons use surface bg (no outlines, consistent with card pattern)
+- SVG icons only (Google multi-color, Apple uses textPrimary)
+- Inputs have no borders — surface bg on background creates hierarchy
+- All touch targets meet 48px minimum height
+- `textContentType` and `autoComplete` set for system autofill support
+- Transitions: sign-in uses `fade`, sign-up uses `slide_from_right`
+
 ---
 
 ### 1. Home Page (`app/index.tsx`)
 
-The main dashboard. Gives the user an immediate read on all active buying and selling agents.
+#### Header (surface bg, extends to status bar)
+- Left: `<Logo>` component — SVG double-chevron "A" mark + "AgentMarket" wordmark
+- Right: Avatar button (34×34, primary bg placeholder)
+- `SafeAreaView edges={['top']}` with surface color
 
-#### Header Bar (surface background, extends to top of screen behind status bar)
-- Left: `AgentMarket` brand name (textPrimary, Inter 800, 20px) + **agent cap counter pill** (`{current}/{limit}`, surface bg, textMuted, 12px tabular-nums). The limit is the plan cap (currently 10).
-- Right: Circular avatar button (34×34, primary bg, initials "SS") → tapping opens a profile dropdown modal
-- **Header uses `surface` bg** — `SafeAreaView` has `edges={['top']}` with surface color so the header blends seamlessly from the status bar down. Scroll content below uses `background` color.
+#### P&L Chart
+Below header, in the scroll content. Rendered by `<PnLChart>` component:
+- Hero "Net Profit" number (24px bold, green when positive, red when negative)
+- SVG bezier area chart with gradient fill
+- Three subtle grid lines with Y-axis labels
+- Period tabs: 1W / 1M / 3M / ALL (surfaceRaised active state)
+- Data: cumulative P&L from completed trades that have `initialPrice` set
+- Empty state: "Set initial prices on listings to track profit"
 
-#### Profile Dropdown Modal (semi-transparent overlay, top-right)
-- User avatar + name + email row
-- "Settings" menu item → navigates to `/settings`
-- Divider
-- "Sign Out" (destructive red)
-- **No outline on the modal** — uses surface background on scrim
+#### Recent Trades Button
+Below the chart. Surface card, 12px radius, full width:
+- "Recent Trades" text (textPrimary, 14px, 600 weight) + ChevronRight (textMuted)
+- Tapping navigates to `/trades` full-screen page
 
-#### Layout
-Two stacked sections: **Selling** (top) and **Buying** (bottom), each with:
-- Section title (Inter 700, 16px) + **Add New button (+ icon in a small surface-bg square)** on the left — navigates to `/new-listing?type=sell` or `/new-listing?type=buy`
-- **Merged count** on the right: `{active}/{total} active` (single text, textMuted)
-- Horizontal scrollable carousel of `ItemCard` components (card width = 58% screen width)
-- **No AddNewCard below the carousel** — the add button is inline with the section header
+#### Selling / Buying Carousels
+Two sections below the trades button:
+- Section title (16px, 700) + `AddNewCard` button (28×28 surface square with `+` icon) on left
+- `{active}/{total} active` count on right (textMuted)
+- Horizontal snap carousel of `ItemCard` components (58% screen width)
+
+#### Profile Menu (Modal)
+- Avatar+name+email row → tappable, navigates to `/settings` (Account)
+- Platforms → `/settings/platforms`
+- Agent Defaults → `/settings/agents`
+- Notifications → `/settings/notifications`
+- Sign Out (destructive)
 
 ---
 
 ### 2. Item Detail Page (`app/item/[id].tsx`)
 
-Opened by tapping any item card.
+#### Header (surface bg, extends to status bar)
+- Back arrow (bare), item name + "Buying"/"Selling" subtitle, AI Agent Active switch
 
-#### Header Bar
-- Back arrow — bare, no box (36×36 touch area)
-- Item name as title (Inter 700, 16px, truncated)
-- `StatusBadge` on the right
-- **No bottom border** — header blends into page
+#### Hero Metrics Strip (surface bg, continuous with header)
+- Best Offer (28px bold, accent green or textPrimary "None")
+- Target (18px, textPrimary)
+- Separated by vertical divider
 
-#### Header Bar (surface background, extends to top of screen)
-- Same surface-bg-to-status-bar pattern as home page
+#### Photos Section
+- "PHOTOS (N)" label + "+ Add" button
+- 150×150 photo cards with position badge, delete X overlay, left/right reorder arrows
+- Subtle opacity animation on reorder (80ms dip to 0.5, 120ms restore)
 
-#### Hero Strip
-Compact metrics bar with accent stripe (3px, `primary` in dark / `muted` in light) at top:
-- Three metrics side by side: **Best Offer** (accent green or "None"), **Target** (textPrimary), **Mode** (primary violet)
-- Separated by subtle vertical dividers
-- Surface background, no outline
+#### Details Card (merged Overview + Settings)
+Single card with:
+- Description (stacked vertically)
+- 2×2 info grid: Condition, Quantity, Negotiation, Tone
+- Price settings: Initial Price (if set), Target, Min/Max, Auto-Accept
+- Platforms (comma-separated names)
 
-#### Section: Photos
-Positioned after the hero strip, before Overview. Uppercase label "PHOTOS (N)" with an inline "+ Add" button on the right.
+#### Market Overview
+Horizontal scroll of cards: platform name, buy/sell prices side by side, volume
 
-**When photos exist:** Horizontal `ScrollView` of photo cards (150×150 images, surface bg, 12px radius). Each card shows:
-- The photo image (cover fit)
-- Position badge (bottom-left, semi-transparent black pill)
-- Delete button (top-right, 28×28 circle with X icon, semi-transparent black)
-- Below image: left/right ChevronLeft/ChevronRight reorder buttons (36×32, surfaceRaised bg)
-- Disabled arrow opacity (0.3) for first/last items
-- **No extra add card** at end of scroll — the "+ Add" button in the header is sufficient
+#### Conversations
+Rows with circular avatar initials, username, platform, message preview (bold when unread), timestamp
 
-**When no photos:** A tappable empty state (surface bg, rounded) with `+` icon, "Add photos for your listing" label, and a hint: "Photos are uploaded in order when the AI creates listings".
-
-Photos are stored as an ordered `string[]` of URIs. The order is significant — the AI uploads them in this order when creating listings on platforms.
-
-#### AI Agent Active Toggle
-Standalone row below the photos section (surface bg, 12px radius). Shows "AI Agent Active" label + Switch. **Not inside the Settings card.**
-
-#### Section: Overview
-Uppercase section label + card body. **Description is stacked vertically** (label above, value below) to give long text room. Then a compact horizontal row for **Condition** and **Quantity** (no Mode — mode is shown in the hero strip only).
-
-#### Section: Settings
-Uppercase section label + card body:
-
-| Row | Control |
-|-----|---------|
-| Target Price | Static value |
-| Min Acceptable | Static value (if set) |
-| Max Acceptable | Static value (if set) |
-| Auto-Accept Below | Static value (if set) |
-| Negotiation Style | Static value |
-| Reply Tone | Static value |
-| Active Platforms | Comma-separated company names |
-
-#### Section: Market Overview
-Horizontal `ScrollView` of market cards. Each card (surface bg, **no border**, 12px radius):
-- Platform name
-- Buy price + Sell price side by side with vertical divider
-- Volume — "N listings"
-
-#### Section: Active Conversations
-Card body with conversation rows:
-- Username (bold) + platform name as text (muted)
-- Last message preview: **textPrimary + fontWeight 500** when unread, **textMuted** when read
-- **Timestamp is also highlighted (textPrimary, fontWeight 600) when unread** — not just the message
-- Chevron
-
-#### Archive Listing (bottom)
-- **No outline** — uses surface background with destructive-colored text
-- Tapping triggers `Alert.alert` confirmation before archiving
+#### Archive
+Text-only button at bottom, destructive color
 
 ---
 
 ### 3. Chat Log Page (`app/chat/[id].tsx`)
 
-Read-only conversation view.
-
-#### Header Bar
-- Back arrow — bare, no box
-- Center: `@username` (bold, 15px) + item name (muted subtitle, 12px)
-- Right: Platform name as uppercase text
-- **Surface background, no border**
-
-#### Message List (`FlatList`)
-- Agent bubbles: right-aligned, `primary` background, `onPrimary` text
-- Counterparty bubbles: left-aligned, `surface` background, **no border**
-- Timestamp below each bubble (`textMuted`, 11px)
+- Back arrow, `@username` + item name, platform name on right
+- Agent bubbles: accent green bg, white text
+- Other party bubbles: surface bg, textPrimary
 
 ---
 
-### 4. New Listing Page (`app/new-listing.tsx`)
+### 4. Recent Trades Page (`app/trades.tsx`)
 
-Full-screen form for creating a new buy or sell listing. Opened from the `+` button next to "Selling" or "Buying" on the home page. The `type` query param (`buy`/`sell`) sets the listing type.
+Full-screen scrollable list of completed trades. Custom header (surface bg extending to status bar, back arrow, "Recent Trades" title).
 
-#### Header Bar (surface background, extends to top of screen)
-- Back arrow (bare, no box)
-- Title: "New Buy Listing" or "New Sell Listing"
-- Spacer on right (no button in header)
-
-#### Form Sections (scrollable, background color)
-
-1. **Photos** — Empty state with `+` icon + prompt text. When photos exist: horizontal scroll of 80×80 thumbnails with delete X overlays and position badges, plus "+ Add More" button below.
-
-2. **Basic Information** — Name (required, text input), Description (multiline text input), Condition (segmented: New / Like New / Good / Fair / Poor), Quantity (number pad).
-
-3. **Pricing** — Target Price (required, `$` prefix, decimal pad), Min Acceptable, Max Acceptable, Auto-Accept Threshold — all with `$` prefix.
-
-4. **Platforms** — Checkbox list of all 5 platforms (eBay, Depop, Mercari, OfferUp, Facebook). At least one required. Uses custom checkbox (22×22, primary bg when selected with Check icon).
-
-5. **Agent Settings** — AI Agent Active toggle, Negotiation Style (segmented: Aggressive / Moderate / Passive), Reply Tone (segmented: Professional / Casual / Firm).
-
-#### Create Button
-Full-width primary button at the bottom of the scroll content: "Create Listing". Validates: name required, target price required, at least one platform. Shows success alert then navigates back.
+Each trade row:
+- Item name (14px, 600 weight)
+- Type · Platform · Date (12px, textMuted)
+- Price on right (15px, 700, tabular-nums)
+- Profit below price when `initialPrice` exists: `+$X` (accent) or `-$X` (destructive)
 
 ---
 
-### 5. Settings Page (`app/settings.tsx`)
+### 5. New Listing Page (`app/new-listing.tsx`)
 
-Navigation: avatar menu on Home → Settings (Stack navigator, back button labeled "Back").
+Full-screen form, `?type=buy|sell` param. Custom header (surface bg, back arrow, title).
 
-#### Appearance
-Segmented theme picker (Light / Dark / System). Default: **System**. Active option shows `surfaceRaised` bg. **No border on individual options** — active state uses background color alone.
+Sections: Photos, Basic Info (name, description, condition, quantity), Pricing (initial price optional with hint, target, min/max, auto-accept), Platforms (checkboxes, accent bg when selected), Agent Settings (AI toggle, negotiation style, reply tone).
 
-#### Account
-Three rows: Display Name, Email, Profile Photo (icon + label + value + chevron).
+"Create Listing" button at bottom (full-width, accent bg).
 
-#### Platforms
-One row per platform:
-- Colored icon square (theme-aware) — **currently uses text placeholders, to be replaced with actual logos**
-- Platform name + username (if connected), or "Not connected"
-- Status: "Connected" (green badge) or "Connect" (muted bg badge, **no border**)
+---
 
-#### Default Agent Behavior
-- Auto-Reply toggle
-- Response Delay row
-- Negotiation Style — stacked layout: label row above, full-width segmented selector below
-- **Reply Tone** — same stacked layout as Negotiation Style, options: Professional / Casual / Firm. Acts as the global default for all new chats.
+### 6. Settings Pages (`app/settings/`)
 
-#### Notifications
-Four toggle rows: New Message, Price Drop, Deal Closed, Listing Expired.
+Four separate pages, each with custom header (surface bg, back arrow):
 
-#### Usage
-2×2 grid inside a card:
-- Active Listings, Messages This Month, Deals Closed, API Usage
-- Each tile: large number (Inter 800, 28px, `primary`, tabular-nums) + label
+- **Account** (`settings/index.tsx`) — Appearance (Light/Dark/System), account info, usage stats
+- **Platforms** (`settings/platforms.tsx`) — Platform connection list
+- **Agent Defaults** (`settings/agents.tsx`) — Auto-reply, response delay, negotiation style, reply tone
+- **Notifications** (`settings/notifications.tsx`) — Toggle rows
 
 ---
 
 ## Components
 
-### `ItemCard` (`components/ItemCard.tsx`)
-- **Photo preview** at the top — shows the first photo from `item.photos[]` (cover fit). Falls back to `imageColor` placeholder with initial letter when no photos exist.
-- Status label overlaid on the photo (top-left, semi-transparent black pill): **"Active"** (accent green) or **"Paused"** (destructive red)
-- Surface background, **no border/outline**
-- Item name (Inter 700, 15px), content padding 14px with 10px gap
-- Bottom row: Best Offer label + value (accent green, or "None" in textPrimary if no offer) | Target label + value
-- Uses `tabular-nums` for price alignment
+### `ItemCard`
+- Photo preview (first photo, or imageColor placeholder)
+- Name + Best Offer / Target prices
+- **Paused overlay**: `rgba(0,0,0,0.45)` dark scrim over entire card (not opacity fade)
 
-### `AddNewCard` (`components/AddNewCard.tsx`)
-- **Compact icon-only button** (28×28, surface bg, 8px radius) with Plus icon
-- Rendered **inline next to the section title** in the header, not below the carousel
+### `Logo`
+- SVG double-chevron "A" mark (react-native-svg) + "AgentMarket" wordmark
+- Theme-aware (uses textPrimary)
 
-### `StatusBadge` (`components/StatusBadge.tsx`)
-- Theme-aware badge with radius 6. Used in item detail header.
+### `PnLChart`
+- Accepts `data: PnLDataPoint[]` prop
+- SVG bezier curve with gradient fill, period tabs, hero P&L number
 
-### `PlatformBadge` (`components/PlatformBadge.tsx`)
-- Still defined but **not used** in conversations or chat headers (replaced by plain company name text)
+### `MasterAgentFAB`
+- Persistent floating action button linking to the ASI:One master agent
+- **Visibility:** All screens for authenticated users. Hidden on auth screens. Hidden if backend returns no agent address.
+- **Position:** `absolute`, bottom: 24, right: 16. Above all screen content (`zIndex: 999`).
+- **Size:** 56×56 circular (`borderRadius: 28`)
+- **Background:** `#7C3AED` (fixed, not theme-dependent)
+- **Icon:** `asi-one-logo-modified.png` from assets, 30×30, white `tintColor`
+- **Shadow:** `elevation: 6`, `shadowOffset: {0, 3}`, `shadowOpacity: 0.3`, `shadowRadius: 4`
+- **Pressed state:** opacity 0.8, scale 0.95
+- **Accessibility:** `accessibilityLabel="Chat with AI agent on ASI:One"`, `accessibilityRole="button"`
+- **Behavior:** Opens `https://asi1.ai/chat?agent=<address>` via `Linking.openURL()`. Address fetched from `GET /config`.
+
+### `AddNewCard`
+- 28×28 surface square with `+` icon (textPrimary)
 
 ---
 
-## Data Model (`data/mockData.ts`)
+## Data Model
 
-### `Item`
+### Item
 ```ts
 interface Item {
   id: string;
@@ -308,65 +262,28 @@ interface Item {
   minPrice?: number;
   maxPrice?: number;
   autoAcceptThreshold?: number;
+  initialPrice?: number;      // What user paid — enables profit tracking
   platforms: Platform[];
   status: 'active' | 'paused' | 'archived';
   quantity: number;
   negotiationStyle: 'aggressive' | 'moderate' | 'passive';
   replyTone: 'professional' | 'casual' | 'firm';
   bestOffer?: number;
-  photos: string[];           // Ordered array of photo URIs — first photo is the card thumbnail
+  photos: string[];
   marketData: MarketData[];
   conversations: Conversation[];
 }
 ```
 
-### `MarketData`
-```ts
-interface MarketData {
-  platform: Platform;
-  bestBuyPrice: number;
-  bestSellPrice: number;
-  volume: number;
-}
-```
+### Navigation
+Routes: `auth/sign-in`, `auth/sign-up`, `index`, `settings/*`, `item/[id]`, `chat/[id]`, `new-listing`, `trades`, `trade/[id]`
 
-### `PLATFORM_NAMES`
-```ts
-const PLATFORM_NAMES: Record<Platform, string> = {
-  ebay: 'eBay',
-  depop: 'Depop',
-  mercari: 'Mercari',
-  offerup: 'OfferUp',
-  facebook: 'Facebook',
-};
-```
-
----
-
-## Navigation
-
-- **Back button label**: "Back" (set globally in `_layout.tsx` via `headerBackTitle: 'Back'`)
-- Routes: `index`, `settings`, `item/[id]`, `chat/[id]`, `new-listing`
-- `item/[id]`, `chat/[id]`, and `new-listing` use `headerShown: false` (custom headers)
-
----
-
-## Key Design Rules
-
-- **No outlines/borders on cards** — surface color differentiation only. Internal dividers use the `divider` token (very low opacity).
-- **3-4 color palette** per mode: primary (violet), accent (green), neutral (bg/surface), destructive (red, minimal use)
-- **No colored status dots** anywhere — status is text-only or themed badge
-- **No platform names on item cards** — cards show only status, name, and prices
-- **"None"** shown when no best offer exists
-- **Unread conversation highlighting** applies to both the message preview AND the timestamp
-- **New Agent button** is a compact + icon inline with section headers, not a separate card
-- **Merged agent counts** — single `X/Y active` text on the right of each section header
-- **Reply Tone** has a global default in Settings (professional/casual/firm), overridable per item
-- **Profile access** via circular avatar button — no hamburger / gear icon on home
-- **Theme propagation**: all color values come from `useTheme().colors` — no hardcoded hex in components (exception: status badge config, platform colors)
-- **Touch targets**: minimum 44×44pt via `hitSlop` where visual size is smaller
-- **Safe areas**: `SafeAreaView` with `edges` on every screen
-- **Header surface pattern**: Pages with custom headers (home, item detail, chat, new-listing) use `SafeAreaView edges={['top']}` with `surface` bg so the header color extends behind the status bar, then `background` color for the scroll content below
-- **Paused status color**: uses `destructive` (red), not gray
-- **AI Agent toggle**: shown as standalone row below photos on item detail page, not inside the Settings card
-- **Platform logos**: currently text-based placeholders, to be replaced with official brand assets
+### Key Rules
+- No purple in UI (only avatar placeholder)
+- No outlines/borders on cards
+- Paused = dark scrim overlay, not opacity
+- Settings icons are neutral gray (textSecondary)
+- Active segments use textPrimary, not accent
+- + buttons are textPrimary (white)
+- Chat agent bubbles are accent green
+- Header surface-bg-to-status-bar pattern on all custom-header pages

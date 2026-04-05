@@ -45,6 +45,7 @@ export interface Item {
   negotiationStyle: NegotiationStyle;
   replyTone: ReplyTone;
   bestOffer?: number;
+  initialPrice?: number;
   photos: string[];
   marketData: MarketData[];
   conversations: Conversation[];
@@ -76,6 +77,7 @@ export const mockItems: Item[] = [
     negotiationStyle: 'moderate',
     replyTone: 'professional',
     bestOffer: 295,
+    initialPrice: 85,
     photos: [
       'https://picsum.photos/seed/jordan1a/400/400',
       'https://picsum.photos/seed/jordan1b/400/400',
@@ -132,6 +134,7 @@ export const mockItems: Item[] = [
     quantity: 1,
     negotiationStyle: 'passive',
     replyTone: 'casual',
+    initialPrice: 45,
     photos: [
       'https://picsum.photos/seed/sonyxm4a/400/400',
       'https://picsum.photos/seed/sonyxm4b/400/400',

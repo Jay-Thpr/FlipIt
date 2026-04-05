@@ -1,4 +1,5 @@
 import { View, Text, Image, StyleSheet, TouchableOpacity } from 'react-native';
+import { Pause } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { Item } from '../data/mockData';
 
@@ -9,14 +10,13 @@ interface Props {
 }
 
 export default function ItemCard({ item, cardWidth, onPress }: Props) {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
 
   const offerDisplay = item.bestOffer
     ? `$${item.bestOffer}`
     : 'None';
 
-  const statusLabel = item.status === 'active' ? 'Active' : 'Paused';
-  const statusColor = item.status === 'active' ? colors.accent : colors.destructive;
+  const isPaused = item.status !== 'active';
   const hasPhoto = item.photos.length > 0;
   const imageHeight = Math.round(cardWidth * 0.6);
 
@@ -45,10 +45,13 @@ export default function ItemCard({ item, cardWidth, onPress }: Props) {
             <Text style={styles.placeholderInitial}>{item.name[0]}</Text>
           </View>
         )}
-        {/* Status label over image */}
-        <View style={styles.statusOverlay}>
-          <Text style={[styles.statusOverlayText, { color: statusColor }]}>{statusLabel}</Text>
-        </View>
+        {isPaused && (
+          <View style={styles.pausedImageOverlay}>
+            <View style={styles.pausedIcon}>
+              <Pause size={20} color="#FFFFFF" fill="#FFFFFF" />
+            </View>
+          </View>
+        )}
       </View>
 
       {/* Content below image */}
@@ -74,6 +77,9 @@ export default function ItemCard({ item, cardWidth, onPress }: Props) {
           </View>
         </View>
       </View>
+
+      {/* Light scrim over entire card for paused */}
+      {isPaused && <View style={styles.pausedOverlay} />}
     </TouchableOpacity>
   );
 }
@@ -102,21 +108,6 @@ const styles = StyleSheet.create({
     fontSize: 48,
     fontWeight: '800',
     color: 'rgba(255,255,255,0.5)',
-  },
-  statusOverlay: {
-    position: 'absolute',
-    top: 8,
-    left: 8,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    borderRadius: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  statusOverlayText: {
-    fontSize: 10,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
   },
 
   content: {
@@ -158,5 +149,24 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: -0.2,
     fontVariant: ['tabular-nums'],
+  },
+
+  pausedOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+    borderRadius: 12,
+  },
+  pausedImageOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pausedIcon: {
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

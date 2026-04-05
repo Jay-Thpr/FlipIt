@@ -1,18 +1,129 @@
+import { useState, useEffect } from 'react';
 import { View, Text, FlatList, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
-import { mockItems, Message, PLATFORM_NAMES } from '../../data/mockData';
+import { supabase } from '../../lib/supabase';
+import { PLATFORM_NAMES } from '../../data/mockData';
+import type { DbMessage, DbConversation } from '../../lib/types';
+
+interface Message {
+  id: string;
+  sender: string;
+  text: string;
+  timestamp: string;
+}
+
+function formatTime(dateStr: string): string {
+  const d = new Date(dateStr);
+  return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
 
 export default function ChatLogScreen() {
-  const { id, itemId } = useLocalSearchParams<{ id: string; itemId: string }>();
+  const { id, itemId } = useLocalSearchParams<{ id: string; itemId?: string }>();
   const { colors } = useTheme();
 
-  const item = mockItems.find(i => i.id === itemId);
-  const conversation = item?.conversations.find(c => c.id === id);
+  const [conversation, setConversation] = useState<DbConversation | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [itemName, setItemName] = useState<string>('');
+  const [loading, setLoading] = useState(true);
 
-  if (!item || !conversation) {
+  useEffect(() => {
+    const conversationId = id;
+    if (!conversationId) return;
+
+    let cancelled = false;
+
+    async function fetchData() {
+      const { data: conv } = await supabase
+        .from('conversations')
+        .select('*, messages(id, sender, text, created_at)')
+        .eq('id', conversationId)
+        .single();
+
+      if (cancelled || !conv) {
+        if (!cancelled) setLoading(false);
+        return;
+      }
+
+      setConversation(conv as DbConversation);
+
+      const dbMessages: DbMessage[] = conv.messages ?? [];
+      setMessages(
+        dbMessages
+          .sort((a: DbMessage, b: DbMessage) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+          .map((m: DbMessage) => ({
+            id: m.id,
+            sender: m.sender,
+            text: m.text,
+            timestamp: formatTime(m.created_at),
+          }))
+      );
+
+      const resolvedItemId = itemId || conv.item_id;
+      if (resolvedItemId) {
+        const { data: item } = await supabase
+          .from('items')
+          .select('name')
+          .eq('id', resolvedItemId)
+          .single();
+        if (!cancelled && item) {
+          setItemName(item.name);
+        }
+      }
+
+      await supabase
+        .from('conversations')
+        .update({ unread: false })
+        .eq('id', conversationId);
+
+      if (!cancelled) setLoading(false);
+    }
+
+    fetchData();
+
+    // Realtime subscription for new messages
+    const channel = supabase
+      .channel(`messages:${conversationId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `conversation_id=eq.${conversationId}`,
+        },
+        (payload: any) => {
+          const newMsg = payload.new as DbMessage;
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: newMsg.id,
+              sender: newMsg.sender,
+              text: newMsg.text,
+              timestamp: formatTime(newMsg.created_at),
+            },
+          ]);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(channel);
+    };
+  }, [id, itemId]);
+
+  if (loading) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+        <Text style={{ padding: 24, color: colors.textMuted }}>Loading...</Text>
+      </SafeAreaView>
+    );
+  }
+
+  if (!conversation) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <Text style={{ padding: 24, color: colors.textMuted }}>Conversation not found.</Text>
@@ -28,11 +139,8 @@ export default function ChatLogScreen() {
           style={[
             styles.bubble,
             isAgent
-              ? { backgroundColor: colors.primary, borderBottomRightRadius: 4 }
-              : {
-                  backgroundColor: colors.surface,
-                  borderBottomLeftRadius: 4,
-                },
+              ? { backgroundColor: colors.accent, borderBottomRightRadius: 4 }
+              : { backgroundColor: colors.surface, borderBottomLeftRadius: 4 },
           ]}
         >
           <Text
@@ -54,7 +162,6 @@ export default function ChatLogScreen() {
       style={[styles.container, { backgroundColor: colors.background }]}
       edges={['top', 'bottom']}
     >
-      {/* Header */}
       <View style={[styles.header, { backgroundColor: colors.surface }]}>
         <TouchableOpacity
           onPress={() => router.back()}
@@ -68,7 +175,7 @@ export default function ChatLogScreen() {
             @{conversation.username}
           </Text>
           <Text style={[styles.headerItem, { color: colors.textMuted }]} numberOfLines={1}>
-            {item.name}
+            {itemName}
           </Text>
         </View>
         <Text style={[styles.platformName, { color: colors.textSecondary }]}>
@@ -76,9 +183,8 @@ export default function ChatLogScreen() {
         </Text>
       </View>
 
-      {/* Messages */}
       <FlatList
-        data={conversation.messages}
+        data={messages}
         keyExtractor={m => m.id}
         contentContainerStyle={styles.messageList}
         renderItem={renderMessage}
@@ -92,7 +198,6 @@ export default function ChatLogScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -124,13 +229,11 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.4,
   },
-
   messageList: {
     paddingHorizontal: 16,
     paddingVertical: 16,
     gap: 12,
   },
-
   bubbleWrapper: {
     maxWidth: '78%',
     gap: 4,
@@ -143,23 +246,19 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     alignItems: 'flex-start',
   },
-
   bubble: {
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
-
   bubbleText: {
     fontSize: 14,
     lineHeight: 20,
   },
-
   timestamp: {
     fontSize: 11,
     fontVariant: ['tabular-nums'],
   },
-
   emptyText: {
     textAlign: 'center',
     fontSize: 14,
