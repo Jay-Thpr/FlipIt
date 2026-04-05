@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 
 from dotenv import load_dotenv
 
+from backend.fetch_runtime import get_fetch_agent_spec, list_public_fetch_agent_slugs
+
 
 def _import_uagents():
     from uagents import Agent, Context, Protocol
@@ -104,8 +106,18 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Send a ChatMessage to a running Fetch/Agentverse agent and print the response.",
     )
-    parser.add_argument("--address", required=True, help="Destination Agentverse agent address (agent1q...).")
-    parser.add_argument("--message", required=True, help="Chat prompt to send to the fetch agent.")
+    parser.add_argument("--address", help="Destination Agentverse agent address (agent1q...).")
+    parser.add_argument("--message", help="Chat prompt to send to the fetch agent.")
+    parser.add_argument(
+        "--scenario",
+        choices=list_public_fetch_agent_slugs(),
+        help="Use the first example prompt from a public Fetch agent.",
+    )
+    parser.add_argument(
+        "--catalog",
+        action="store_true",
+        help="Print the public Fetch agent catalog and exit.",
+    )
     parser.add_argument(
         "--timeout",
         type=float,
@@ -135,10 +147,27 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     load_dotenv()
     args = parse_args()
+    if args.catalog:
+        for agent_slug in list_public_fetch_agent_slugs():
+            spec = get_fetch_agent_spec(agent_slug)
+            print(f"{spec.slug} ({spec.name})")
+            print(f"  port: {spec.port}")
+            print(f"  task_family: {spec.task_family}")
+            print(f"  example: {spec.example_prompts[0]}")
+        return 0
+
+    message = args.message
+    if args.scenario:
+        message = get_fetch_agent_spec(args.scenario).example_prompts[0]
+    if not args.address:
+        raise SystemExit("--address is required unless --catalog is used")
+    if not message:
+        raise SystemExit("--message or --scenario is required unless --catalog is used")
+
     response = asyncio.run(
         run_demo(
             destination=args.address,
-            message=args.message,
+            message=message,
             timeout=args.timeout,
             startup_delay=args.startup_delay,
             seed=args.seed,

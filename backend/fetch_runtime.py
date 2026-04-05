@@ -325,6 +325,33 @@ def list_fetch_agent_specs() -> list[dict[str, str | int | None]]:
     ]
 
 
+def list_fetch_agent_capabilities() -> list[dict[str, object]]:
+    capabilities: list[dict[str, object]] = []
+    for spec in FETCH_AGENT_SPECS.values():
+        capabilities.append(
+            {
+                "slug": spec.slug,
+                "name": spec.name,
+                "is_public": spec.is_public,
+                "task_family": spec.task_family,
+                "persona": spec.persona,
+                "capabilities": list(spec.capabilities),
+                "example_prompts": list(spec.example_prompts),
+                "tags": list(spec.tags),
+                "readme_path": spec.readme_path,
+                "handoff_targets": list(spec.handoff_targets),
+                "runtime": {
+                    "port": spec.port,
+                    "seed_env_var": spec.seed_env_var,
+                    "seed_configured": bool(os.getenv(spec.seed_env_var, "").strip()),
+                    "agentverse_address": get_fetch_agentverse_address(spec.slug),
+                    "readme_present": bool(spec.readme_path and Path(spec.readme_path).is_file()),
+                },
+            }
+        )
+    return capabilities
+
+
 def extract_urls(text: str) -> list[str]:
     return [match.rstrip(".,)") for match in URL_PATTERN.findall(text)]
 

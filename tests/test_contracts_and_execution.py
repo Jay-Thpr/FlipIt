@@ -123,6 +123,24 @@ def test_fetch_agents_manifest_lists_all_fetch_agents(
     }
 
 
+def test_fetch_agent_capability_registry_exposes_public_private_split(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("RESALE_COPILOT_FETCH_AGENT_SEED", "seed-copilot")
+    response = client.get("/fetch-agent-capabilities")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload["agents"]) == 11
+    assert payload["agents"][0]["slug"] == "resale_copilot_agent"
+    assert payload["agents"][0]["is_public"] is True
+    assert payload["agents"][0]["runtime"]["seed_configured"] is True
+    assert payload["agents"][0]["runtime"]["readme_present"] is True
+    assert payload["agents"][-1]["slug"] == "negotiation_agent"
+    assert payload["agents"][-1]["is_public"] is False
+
+
 def test_pipelines_manifest_matches_step_contracts(client: TestClient) -> None:
     response = client.get("/pipelines")
 

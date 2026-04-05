@@ -10,7 +10,7 @@ Use the Makefile targets. They activate the correct virtualenvs for you.
 |------|---------|------|-------|
 | Main API + SSE | `make run` | `.venv` | `8000` |
 | Per-agent HTTP apps (optional) | `make run-agents` | `.venv` | `9101-9110` |
-| Fetch uAgents (optional) | `make run-fetch-agents` | `.venv-fetch` | `9201-9210` |
+| Fetch uAgents (optional) | `make run-fetch-agents` | `.venv-fetch` | `9201`, `9203`, `9204`, `9211` |
 
 `make run` and `make run-fetch-agents` use different venvs and ports; run them in separate shells if you need both.
 
@@ -51,6 +51,7 @@ make run
 ```bash
 export AGENTVERSE_API_KEY=your_agentverse_key
 export FETCH_ENABLED=true
+export RESALE_COPILOT_FETCH_AGENT_SEED=resale-copilot-fetch-agent-seed
 export VISION_FETCH_AGENT_SEED=vision-fetch-agent-seed
 export EBAY_SOLD_COMPS_FETCH_AGENT_SEED=ebay-sold-comps-fetch-agent-seed
 export PRICING_FETCH_AGENT_SEED=pricing-fetch-agent-seed
@@ -73,13 +74,14 @@ make run-fetch-agents
 
 - FastAPI backend: `8000`
 - Per-agent FastAPI apps from `make run-agents`: `9101-9110`
-- Fetch `uAgents` from `make run-fetch-agents`: `9201-9210`
+- Public Fetch `uAgents` from `make run-fetch-agents`: `9201`, `9203`, `9204`, `9211`
 
 ## Current Endpoints
 
 - `GET /health`
 - `GET /agents`
 - `GET /fetch-agents`
+- `GET /fetch-agent-capabilities`
 - `GET /pipelines`
 - `POST /sell/start`
 - `POST /buy/start`
@@ -99,7 +101,7 @@ make run-fetch-agents
 - The orchestrator applies per-step timeouts, emits `agent_error` and `agent_retrying` events, retries transient `BUY` search failures once by default, and stores partial results on pipeline failure.
 - `AGENT_EXECUTION_MODE=local_functions` keeps the app runnable without launching separate agent processes.
 - `make run-agents` starts one FastAPI process per agent scaffold when you want to validate the per-agent `/task` apps.
-- `make run-fetch-agents` starts 10 Fetch `uAgents` that wrap the same local agent logic for Agentverse/ASI:One.
+- `make run-fetch-agents` starts the 4 public Agentverse-facing Fetch agents: `resale_copilot_agent`, `vision_agent`, `pricing_agent`, and `depop_listing_agent`.
 - When `FETCH_ENABLED=true`, orchestrator step execution routes through the Fetch adapter layer instead of the direct local registry.
 - `make check` is the current local verification path and mirrors CI.
 
@@ -127,6 +129,7 @@ The mobile app still talks to FastAPI directly. Fetch.ai is implemented as a par
 - FastAPI + SSE stay as the product-facing interface for the mobile app.
 - Browser Use remains the browser execution layer used by search, listing, and negotiation agents.
 - Fetch `uAgents` reuse the same backend agent logic so the Agentverse path does not diverge from the app path.
+- Public Fetch agents now expose Agentverse-oriented metadata, README assets, and deterministic chat specialization. Internal worker agents remain available through the local Fetch runtime but are not part of the default public launch set.
 
 ### Setup
 
@@ -149,7 +152,7 @@ make venv-fetch
 5. Start one Fetch agent:
 
 ```bash
-PYTHONPATH=$PWD .venv-fetch/bin/python -m backend.fetch_agents.launch depop_search_agent
+PYTHONPATH=$PWD .venv-fetch/bin/python -m backend.fetch_agents.launch resale_copilot_agent
 ```
 
 6. Start all Fetch agents from the dedicated Fetch virtualenv:
@@ -161,15 +164,21 @@ make run-fetch-agents
 (Same as `PYTHONPATH=$PWD .venv-fetch/bin/python -m backend.run_fetch_agents`.)
 
 - `make run` keeps using `.venv` for the FastAPI app on port `8000`.
-- `make run-fetch-agents` uses `.venv-fetch` for the Fetch `uAgents` on ports `9201-9210`.
+- `make run-fetch-agents` uses `.venv-fetch` for the public Fetch `uAgents` on ports `9201`, `9203`, `9204`, and `9211`.
 - The per-agent FastAPI apps from `make run-agents` stay on ports `9101-9110`, so all three launch paths can coexist without port overlap.
 
-7. Send a real chat message through Agentverse to a registered Fetch agent:
+7. Inspect the public Fetch catalog locally:
+
+```bash
+PYTHONPATH=$PWD .venv-fetch/bin/python scripts/fetch_demo.py --catalog
+```
+
+8. Send a real chat message through Agentverse to a registered Fetch agent:
 
 ```bash
 .venv-fetch/bin/python scripts/fetch_demo.py \
   --address agent1q... \
-  --message "Find me a vintage Nike tee under $45"
+  --scenario resale_copilot_agent
 ```
 
 `GET /fetch-agents` mirrors `GET /agents` but returns the Fetch-specific catalog:
@@ -179,18 +188,29 @@ make run-fetch-agents
 - `port`
 - `agentverse_address` from `<SLUG>_AGENTVERSE_ADDRESS` env vars when recorded
 - `description`
-### Chat-to-Agent Mapping
+- `persona`
+- `capabilities`
+- `example_prompts`
+- `task_family`
+- `readme_path`
+- `is_public`
 
-- `vision_agent` turns the chat message into item notes and optional image URLs.
-- `ebay_sold_comps_agent` runs vision first, then sold comps.
-- `pricing_agent` runs vision + sold comps + pricing.
-- `depop_listing_agent` runs the full SELL chain through listing creation.
-- `depop_search_agent`, `ebay_search_agent`, `mercari_search_agent`, and `offerup_search_agent` treat the chat message as a marketplace search query and attempt Browser Use first.
-- `ranking_agent` runs the BUY search chain and ranking.
-- `negotiation_agent` runs the BUY flow through negotiation.
+`GET /fetch-agent-capabilities` adds runtime verification details such as seed presence and README availability.
+
+### Public Agent Surface
+
+- `resale_copilot_agent` is the default Agentverse entrypoint for broad resale requests and routes to the correct specialist workflow.
+- `vision_agent` only handles identify-style inventory triage and hands off pricing or listing requests.
+- `pricing_agent` only handles valuation requests and asks for missing brand, item, or condition details when needed.
+- `depop_listing_agent` focuses on Depop draft creation and revision, with clarification prompts for incomplete listing requests.
+
+### Internal Worker Surface
+
+- `ebay_sold_comps_agent`, the marketplace search agents, `ranking_agent`, and `negotiation_agent` remain part of the local Fetch runtime.
+- Those worker agents still power the orchestrated backend flows, but they are not part of the default public Agentverse launch set.
 
 ## Next Backend Tasks
 
 - Manually validate the profile-gated Browser Use paths on real logged-in marketplace accounts.
 - Add frontend-facing custom Browser Use events such as `listing_found` and `offer_sent` where needed.
-- Add live Agentverse verification and profile metadata for each Fetch agent.
+- Add live Agentverse verification and profile metadata for each public Fetch agent.

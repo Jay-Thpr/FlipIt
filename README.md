@@ -1,7 +1,7 @@
 # DiamondHacks
 
-FastAPI backend scaffold for the DiamondHacks resale-agent demo. The current repo state is a working backend shell with in-memory sessions, SSE streaming, 10 agent services, and an automated test suite.
-Agent inputs and outputs are validated against step-specific schemas so pipeline contracts stay structurally stable as real logic is added. All 10 agents now run deterministic non-stub logic, and the orchestrator includes timeout, retry, and structured failure-event handling for demo resilience.
+FastAPI backend scaffold for the DiamondHacks resale-agent demo. The repo now exposes both the product-facing FastAPI backend and a specialized Fetch/Agentverse surface with public customized agents backed by the same local resale workflows.
+Agent inputs and outputs are validated against step-specific schemas so pipeline contracts stay structurally stable as real logic is added. All 10 backend agents still run deterministic non-stub logic, and the Fetch layer now adds a public `resale_copilot_agent`, specialist public agents, README-backed metadata, and deterministic handoff or clarification behavior for Agentverse demos.
 
 ## Quick Start
 
@@ -35,6 +35,15 @@ For local development, copy `.env.example` to `.env` and set `INTERNAL_API_TOKEN
 - `./.venv/bin/python -m backend.browser_use_validation --mode fallback --scenario depop_listing` forces deterministic fallback for a targeted validation case.
 - `./.venv/bin/python -m backend.browser_use_validation --require-live --group sell` fails if the selected sell-side scenarios do not execute in live Browser Use mode.
 - `./.venv/bin/python -m backend.browser_use_runtime_audit` audits Chromium, env vars, profile directories, and runtime settings before live Browser Use runs.
+
+## Fetch Agentverse Surface
+
+- Public Fetch agents: `resale_copilot_agent`, `vision_agent`, `pricing_agent`, and `depop_listing_agent`.
+- Internal Fetch worker agents stay available through the local runtime for orchestration, but they are not part of the default public launch set.
+- `GET /fetch-agents` exposes the Fetch catalog with persona, capabilities, example prompts, task family, README path, and public/private status.
+- `GET /fetch-agent-capabilities` adds runtime verification details such as seed presence and README availability.
+- `make run-fetch-agents` now launches only the public Agentverse-facing agents.
+- `PYTHONPATH=$PWD .venv-fetch/bin/python scripts/fetch_demo.py --catalog` prints the judge-path catalog and sample prompts.
 
 ## Current API
 
