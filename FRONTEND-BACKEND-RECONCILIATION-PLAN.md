@@ -260,7 +260,8 @@ Suggested `next_action.type` values:
 
 Suggested `result_source` values:
 
-- `live`
+- `browser_use`
+- `httpx`
 - `fallback`
 - `mixed`
 
@@ -291,15 +292,14 @@ Required normalized mapping:
 
 Current backend reality:
 
-- the buy pipeline orchestrates 6 agents in sequence:
-  1. `depop_search_agent` (search)
-  2. `ebay_search_agent` (search)
-  3. `mercari_search_agent` (search)
-  4. `offerup_search_agent` (search)
-  5. `ranking_agent` (aggregation)
-  6. `negotiation_agent` (action)
-- the four search agents are architecturally independent and could run in parallel, but currently execute sequentially via `run_pipeline_steps()`
-- each search agent returns a `SearchResultsOutput` containing a list of `SearchListing` objects with platform, title, price, url, condition, seller, seller_score, and posted_at
+- the buy pipeline executes in two stages:
+  1. four search agents run in parallel:
+     - `depop_search_agent`
+     - `ebay_search_agent`
+     - `mercari_search_agent`
+     - `offerup_search_agent`
+  2. then `ranking_agent` and `negotiation_agent` run sequentially after search aggregation
+- each search agent returns a `SearchResultsOutput` containing `SearchListing` objects with platform, title, price, url, condition, seller, seller_score, and posted_at
 - each search agent tracks its own `execution_mode` (`browser_use`, `httpx`, or `fallback`) and any `browser_use_error`
 - the ranking agent consumes all search results and produces a `RankingOutput` with `top_choice`, `ranked_listings`, `candidate_count`, and `median_price`
 - the negotiation agent sends offers to sellers and produces a `NegotiationOutput` with a list of `NegotiationAttempt` objects tracking status (`sent`, `failed`, `prepared`), target price, message, and conversation URL
@@ -311,8 +311,8 @@ Frontend implication:
 
 - home/item screens should not need to parse raw per-agent outputs
 - the frontend needs a summarized buy result object
-- the buy UI should show meaningful progress through 6 agents, not just a single loading spinner
-- `result_source` must be computed across all search agents since some may use Browser Use while others fall back — the overall result can be `live`, `fallback`, or `mixed`
+- the buy UI should show meaningful progress through search, ranking, and negotiation
+- `result_source` must be computed across all search agents since some may use Browser Use, others `httpx`, and others fallback logic
 - negotiation status is per-offer, not per-run — the UI must handle partial success (2 of 3 offers sent, 1 failed)
 - unlike sell, buy currently has no user interaction points mid-run — the entire pipeline runs to completion or failure without pausing
 
@@ -329,7 +329,7 @@ Required normalized result mapping:
 
 - `search_summary`: aggregated stats across all four search agents
   - `total_results`: total listings found across all platforms
-  - `results_by_platform`: count per platform (e.g., `{"depop": 5, "ebay": 8, "mercari": 3, "offerup": 2}`)
+  - `results_by_platform`: count per platform
   - `platforms_searched`: number of platforms that returned results
   - `platforms_failed`: number of platforms whose agents errored
   - `median_price`: from ranking agent output
@@ -342,15 +342,16 @@ Required normalized result mapping:
   - `offers`: list of individual `NegotiationAttempt` objects for detail views
   - `best_offer`: the offer with the lowest target price that was successfully sent
 - `result_source`: overall execution mode
-  - `live` if all search agents used `browser_use`
-  - `fallback` if all search agents used `fallback`
-  - `mixed` if some used `browser_use` and others used `fallback`
+  - `browser_use` if all search agents used Browser Use
+  - `httpx` if all search agents used HTTP-only search
+  - `fallback` if all search agents used fallback search
+  - `mixed` if the run combines multiple search execution modes
   - derived from each agent's `execution_mode` field
 
 Future consideration:
 
-- buy could gain pause/resume in the future (e.g., user confirms before negotiation begins, or user selects which listing to negotiate on instead of the ranking agent choosing automatically)
-- if that is added, the `PipelinePaused` exception and the `awaiting_input` session status already exist in the backend architecture to support it
+- buy could gain pause/resume in the future (e.g. user confirms before negotiation begins, or user selects which listing to negotiate on instead of the ranking agent choosing automatically)
+- if that is added, the sell-side pause architecture is already a useful pattern to follow
 - suggested future phases:
   - `awaiting_negotiation_approval` with `next_action.type=approve_negotiation`
   - `awaiting_listing_selection` with `next_action.type=select_listing`

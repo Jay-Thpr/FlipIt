@@ -9,13 +9,25 @@ __pycache__/
 dist/
 build/
 .eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
 
 # Environment
 .env
+.env.*
+!.env.example
 .env.local
 .env.*.local
+
+# Virtual environments
 venv/
 .venv/
+.venv312/
+.venv-fetch/
 env/
 
 # Node
@@ -29,9 +41,6 @@ yarn-error.log*
 Thumbs.db
 desktop.ini
 
-# Claude
-.claude/
-
 # IDE
 .vscode/
 .idea/
@@ -41,3 +50,13 @@ desktop.ini
 # Logs
 *.log
 logs/
+
+# Claude
+.claude/
+
+# Browser Use / Playwright
+profiles/
+playwright-report/
+
+# Local Codex/agent assets
+.agents/

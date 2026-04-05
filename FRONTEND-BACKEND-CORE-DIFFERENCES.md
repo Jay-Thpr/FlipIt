@@ -291,18 +291,18 @@ Frontend branch assumption:
 
 Current backend reality:
 
-- The buy pipeline orchestrates 6 sequential agents:
-  1. `depop_search_agent` — searches Depop
-  2. `ebay_search_agent` — searches eBay
-  3. `mercari_search_agent` — searches Mercari
-  4. `offerup_search_agent` — searches OfferUp
-  5. `ranking_agent` — aggregates and scores all search results, selects a top choice
-  6. `negotiation_agent` — sends offers to sellers via Browser Use or deterministic messages
+- The buy pipeline executes in two stages:
+  1. four marketplace search agents run in parallel:
+     - `depop_search_agent`
+     - `ebay_search_agent`
+     - `mercari_search_agent`
+     - `offerup_search_agent`
+  2. then `ranking_agent` and `negotiation_agent` run sequentially after search aggregation
 - Each search agent independently tracks its own `execution_mode` (`browser_use`, `httpx`, or `fallback`) and any `browser_use_error`.
 - Search agents are retryable via `RETRYABLE_BUY_AGENT_SLUGS` with configurable max retries.
 - The ranking agent produces structured output: `top_choice`, `ranked_listings`, `candidate_count`, and `median_price`.
 - The negotiation agent produces a list of `NegotiationAttempt` objects, each with its own `status` (`sent`, `failed`, `prepared`), `target_price`, `message`, `conversation_url`, and `execution_mode`.
-- Negotiation is per-offer, not per-run — partial success is possible (e.g., 2 of 3 offers sent, 1 failed).
+- Negotiation is per-offer, not per-run — partial success is possible (e.g. 2 of 3 offers sent, 1 failed).
 - The final buy result is a nested dict of per-agent outputs keyed by step name, not a single flat object.
 - Unlike sell, buy currently has no pause/resume logic — no `PipelinePaused` is raised, and the entire pipeline runs to completion or failure without user interaction.
 
@@ -310,9 +310,10 @@ Why this matters:
 
 - This is more complex than the frontend docs suggest.
 - The frontend cannot render a buy result by reading a single flat field — it must either parse nested per-agent outputs or consume a normalized summary.
-- The `result_source` for a buy run is not a single value — it must be derived across four independent search agents, any of which may have used Browser Use, fallen back, or failed entirely.
+- The buy pipeline needs meaningful progress states, not just a single loading state.
+- The overall `result_source` cannot be derived from a simple live/fallback binary because search agents can independently use `browser_use`, `httpx`, or `fallback`.
 - Negotiation results are not binary success/failure — the UI must handle mixed outcomes per offer.
-- The lack of user interaction during buy is a product decision, not a technical limitation — the backend architecture (`PipelinePaused`, `awaiting_input` status) already supports adding mid-run user checkpoints if desired (e.g., user confirms before negotiation, or user selects which listing to pursue).
+- The lack of user interaction during buy is a product decision, not a technical limitation — the backend architecture already has room for future pause points if desired.
 
 Recommendation:
 
@@ -320,11 +321,15 @@ Recommendation:
   - `search_summary` with total results, results per platform, platforms searched, platforms failed, and median price.
   - `top_choice` with platform, title, price, score, reason, url, seller, and seller_score.
   - `offer_summary` with total offers, offers sent, offers failed, and best offer details.
-  - `result_source` as `live`, `fallback`, or `mixed`, derived from each search agent's `execution_mode`.
-- Expose step-level progress during the run so the UI can show which agent is currently executing (e.g., "Searching eBay..." → "Ranking results..." → "Sending offers...").
-- Consider adding optional future pause points:
-  - `phase=awaiting_negotiation_approval` before the negotiation agent runs, letting the user confirm or adjust the top choice.
-  - `phase=awaiting_listing_selection` to let the user pick from ranked results instead of auto-selecting.
+  - `result_source` as one of:
+    - `browser_use` if all search agents used Browser Use
+    - `httpx` if all search agents used HTTP-only search
+    - `fallback` if all search agents used fallback logic
+    - `mixed` if the run combines multiple search execution modes
+- Expose step-level progress during the run so the UI can show which stage is executing (e.g. "Searching eBay..." then "Ranking results..." then "Sending offers...").
+- Consider optional future pause points:
+  - `phase=awaiting_negotiation_approval` before the negotiation agent runs
+  - `phase=awaiting_listing_selection` to let the user choose from ranked results
 
 ## 9. Frontend data ownership
 
@@ -363,7 +368,7 @@ Why this matters:
 
 - The frontend chat screen expects durable history, not temporary run output.
 - If a user refreshes after a buy run, negotiation messages would be lost unless they are persisted.
-- The negotiation agent's `conversation_url` links to external platform conversations (e.g., eBay messages) — the frontend needs to surface these so the user can continue the conversation on the original platform.
+- The negotiation agent's `conversation_url` links to external platform conversations, so the frontend needs a durable way to surface those links.
 
 Recommendation:
 
@@ -416,7 +421,7 @@ Recommendation:
 - Add normalized frontend-facing fields to workflow results:
   - `phase`
   - `next_action`
-  - `result_source`
+  - `result_source` derived from `browser_use`, `httpx`, and `fallback` execution modes
   - `sell_review`
   - `buy_summary`
 - Keep raw per-agent outputs available for debugging, but do not force the frontend to depend on them.
