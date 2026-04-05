@@ -258,8 +258,8 @@ Fired by search agents to tell the frontend how the search was performed. Use th
 }
 ```
 
-**`draft_created`**
-Fired by `depop_listing_agent`.
+**`draft_created`** *(legacy / compatibility)*
+May be fired by `depop_listing_agent` for older clients. **Authoritative sell-side checkpoint:** use **`listing_review_required`** from the orchestrator (see below) and `GET /result/{session_id}` → `sell_listing_review` for paused-session UX.
 ```json
 {
   "agent_name": "depop_listing_agent",
@@ -271,6 +271,11 @@ Fired by `depop_listing_agent`.
   "source": "browser_use"
 }
 ```
+
+**`listing_review_required`**
+Emitted when the SELL pipeline pauses for human review before submit. Transition the UI from the agent feed to the listing review screen. Payload includes `review_state`, `allowed_decisions` (`confirm_submit`, `revise`, `abort`), listing preview fields, and full Depop `output` as applicable. User continues via **`POST /sell/listing-decision`**.
+
+Follow-on events after a decision include `listing_decision_received`, `listing_submission_approved`, `listing_submit_requested`, `listing_submitted` or `listing_submission_failed`, `listing_revision_requested`, `listing_revision_applied`, `listing_submission_aborted`, `listing_abort_requested`, `listing_aborted`, and expiry/cleanup events — see `BrowserUse-Live-Validation.md` and `backend/orchestrator.py`.
 
 **`offer_prepared` / `offer_sent` / `offer_failed`**
 Fired sequentially by `negotiation_agent` on the BUY pipeline.
