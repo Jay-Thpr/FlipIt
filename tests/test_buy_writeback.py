@@ -167,8 +167,7 @@ async def test_write_back_calls_upsert_conversation_for_sent_offer():
     with patch("backend.buy_writeback.is_supabase_configured", return_value=True), \
          patch("backend.buy_writeback.get_supabase_client"), \
          patch("backend.buy_writeback.ConversationRepository", return_value=conv_repo), \
-         patch("backend.buy_writeback.MessageRepository", return_value=msg_repo), \
-         patch("backend.buy_writeback.CompletedTradeRepository", return_value=trade_repo):
+         patch("backend.buy_writeback.MessageRepository", return_value=msg_repo):
 
         await write_back_buy_result(
             session_id="s1",
@@ -181,7 +180,7 @@ async def test_write_back_calls_upsert_conversation_for_sent_offer():
     assert call_kwargs["user_id"] == "user-1"
     assert call_kwargs["listing_url"] == "https://depop.example/1"
     assert call_kwargs["platform"] == "depop"
-    assert call_kwargs["status"] == "active"
+    assert call_kwargs["status"] == "offer_sent"
 
 
 @pytest.mark.asyncio
@@ -191,8 +190,7 @@ async def test_write_back_creates_message_when_conv_and_message_present():
     with patch("backend.buy_writeback.is_supabase_configured", return_value=True), \
          patch("backend.buy_writeback.get_supabase_client"), \
          patch("backend.buy_writeback.ConversationRepository", return_value=conv_repo), \
-         patch("backend.buy_writeback.MessageRepository", return_value=msg_repo), \
-         patch("backend.buy_writeback.CompletedTradeRepository", return_value=trade_repo):
+         patch("backend.buy_writeback.MessageRepository", return_value=msg_repo):
 
         await write_back_buy_result(
             session_id="s1",
@@ -209,14 +207,14 @@ async def test_write_back_creates_message_when_conv_and_message_present():
 
 
 @pytest.mark.asyncio
-async def test_write_back_creates_completed_trade_for_top_choice():
+async def test_write_back_does_not_create_completed_trade_on_offer_sent():
+    """A sent offer must never trigger a completed_trade write — only a real purchase close should."""
     conv_repo, msg_repo, trade_repo = _make_mock_repos()
 
     with patch("backend.buy_writeback.is_supabase_configured", return_value=True), \
          patch("backend.buy_writeback.get_supabase_client"), \
          patch("backend.buy_writeback.ConversationRepository", return_value=conv_repo), \
-         patch("backend.buy_writeback.MessageRepository", return_value=msg_repo), \
-         patch("backend.buy_writeback.CompletedTradeRepository", return_value=trade_repo):
+         patch("backend.buy_writeback.MessageRepository", return_value=msg_repo):
 
         await write_back_buy_result(
             session_id="s1",
@@ -227,13 +225,7 @@ async def test_write_back_creates_completed_trade_for_top_choice():
             ),
         )
 
-    trade_repo.create_trade.assert_called_once()
-    trade_kwargs = trade_repo.create_trade.call_args[0][0]
-    assert trade_kwargs["user_id"] == "user-1"
-    assert trade_kwargs["listing_url"] == "https://depop.example/1"
-    assert trade_kwargs["final_price"] == 32.0
-    assert trade_kwargs["run_id"] == "s1"
-    assert trade_kwargs["conversation_id"] == "conv-id-1"
+    trade_repo.create_trade.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -243,8 +235,7 @@ async def test_write_back_no_trade_when_top_choice_url_does_not_match():
     with patch("backend.buy_writeback.is_supabase_configured", return_value=True), \
          patch("backend.buy_writeback.get_supabase_client"), \
          patch("backend.buy_writeback.ConversationRepository", return_value=conv_repo), \
-         patch("backend.buy_writeback.MessageRepository", return_value=msg_repo), \
-         patch("backend.buy_writeback.CompletedTradeRepository", return_value=trade_repo):
+         patch("backend.buy_writeback.MessageRepository", return_value=msg_repo):
 
         await write_back_buy_result(
             session_id="s1",
@@ -265,8 +256,7 @@ async def test_write_back_no_trade_when_no_top_choice():
     with patch("backend.buy_writeback.is_supabase_configured", return_value=True), \
          patch("backend.buy_writeback.get_supabase_client"), \
          patch("backend.buy_writeback.ConversationRepository", return_value=conv_repo), \
-         patch("backend.buy_writeback.MessageRepository", return_value=msg_repo), \
-         patch("backend.buy_writeback.CompletedTradeRepository", return_value=trade_repo):
+         patch("backend.buy_writeback.MessageRepository", return_value=msg_repo):
 
         await write_back_buy_result(
             session_id="s1",
@@ -281,16 +271,15 @@ async def test_write_back_no_trade_when_no_top_choice():
 
 
 @pytest.mark.asyncio
-async def test_write_back_trade_written_only_once_for_multiple_sent_offers():
-    """Even if multiple sent offers match the top_choice URL, only one trade is created."""
+async def test_write_back_no_completed_trade_for_multiple_sent_offers():
+    """No completed_trade is created even when multiple sent offers match the top_choice URL."""
     conv_repo, msg_repo, trade_repo = _make_mock_repos()
     conv_repo.upsert_conversation.return_value = {"id": "conv-id-1"}
 
     with patch("backend.buy_writeback.is_supabase_configured", return_value=True), \
          patch("backend.buy_writeback.get_supabase_client"), \
          patch("backend.buy_writeback.ConversationRepository", return_value=conv_repo), \
-         patch("backend.buy_writeback.MessageRepository", return_value=msg_repo), \
-         patch("backend.buy_writeback.CompletedTradeRepository", return_value=trade_repo):
+         patch("backend.buy_writeback.MessageRepository", return_value=msg_repo):
 
         await write_back_buy_result(
             session_id="s1",
@@ -304,7 +293,7 @@ async def test_write_back_trade_written_only_once_for_multiple_sent_offers():
             ),
         )
 
-    assert trade_repo.create_trade.call_count == 1
+    trade_repo.create_trade.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -318,8 +307,7 @@ async def test_write_back_skips_offer_with_no_listing_url():
     with patch("backend.buy_writeback.is_supabase_configured", return_value=True), \
          patch("backend.buy_writeback.get_supabase_client"), \
          patch("backend.buy_writeback.ConversationRepository", return_value=conv_repo), \
-         patch("backend.buy_writeback.MessageRepository", return_value=msg_repo), \
-         patch("backend.buy_writeback.CompletedTradeRepository", return_value=trade_repo):
+         patch("backend.buy_writeback.MessageRepository", return_value=msg_repo):
 
         offer_no_url = {**_make_offer(), "listing_url": None}
         await write_back_buy_result(
@@ -338,8 +326,7 @@ async def test_write_back_skips_message_when_offer_has_no_message():
     with patch("backend.buy_writeback.is_supabase_configured", return_value=True), \
          patch("backend.buy_writeback.get_supabase_client"), \
          patch("backend.buy_writeback.ConversationRepository", return_value=conv_repo), \
-         patch("backend.buy_writeback.MessageRepository", return_value=msg_repo), \
-         patch("backend.buy_writeback.CompletedTradeRepository", return_value=trade_repo):
+         patch("backend.buy_writeback.MessageRepository", return_value=msg_repo):
 
         offer_no_message = {**_make_offer(), "message": ""}
         await write_back_buy_result(
@@ -352,29 +339,29 @@ async def test_write_back_skips_message_when_offer_has_no_message():
 
 
 @pytest.mark.asyncio
-async def test_write_back_still_creates_trade_when_conv_upsert_fails():
-    """If conversation upsert throws, the trade record is still attempted (without conversation_id)."""
+async def test_write_back_processes_all_offers_when_conv_upsert_fails():
+    """If conversation upsert throws, the loop continues and all offers are attempted."""
     conv_repo, msg_repo, trade_repo = _make_mock_repos()
     conv_repo.upsert_conversation.side_effect = RuntimeError("db error")
 
     with patch("backend.buy_writeback.is_supabase_configured", return_value=True), \
          patch("backend.buy_writeback.get_supabase_client"), \
          patch("backend.buy_writeback.ConversationRepository", return_value=conv_repo), \
-         patch("backend.buy_writeback.MessageRepository", return_value=msg_repo), \
-         patch("backend.buy_writeback.CompletedTradeRepository", return_value=trade_repo):
+         patch("backend.buy_writeback.MessageRepository", return_value=msg_repo):
 
         await write_back_buy_result(
             session_id="s1",
             user_id="user-1",
             outputs=_make_outputs(
-                offers=[_make_offer(listing_url="https://depop.example/1")],
+                offers=[
+                    _make_offer(listing_url="https://depop.example/1"),
+                    _make_offer(listing_url="https://depop.example/2", status="sent"),
+                ],
                 top_choice_url="https://depop.example/1",
             ),
         )
 
-    # Trade attempted with conversation_id=None because conv was None
-    trade_repo.create_trade.assert_called_once()
-    assert trade_repo.create_trade.call_args[0][0]["conversation_id"] is None
+    assert conv_repo.upsert_conversation.call_count == 2
 
 
 @pytest.mark.asyncio
@@ -391,8 +378,7 @@ async def test_write_back_continues_after_message_write_failure():
     with patch("backend.buy_writeback.is_supabase_configured", return_value=True), \
          patch("backend.buy_writeback.get_supabase_client"), \
          patch("backend.buy_writeback.ConversationRepository", return_value=conv_repo), \
-         patch("backend.buy_writeback.MessageRepository", return_value=msg_repo), \
-         patch("backend.buy_writeback.CompletedTradeRepository", return_value=trade_repo):
+         patch("backend.buy_writeback.MessageRepository", return_value=msg_repo):
 
         await write_back_buy_result(
             session_id="s1",
@@ -408,5 +394,3 @@ async def test_write_back_continues_after_message_write_failure():
 
     # Both conversations were attempted
     assert conv_repo.upsert_conversation.call_count == 2
-    # Trade still created for the top-choice
-    trade_repo.create_trade.assert_called_once()

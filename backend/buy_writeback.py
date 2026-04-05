@@ -11,7 +11,6 @@ import logging
 from typing import Any
 
 from backend.config import is_supabase_configured
-from backend.repositories.completed_trades import CompletedTradeRepository
 from backend.repositories.conversations import ConversationRepository
 from backend.repositories.messages import MessageRepository
 from backend.supabase import get_supabase_client
@@ -54,8 +53,9 @@ async def write_back_buy_result(
     - Upserts a conversation record (user_id + listing_url as natural key).
     - Creates a message record containing the negotiation message.
 
-    For the top-choice listing where an offer was sent:
-    - Creates one completed_trade record per session.
+    A completed_trade is NOT written here — a sent offer does not mean a trade is
+    complete. That record should only be created on a real purchase-close signal
+    (seller accepts, payment confirmed, etc.).
     """
     if not is_supabase_configured():
         return
@@ -66,18 +66,13 @@ async def write_back_buy_result(
     if not sent_offers:
         return
 
-    top_choice_url = _extract_top_choice_url(outputs)
-
     try:
         client = get_supabase_client()
         conv_repo = ConversationRepository(client)
         msg_repo = MessageRepository(client)
-        trade_repo = CompletedTradeRepository(client)
     except Exception:
         logger.exception("buy writeback: failed to initialise Supabase client for session %s", session_id)
         return
-
-    trade_written = False
 
     for offer in sent_offers:
         listing_url = offer.get("listing_url")
@@ -93,7 +88,7 @@ async def write_back_buy_result(
                 "listing_url": listing_url,
                 "listing_title": offer.get("listing_title"),
                 "seller": offer.get("seller"),
-                "status": "active",
+                "status": "offer_sent",
             })
         except Exception:
             logger.exception(
@@ -116,25 +111,5 @@ async def write_back_buy_result(
                 logger.exception(
                     "buy writeback: failed to create message for conversation %s session %s",
                     conv.get("id"),
-                    session_id,
-                )
-
-        # --- persist completed trade for the top-choice listing (once per session) ---
-        if not trade_written and top_choice_url and listing_url == top_choice_url:
-            try:
-                trade_repo.create_trade({
-                    "user_id": user_id,
-                    "platform": offer.get("platform"),
-                    "listing_url": listing_url,
-                    "listing_title": offer.get("listing_title"),
-                    "final_price": offer.get("target_price"),
-                    "seller": offer.get("seller"),
-                    "conversation_id": conv["id"] if conv else None,
-                    "run_id": session_id,
-                })
-                trade_written = True
-            except Exception:
-                logger.exception(
-                    "buy writeback: failed to create completed_trade for session %s",
                     session_id,
                 )
