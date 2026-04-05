@@ -92,12 +92,12 @@ export default function SignInScreen() {
         >
           {/* Logo + Welcome */}
           <View style={styles.heroSection}>
-            <Logo size={36} />
+            <Logo size={48} />
             <Text style={[styles.heroTitle, { color: colors.textPrimary }]}>
-              Welcome back
+              DiamondHacks
             </Text>
             <Text style={[styles.heroSubtitle, { color: colors.textSecondary }]}>
-              Sign in to manage your agents
+              Your autonomous resale fleet.
             </Text>
           </View>
 
@@ -110,118 +110,41 @@ export default function SignInScreen() {
               disabled={loading}
               accessibilityLabel="Continue with Google"
             >
-              <GoogleIcon size={18} />
+              <GoogleIcon size={20} />
               <Text style={[styles.oauthButtonText, { color: colors.textPrimary }]}>
                 Continue with Google
               </Text>
             </TouchableOpacity>
 
-            {Platform.OS === 'ios' && (
-              <TouchableOpacity
-                style={[styles.oauthButton, { backgroundColor: colors.surface }]}
-                onPress={handleAppleSignIn}
-                activeOpacity={0.7}
-                disabled={loading}
-                accessibilityLabel="Continue with Apple"
-              >
-                <AppleIcon size={18} color={colors.textPrimary} />
-                <Text style={[styles.oauthButtonText, { color: colors.textPrimary }]}>
-                  Continue with Apple
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Divider */}
-          <View style={styles.dividerRow}>
-            <View style={[styles.dividerLine, { backgroundColor: colors.divider }]} />
-            <Text style={[styles.dividerText, { color: colors.textMuted }]}>or</Text>
-            <View style={[styles.dividerLine, { backgroundColor: colors.divider }]} />
-          </View>
-
-          {/* Email/Password Form */}
-          <View style={styles.formSection}>
-            <View style={styles.inputGroup}>
-              <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Email</Text>
-              <TextInput
-                style={[styles.input, {
-                  backgroundColor: colors.surface,
-                  color: colors.textPrimary,
-                }]}
-                placeholder="you@example.com"
-                placeholderTextColor={colors.textMuted}
-                value={email}
-                onChangeText={setEmail}
-                autoCapitalize="none"
-                autoComplete="email"
-                keyboardType="email-address"
-                textContentType="emailAddress"
-                returnKeyType="next"
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Password</Text>
-              <View style={styles.passwordWrap}>
-                <TextInput
-                  style={[styles.input, styles.passwordInput, {
-                    backgroundColor: colors.surface,
-                    color: colors.textPrimary,
-                  }]}
-                  placeholder="Enter password"
-                  placeholderTextColor={colors.textMuted}
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry={!showPassword}
-                  autoComplete="password"
-                  textContentType="password"
-                  returnKeyType="done"
-                  onSubmitEditing={handleSignIn}
-                />
-                <TouchableOpacity
-                  style={styles.showPasswordBtn}
-                  onPress={() => setShowPassword(!showPassword)}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
-                >
-                  <Text style={[styles.showPasswordText, { color: colors.textMuted }]}>
-                    {showPassword ? 'Hide' : 'Show'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
+            <TouchableOpacity
+              style={[styles.oauthButton, { backgroundColor: colors.surface }]}
+              onPress={handleAppleSignIn}
+              activeOpacity={0.7}
+              disabled={loading}
+              accessibilityLabel="Continue with Apple"
+            >
+              <AppleIcon size={20} color={colors.textPrimary} />
+              <Text style={[styles.oauthButtonText, { color: colors.textPrimary }]}>
+                Continue with Apple
+              </Text>
+            </TouchableOpacity>
 
             {error ? (
-              <Text style={[styles.errorText, { color: colors.destructive }]}>{error}</Text>
+              <Text style={[styles.errorText, { color: colors.destructive, textAlign: 'center', marginTop: 12 }]}>{error}</Text>
             ) : null}
-
-            <TouchableOpacity
-              style={[styles.primaryButton, { backgroundColor: colors.accent, opacity: loading ? 0.7 : 1 }]}
-              onPress={handleSignIn}
-              activeOpacity={0.8}
-              disabled={loading}
-              accessibilityLabel="Sign in"
-            >
-              {loading ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
-              ) : (
-                <Text style={styles.primaryButtonText}>Sign In</Text>
-              )}
-            </TouchableOpacity>
           </View>
 
-          {/* Footer */}
-          <View style={styles.footerSection}>
-            <Text style={[styles.footerText, { color: colors.textMuted }]}>
-              Don't have an account?{' '}
-            </Text>
-            <TouchableOpacity
-              onPress={() => router.push('/auth/sign-up')}
-              hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
-            >
-              <Text style={[styles.footerLink, { color: colors.accent }]}>Sign Up</Text>
-            </TouchableOpacity>
-          </View>
+          {/* Initializer for Demo */}
+          <TouchableOpacity
+            style={[styles.demoInitButton, { borderColor: colors.divider }]}
+            onPress={() => {
+              // Sign in with a dummy set for the demo if Supabase is bypassed
+              // router.replace('/')
+              handleGoogleSignIn();
+            }}
+          >
+            <Text style={[styles.demoInitText, { color: colors.textMuted }]}>Enter Sandbox</Text>
+          </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -343,29 +266,19 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
   },
-  primaryButton: {
-    height: 48,
+  demoInitButton: {
+    marginTop: 32,
+    paddingVertical: 12,
+    borderWidth: 1,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 4,
+    borderStyle: 'dashed',
   },
-  primaryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  footerSection: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: 28,
-  },
-  footerText: {
-    fontSize: 14,
-    fontWeight: '400',
-  },
-  footerLink: {
-    fontSize: 14,
+  demoInitText: {
+    fontSize: 13,
     fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
   },
 });

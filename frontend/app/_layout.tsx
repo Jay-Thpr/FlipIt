@@ -52,7 +52,8 @@ function RootNavigator() {
     return () => subscription.remove();
   }, []);
 
-  // Auth routing
+  // Auth routing - DISABLED for pure local demo
+  /*
   useEffect(() => {
     if (loading) return;
 
@@ -64,6 +65,7 @@ function RootNavigator() {
       router.replace('/');
     }
   }, [session, loading, segments]);
+  */
 
   if (loading) {
     return (
@@ -88,9 +90,9 @@ function RootNavigator() {
           headerBackTitle: 'Back',
         }}
       >
+        <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="auth/sign-in" options={{ headerShown: false, animation: 'fade' }} />
         <Stack.Screen name="auth/sign-up" options={{ headerShown: false, animation: 'slide_from_right' }} />
-        <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="settings" options={{ headerShown: false }} />
         <Stack.Screen name="item/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="chat/[id]" options={{ headerShown: false }} />
@@ -98,7 +100,7 @@ function RootNavigator() {
         <Stack.Screen name="trades" options={{ headerShown: false }} />
         <Stack.Screen name="trade/[id]" options={{ headerShown: false }} />
       </Stack>
-      {!loading && !inAuthGroup && session && (
+      {!loading && !inAuthGroup && (
         <View style={layoutStyles.fabLayer} pointerEvents="box-none">
           <MasterAgentFAB />
         </View>

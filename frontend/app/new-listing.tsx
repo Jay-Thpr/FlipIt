@@ -2,17 +2,18 @@ import React, { useState } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
   TextInput, Switch, Alert, Image, KeyboardAvoidingView, Platform as RNPlatform,
-  ActivityIndicator,
+  ActivityIndicator, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
 import { ArrowLeft, Plus, X, Check } from 'lucide-react-native';
+import * as FileSystem from 'expo-file-system/legacy';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../lib/supabase';
 import { pickImage } from '../lib/imagePicker';
+import { analyzeItemPhoto, generateWhiteBackgroundPhoto } from '../lib/gemini';
 import { emit } from '../lib/events';
-import { Platform, PLATFORM_NAMES, NegotiationStyle, ReplyTone } from '../data/mockData';
+import { Platform, PLATFORM_NAMES, NegotiationStyle, ReplyTone, Item, MarketData, Conversation, addLocalItem } from '../data/mockData';
 
 const ALL_PLATFORMS: Platform[] = ['ebay', 'depop', 'mercari', 'offerup', 'facebook'];
 const CONDITIONS = ['New', 'Like New', 'Good', 'Fair', 'Poor'];
@@ -39,6 +40,8 @@ export default function NewListingScreen() {
   const [aiActive, setAiActive] = useState(true);
   const [photos, setPhotos] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);
+  const [processingPhoto, setProcessingPhoto] = useState(false);
+  const [processingStep, setProcessingStep] = useState('');
 
   function togglePlatform(p: Platform) {
     setSelectedPlatforms(prev =>
@@ -48,8 +51,49 @@ export default function NewListingScreen() {
 
   async function handleAddPhoto() {
     const uris = await pickImage({ shape: 'rectangle', multiple: false });
-    if (uris.length > 0) {
-      setPhotos(prev => [...prev, ...uris]);
+    if (uris.length === 0) return;
+
+    const originalUri = uris[0];
+
+    // Show overlay FIRST — don't add any photo yet, freeze here
+    setProcessingPhoto(true);
+    setProcessingStep('Reading photo...');
+
+    let finalPhotoUri = originalUri; // fallback is always the original
+
+    try {
+      // Step 1 — Read image as base64
+      const base64 = await FileSystem.readAsStringAsync(originalUri, {
+        encoding: 'base64' as any,
+      });
+
+      // Step 2 — Gemini Vision: identify the item & auto-fill form
+      setProcessingStep('✨ Identifying item with Gemini Vision...');
+      let analysis = null;
+      try {
+        analysis = await analyzeItemPhoto(base64, 'image/jpeg');
+        if (analysis.name && !name.trim()) setName(analysis.name);
+        if (analysis.description && !description.trim()) setDescription(analysis.description);
+        if (analysis.condition) setCondition(analysis.condition);
+      } catch (e) {
+        console.warn('[Gemini Vision] failed:', e);
+      }
+
+      // Step 3 — Gemini Nano Banana: generate white-background product photo
+      setProcessingStep('🖼️ Generating professional product photo...');
+      const itemDesc = analysis?.name ?? 'secondhand fashion item';
+      const cleanDataUri = await generateWhiteBackgroundPhoto(itemDesc, base64, 'image/jpeg');
+
+      if (cleanDataUri) {
+        finalPhotoUri = cleanDataUri; // use the pristine Gemini-generated image
+      }
+    } catch (e: any) {
+      console.warn('[Nano Banana] pipeline error:', e.message);
+    } finally {
+      // Only NOW do we add the photo and dismiss the overlay
+      setPhotos(prev => [...prev, finalPhotoUri]);
+      setProcessingPhoto(false);
+      setProcessingStep('');
     }
   }
 
@@ -70,67 +114,109 @@ export default function NewListingScreen() {
       Alert.alert('No Platforms', 'Please select at least one platform.');
       return;
     }
+    /*
     if (!user) return;
+    */
 
     setCreating(true);
     try {
-      // 1. Create item
-      const { data: item, error: itemError } = await supabase
-        .from('items')
-        .insert({
-          user_id: user.id,
-          type: listingType,
-          name: name.trim(),
-          description: description.trim(),
-          condition,
-          image_color: '#6EE7B7',
-          target_price: parseFloat(targetPrice),
-          min_price: minPrice ? parseFloat(minPrice) : null,
-          max_price: maxPrice ? parseFloat(maxPrice) : null,
-          auto_accept_threshold: autoAcceptThreshold ? parseFloat(autoAcceptThreshold) : null,
-          initial_price: initialPrice ? parseFloat(initialPrice) : null,
-          negotiation_style: negotiationStyle,
-          reply_tone: replyTone,
-          status: aiActive ? 'active' : 'paused',
-          quantity: parseInt(quantity) || 1,
-        })
-        .select()
-        .single();
+      // 1. Generate unique ID
+      const itemId = Math.random().toString(36).substring(7);
 
-      if (itemError) throw itemError;
+      // 2. Auto-generate mock data based on type
+      const price = parseFloat(targetPrice);
+      
+      const mockMarketData: MarketData[] = selectedPlatforms.map(p => ({
+        platform: p,
+        bestBuyPrice: listingType === 'sell' ? price * 0.9 : price,
+        bestSellPrice: listingType === 'sell' ? price : price * 1.1,
+        volume: Math.floor(Math.random() * 50) + 5,
+      }));
 
-      // 2. Insert platforms
-      await supabase
-        .from('item_platforms')
-        .insert(selectedPlatforms.map(p => ({ item_id: item.id, platform: p })));
-
-      // 3. Upload photos + insert photo records
-      for (const [i, uri] of photos.entries()) {
-        const ext = uri.split('.').pop()?.toLowerCase() || 'jpg';
-        const fileName = `${Date.now()}_${i}.${ext}`;
-        const path = `${user.id}/${item.id}/${fileName}`;
-
-        // React Native: use FormData for file uploads
-        const formData = new FormData();
-        formData.append('', {
-          uri,
-          name: fileName,
-          type: `image/${ext === 'jpg' ? 'jpeg' : ext}`,
-        } as any);
-
-        const { error: uploadError } = await supabase.storage
-          .from('item-photos')
-          .upload(path, formData, { contentType: 'multipart/form-data' });
-
-        if (!uploadError) {
-          const { data: urlData } = supabase.storage.from('item-photos').getPublicUrl(path);
-          await supabase.from('item_photos').insert({
-            item_id: item.id,
-            photo_url: urlData.publicUrl,
-            sort_order: i,
-          });
-        }
+      const mockConversations: Conversation[] = [];
+      
+      if (listingType === 'sell') {
+        // Buyer 1: Lowballer
+        mockConversations.push({
+          id: `c-${itemId}-1`,
+          username: 'dealfinder_99',
+          platform: selectedPlatforms[0],
+          lastMessage: `Would you take $${(price * 0.7).toFixed(2)}?`,
+          timestamp: '2m ago',
+          unread: true,
+          messages: [
+            { id: 'm1', sender: 'them', text: 'Hi, I saw your listing. Is the price firm?', timestamp: '10:00 AM' },
+            { id: 'm2', sender: 'agent', text: 'Hi! I am open to reasonable offers.', timestamp: '10:05 AM' },
+            { id: 'm3', sender: 'them', text: `Would you take $${(price * 0.7).toFixed(2)}?`, timestamp: '10:10 AM' },
+          ],
+        });
+        // Buyer 2: Serious Inquirer
+        mockConversations.push({
+          id: `c-${itemId}-2`,
+          username: 'collector_pro',
+          platform: selectedPlatforms[1] || selectedPlatforms[0],
+          lastMessage: 'Is this from a smoke-free home?',
+          timestamp: '1h ago',
+          unread: false,
+          messages: [
+            { id: 'm1', sender: 'them', text: 'Hey, I am very interested. Is this from a smoke-free home?', timestamp: '9:00 AM' },
+            { id: 'm2', sender: 'agent', text: 'Yes, it is! I keep all my listings in a climate-controlled, smoke-free environment.', timestamp: '9:15 AM' },
+          ],
+        });
+      } else {
+        // Seller 1: Competitive Business Seller
+        mockConversations.push({
+          id: `c-${itemId}-1`,
+          username: 'outlet_direct',
+          platform: selectedPlatforms[0],
+          lastMessage: `I have several in stock. Can do $${(price * 1.05).toFixed(2)} shipped.`,
+          timestamp: '5m ago',
+          unread: true,
+          messages: [
+            { id: 'm1', sender: 'agent', text: `Hi! I am looking for this item. Do you have it in stock?`, timestamp: '11:00 AM' },
+            { id: 'm2', sender: 'them', text: `I have several in stock. Can do $${(price * 1.05).toFixed(2)} shipped.`, timestamp: '11:05 AM' },
+          ],
+        });
+        // Seller 2: "Too good to be true" seller
+        mockConversations.push({
+          id: `c-${itemId}-2`,
+          username: 'quick_sale_user',
+          platform: selectedPlatforms[1] || selectedPlatforms[0],
+          lastMessage: 'I can do $1.00 if you buy today.',
+          timestamp: '20m ago',
+          unread: true,
+          messages: [
+            { id: 'm1', sender: 'agent', text: 'Hi, is the price flexible?', timestamp: '10:30 AM' },
+            { id: 'm2', sender: 'them', text: 'I really need to get rid of this. I can do $1.00 if you buy today.', timestamp: '10:45 AM' },
+          ],
+        });
       }
+
+      // 3. Create Local Item Object
+      const newItem: Item = {
+        id: itemId,
+        type: listingType,
+        name: name.trim(),
+        description: description.trim(),
+        condition,
+        imageColor: '#8B5CF6',
+        targetPrice: price,
+        minPrice: minPrice ? parseFloat(minPrice) : undefined,
+        maxPrice: maxPrice ? parseFloat(maxPrice) : undefined,
+        autoAcceptThreshold: autoAcceptThreshold ? parseFloat(autoAcceptThreshold) : undefined,
+        platforms: selectedPlatforms,
+        status: aiActive ? 'active' : 'paused',
+        quantity: parseInt(quantity) || 1,
+        negotiationStyle,
+        replyTone,
+        initialPrice: initialPrice ? parseFloat(initialPrice) : undefined,
+        photos: photos.length > 0 ? photos : ['https://via.placeholder.com/400'], // Use user photos if available
+        marketData: mockMarketData,
+        conversations: mockConversations,
+      };
+
+      // 4. Save to AsyncStorage
+      await addLocalItem(newItem);
 
       emit('item:created');
       router.back();
@@ -145,6 +231,23 @@ export default function NewListingScreen() {
       style={[styles.container, { backgroundColor: colors.surface }]}
       edges={['top']}
     >
+      {/* Nano Banana Processing Overlay */}
+      <Modal visible={processingPhoto} transparent animationType="fade">
+        <View style={overlayStyles.backdrop}>
+          <View style={[overlayStyles.card, { backgroundColor: colors.surface }]}>
+            <ActivityIndicator size="large" color={colors.accent} />
+            <Text style={[overlayStyles.title, { color: colors.textPrimary }]}>
+              Nano Banana ✨
+            </Text>
+            <Text style={[overlayStyles.step, { color: colors.textSecondary }]}>
+              {processingStep || 'Processing...'}
+            </Text>
+            <Text style={[overlayStyles.hint, { color: colors.textMuted }]}>
+              Gemini is creating a professional product photo with a white background
+            </Text>
+          </View>
+        </View>
+      </Modal>
       {/* Header */}
       <View style={[styles.header, { backgroundColor: colors.surface }]}>
         <TouchableOpacity
@@ -716,5 +819,39 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+});
+
+const overlayStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+  },
+  card: {
+    width: '100%',
+    borderRadius: 20,
+    padding: 32,
+    alignItems: 'center',
+    gap: 12,
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+    marginTop: 8,
+  },
+  step: {
+    fontSize: 14,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  hint: {
+    fontSize: 12,
+    textAlign: 'center',
+    lineHeight: 18,
+    paddingHorizontal: 8,
   },
 });

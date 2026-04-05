@@ -93,17 +93,23 @@ export default function HomeScreen() {
 
   const refreshData = useCallback(async () => {
     // Purely local for now — Supabase sync disabled
-    setItems(mockItems);
+    const { getAllItems, loadLocalItems, getPnLData } = require('../data/mockData');
+    await loadLocalItems();
+    setItems(getAllItems());
+    setPnlData(getPnLData());
     setLoading(false);
   }, []);
 
   // Initial load
+  useEffect(() => {
+    refreshData();
+  }, [refreshData]);
+
+  // Focus load to handle navigation back
   useFocusEffect(
     useCallback(() => {
-      if (items.length === 0) {
-        refreshData();
-      }
-    }, [refreshData, items.length])
+      refreshData();
+    }, [refreshData])
   );
 
   // Listen for item status changes from detail page

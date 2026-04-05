@@ -109,7 +109,10 @@ export default function ItemDetailScreen() {
 
   async function loadItem() {
     // Purely local for now — Supabase sync disabled
-    const localItem: Item | undefined = mockItems.find((i: Item) => i.id === id);
+    const { getAllItems, loadLocalItems } = require('../../data/mockData');
+    await loadLocalItems();
+    const allItems: Item[] = getAllItems();
+    const localItem = allItems.find((i: Item) => i.id === id);
 
     if (localItem) {
       // Map Item to ItemDetail

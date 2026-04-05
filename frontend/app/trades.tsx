@@ -37,27 +37,21 @@ export default function TradesScreen() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) return;
     loadTrades();
-  }, [user]);
+  }, []);
 
   async function loadTrades() {
-    if (!user) return;
-    const { data } = await supabase
-      .from('completed_trades')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('completed_at', { ascending: false });
-
+    const { mockTrades } = require('../data/mockData');
+    
     setTrades(
-      (data ?? []).map((t: any) => ({
+      mockTrades.map((t: any) => ({
         id: t.id,
-        name: t.name,
-        type: t.type,
+        name: t.itemName,
+        type: 'Sold', // Mocking all as sold for visual profit
         platform: t.platform,
-        price: t.price,
-        initialPrice: t.initial_price,
-        date: formatDate(t.completed_at),
+        price: t.sellPrice,
+        initialPrice: t.buyPrice,
+        date: formatDate(t.date),
       }))
     );
     setLoading(false);

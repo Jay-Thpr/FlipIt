@@ -64,15 +64,8 @@ export default function PnLChart({ data }: Props) {
     return !isNaN(date.getTime()) && date >= cutoff;
   });
 
-  // Compute cumulative P&L
-  const cumulative = filtered.reduce<number[]>((acc, d) => {
-    const prev = acc.length > 0 ? acc[acc.length - 1] : 0;
-    acc.push(prev + d.value);
-    return acc;
-  }, []);
-
-  // Always start from 0
-  const values = [0, ...cumulative];
+  // Cumulative values are now passed directly from the data source
+  const values = [0, ...filtered.map(d => d.value)];
   const currentValue = values[values.length - 1];
   // Color: green if positive, red if negative, neutral if zero
   const valueColor = currentValue > 0 ? colors.accent : currentValue < 0 ? colors.destructive : colors.textMuted;

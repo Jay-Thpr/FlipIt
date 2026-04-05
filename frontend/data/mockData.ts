@@ -59,7 +59,10 @@ export const PLATFORM_NAMES: Record<Platform, string> = {
   facebook: 'Facebook',
 };
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 export const mockItems: Item[] = [
+  // ... (keeping existing 3 items)
   {
     id: '6',
     type: 'sell',
@@ -212,3 +215,83 @@ export const mockItems: Item[] = [
     ],
   },
 ];
+
+// Local state for items created during the session
+let localCreatedItems: Item[] = [];
+
+const LOCAL_STORAGE_KEY = 'diamondhacks_local_items';
+
+export async function loadLocalItems() {
+  try {
+    const stored = await AsyncStorage.getItem(LOCAL_STORAGE_KEY);
+    if (stored) {
+      localCreatedItems = JSON.parse(stored);
+    }
+  } catch (e) {
+    console.error('Failed to load local items:', e);
+  }
+}
+
+export async function addLocalItem(item: Item) {
+  localCreatedItems.push(item);
+  try {
+    await AsyncStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(localCreatedItems));
+  } catch (e) {
+    console.error('Failed to save local items:', e);
+  }
+}
+
+export function getLocalItems(): Item[] {
+  return localCreatedItems;
+}
+
+export interface Trade {
+  id: string;
+  itemName: string;
+  buyPrice: number;
+  sellPrice: number;
+  date: string; // ISO date
+  platform: Platform;
+}
+
+export const mockTrades: Trade[] = [
+  { id: 't1', itemName: 'Stussy World Tour Tee', buyPrice: 12.00, sellPrice: 28.00, date: '2026-03-01T10:00:00Z', platform: 'depop' }, // +16
+  { id: 't2', itemName: 'Vintage Carhartt Beanie', buyPrice: 5.00, sellPrice: 18.00, date: '2026-03-03T14:30:00Z', platform: 'ebay' }, // +13 (29)
+  { id: 't3', itemName: 'Essentials Tee Cream', buyPrice: 20.00, sellPrice: 42.00, date: '2026-03-05T09:15:00Z', platform: 'mercari' }, // +22 (51)
+  { id: 't4', itemName: 'Patagonia Duckbill Cap', buyPrice: 15.00, sellPrice: 32.00, date: '2026-03-08T16:45:00Z', platform: 'ebay' }, // +17 (68)
+  { id: 't5', itemName: 'Vintage Nike Windbreaker', buyPrice: 10.00, sellPrice: 35.00, date: '2026-03-10T11:20:00Z', platform: 'depop' }, // +25 (93)
+  { id: 't6', itemName: 'Adidas Gazelle Indoor', buyPrice: 45.00, sellPrice: 75.00, date: '2026-03-12T15:00:00Z', platform: 'ebay' }, // +30 (123)
+  { id: 't7', itemName: 'Champion Reverse Weave', buyPrice: 8.00, sellPrice: 28.00, date: '2026-03-15T12:30:00Z', platform: 'mercari' }, // +20 (143)
+  { id: 't8', itemName: 'Vintage Levi\'s 501', buyPrice: 15.00, sellPrice: 40.00, date: '2026-03-18T10:00:00Z', platform: 'ebay' }, // +25 (168)
+  { id: 't9', itemName: 'North Face Denali Fleece', buyPrice: 35.00, sellPrice: 65.00, date: '2026-03-22T14:00:00Z', platform: 'depop' }, // +30 (198)
+  { id: 't10', itemName: 'Carhartt WIP Pocket Tee', buyPrice: 15.00, sellPrice: 28.00, date: '2026-03-25T16:20:00Z', platform: 'ebay' }, // +13 (211)
+  { id: 't11', itemName: 'Uniqlo U Lemaire Shirt', buyPrice: 10.00, sellPrice: 22.00, date: '2026-03-28T11:45:00Z', platform: 'mercari' }, // +12 (223)
+  { id: 't12', itemName: 'Vintage Harley Davidson Tee', buyPrice: 8.00, sellPrice: 20.00, date: '2026-03-31T09:30:00Z', platform: 'ebay' }, // +12 (235)
+  { id: 't13', itemName: 'Dickies 874 Work Pants', buyPrice: 12.00, sellPrice: 25.00, date: '2026-04-01T15:10:00Z', platform: 'depop' }, // +13 (248)
+  { id: 't14', itemName: 'Vintage Blank Hoodie', buyPrice: 5.00, sellPrice: 15.00, date: '2026-04-03T18:00:00Z', platform: 'ebay' }, // +10 (258)
+  { id: 't15', itemName: 'Old Navy Parachute Pants', buyPrice: 10.00, sellPrice: 22.00, date: '2026-04-04T12:00:00Z', platform: 'mercari' }, // +12 (270)
+];
+
+export function getPnLData() {
+  const sorted = [...mockTrades].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  let runningTotal = 0;
+  
+  // Create a proper cumulative curve
+  const dataPoints = sorted.map(t => {
+    const profit = t.sellPrice - t.buyPrice;
+    runningTotal += profit;
+    const date = new Date(t.date);
+    return {
+      date: date.toLocaleDateString([], { month: 'short', day: 'numeric' }),
+      isoDate: t.date,
+      value: Math.round(runningTotal), // Keep values clean
+    };
+  });
+
+  // Always start the graph at $0 if no trades, but for demo we start with 0 as first point
+  return [{ date: 'Start', value: 0 }, ...dataPoints];
+}
+
+export function getAllItems(): Item[] {
+  return [...mockItems, ...localCreatedItems];
+}

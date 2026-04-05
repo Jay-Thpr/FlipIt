@@ -34,11 +34,14 @@ export default function ChatLogScreen() {
     if (!conversationId) return;
 
     // Purely local for now — Supabase sync disabled
+    const { getAllItems, loadLocalItems } = require('../../data/mockData');
+    loadLocalItems().then(() => {
+    const allItems: Item[] = getAllItems();
     let foundConv: any = null;
     let foundItemName = '';
 
-    for (const item of mockItems) {
-      const conv = item.conversations.find(c => c.id === conversationId);
+    for (const item of allItems) {
+      const conv = item.conversations.find((c: any) => c.id === conversationId);
       if (conv) {
         foundConv = conv;
         foundItemName = item.name;
@@ -52,6 +55,7 @@ export default function ChatLogScreen() {
       setMessages(foundConv.messages);
     }
     setLoading(false);
+    });
   }, [id]);
 
   if (loading) {
