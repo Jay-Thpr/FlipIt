@@ -82,12 +82,12 @@ See `IMPLEMENTATION-PLAN.md` Phase 2 for detailed subtasks.
 
 ### Phase F — Documentation (P3, can parallelize)
 
-| ID | Task | File |
-|----|------|------|
-| F1 | PRD §5: **FastAPI + in-process orchestrator** is primary for the app; ASI:One/Fetch as parallel discovery — not “ASI:One is the orchestrator” for mobile. | `PRD.md` |
-| F2 | PRD BUY search: match **code** (sequential in main pipeline vs parallel in Fetch path — state both accurately). | `PRD.md` |
-| F3 | Replace legacy **listing_ready** language with `listing_review_required` + `/sell/listing-decision`. | `PRD.md`, any stray docs |
-| F4 | Note **draft_created** as compatibility-only vs `listing_review_required`. | `PRD.md`, `API_CONTRACT.md` |
+| ID | Task | File | Status |
+|----|------|------|--------|
+| F1 | PRD §5: **FastAPI + in-process orchestrator** is primary for the app; ASI:One/Fetch as parallel discovery — not “ASI:One is the orchestrator” for mobile. | `PRD.md` | Done |
+| F2 | PRD BUY search: match **code** (sequential in main pipeline vs parallel in Fetch path — state both accurately). | `PRD.md` | Done |
+| F3 | Replace legacy **listing_ready** language with `listing_review_required` + `/sell/listing-decision`. | `PRD.md`, any stray docs | Done (PRD §7.3, §7.6) |
+| F4 | Note **draft_created** as compatibility-only vs `listing_review_required`. | `PRD.md`, `API_CONTRACT.md` | PRD done; align `API_CONTRACT.md` if still drift |
 
 ### Phase G — Performance (optional; from `IMPLEMENTATION-PLAN.md` Phase 3)
 

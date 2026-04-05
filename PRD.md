@@ -79,9 +79,11 @@ User opens Item Detail → sees ranked listings, market overview, active convers
 
 ### 5.1 The Orchestration Layer
 
-**ASI:One is the orchestrator.** This is Fetch.ai's own LLM — not a custom agent you build. ASI:One discovers your registered agents on Agentverse and routes tasks to them. Your job is building the specialist agents, registering them, and implementing the Chat Protocol. ASI:One handles coordination automatically.
+**Mobile app runtime:** **FastAPI** is the primary orchestrator for the product. The in-process `backend/orchestrator.py` runs the SELL and BUY pipelines, validates agent I/O, emits SSE to the client, and owns session state (`POST /sell/start`, `POST /buy/start`, `GET /stream/{session_id}`).
 
-FastAPI sits alongside this as the bridge between the mobile app and the agent network, receiving SSE events and streaming them to the frontend.
+**Fetch.ai / ASI:One (parallel track):** Ten **uAgents** register on Agentverse and expose the same capabilities via Chat Protocol. ASI:One discovers those agents for sponsor demos and natural-language routing. It does **not** replace FastAPI for the Expo client’s live pipeline unless the product explicitly switches to that path.
+
+**Summary:** FastAPI + orchestrator = product truth; Fetch + ASI:One = discoverability, judging, and optional parallel access to the same agent logic.
 
 ### 5.2 Full Agent Roster — 10 Agents
 
@@ -112,7 +114,9 @@ DepopSearchAgent → EbaySearchAgent → MercariSearchAgent → OfferUpSearchAge
         → RankingAgent
         → NegotiationAgent (×N, once per target seller)
 ```
-Search agents run sequentially — one platform at a time. Sequential-but-fast: each platform search takes 10-20 seconds, total search phase ~60 seconds. Results aggregate after all search agents complete, then pass to RankingAgent. HagglingAgent is called independently once per seller, sequentially.
+**FastAPI BUY pipeline (today):** Search agents run **sequentially** in code — one platform step after another. Sequential-but-fast in demo: each platform search is often 10–20 seconds, total search phase on the order of ~60 seconds. Results aggregate into `previous_outputs`, then RankingAgent, then NegotiationAgent.
+
+**Fetch chat path:** The Fetch bridge may fan out the four marketplace searches **in parallel** before ranking/negotiation. When documenting or demoing, state which path you are using.
 
 ### 5.5 Fetch.ai Integration — Full Detail
 
@@ -128,7 +132,7 @@ Search agents run sequentially — one platform at a time. Sequential-but-fast: 
 - README.md per agent with name, address, capability description
 - `![tag:innovationlab]` badge in each README
 
-**Fetch.ai judging story:** 10 distinct registered agents, genuine multi-agent coordination, Browser Use inside uAgents, ASI:One as discovery + orchestration layer. Directly hits "Quantity of Agents Created" and "multi-agent collaboration" judging criteria.
+**Fetch.ai judging story:** 10 distinct registered agents, genuine multi-agent coordination, Browser Use inside agent logic, ASI:One as **discovery + chat routing** while FastAPI remains the reference orchestration implementation for the app. Directly hits "Quantity of Agents Created" and "multi-agent collaboration" judging criteria.
 
 ---
 
@@ -224,6 +228,8 @@ Search agents run sequentially — one platform at a time. Sequential-but-fast: 
 ```
 
 **Draft sync:** Agent attempts to save as draft before stopping. If draft save succeeds, `draft_url` is the web draft URL and the mobile app deep-links to `depop://selling/drafts`. If draft save fails, `draft_url` is `None` and the app falls back to showing the screenshot + opening `depop://sell`.
+
+**Implementation note (backend today):** The live schema may still expose `form_screenshot_url` and related placeholders until real capture lands; see `BACKEND-CODEBASE-PROBLEMS.md` P0. The **target** shape above is what the app and agents should converge on.
 
 ---
 
@@ -379,15 +385,19 @@ Dark mode variants defined separately — do not invert light mode values.
 - Left/top: agent cards with status + live log lines. Vision card activates first, shows item name + confidence as it resolves. Before/after photo strip appears after VisionAgent.
 - Right/bottom: empty "Analyzing..." state → eBay comp table fades in after EbayResearchAgent → profit margin number + trend badge + velocity chip appear after PricingAgent.
 
-**State 3 — Listing Ready Screen:** Triggered by `listing_ready` SSE event. Full replacement of agent feed. Contents top-to-bottom:
-1. ✓ "Your listing is ready"
-2. Before/after photo row (raw → clean Nano Banana)
+**State 3 — Listing Review Screen:** Triggered by the **`listing_review_required`** SSE event (authoritative). The backend may also emit legacy **`draft_created`** for compatibility — **ignore it for UX state** if both appear; bind UI to `listing_review_required` and `GET /result` → `sell_listing_review`. Full replacement of agent feed. Contents top-to-bottom:
+1. ✓ "Review your listing" (pipeline is **paused** until the user decides)
+2. Before/after photo row (raw → clean Nano Banana) when available
 3. Generated title + description
 4. Price + estimated profit
-5. Trend badge + velocity chip
-6. Depop form screenshot (scrollable, shows populated form)
-7. **"Open Depop to Post"** — primary CTA (full width, green). Attempts `depop://selling/drafts` if `draft_url` present, else `depop://sell` / `https://www.depop.com/sell/`.
-8. "Copy listing details" — copies title, description, price, condition to clipboard.
+5. Trend badge + velocity chip when present
+6. Depop form screenshot (scrollable) — target: `form_screenshot_b64`; until implemented, URL or placeholder per backend
+7. **Primary actions** — call **`POST /sell/listing-decision`** with JSON `{ "session_id", "decision": "confirm_submit" | "revise" | "abort", "revision_instructions"? }`:
+   - **Post / confirm** — `confirm_submit` (runs submit step; then `listing_submitted` or failure events)
+   - **Request changes** — `revise` + required instructions (max **2** revisions; review window **15 minutes**, refreshed after each successful revise)
+   - **Abort** — `abort` (cleanup + `pipeline_complete`)
+8. **"Open Depop"** secondary CTA — attempts `depop://selling/drafts` if `draft_url` present, else `depop://sell` / `https://www.depop.com/sell/`.
+9. "Copy listing details" — copies title, description, price, condition to clipboard.
 
 **State 4 — Error State:** Shows which step failed, partial results collected, "Try again" button.
 
@@ -414,8 +424,8 @@ Opened by tapping any item card.
 - Before/after photo strip (raw vs. clean Nano Banana image)
 - Comp table: sold prices from eBay, filtered and ranked
 - Profit margin hero number (large, `--color-accent`)
-- Depop form preview screenshot — fully populated, paused at submit
-- "Post to Depop" CTA (manual final step)
+- Depop form preview — fully populated, **review loop**: user confirms via **`POST /sell/listing-decision`** (not a blind single "Post" without backend contract)
+- CTAs aligned with `confirm_submit` / `revise` / `abort` and SSE follow-up (`listing_submitted`, `pipeline_complete`, etc.)
 
 **BUY Result (within Item Detail)**
 - Ranked listing cards: platform badge, price, condition, score, haggle flag
@@ -463,32 +473,33 @@ Shown as an animated bottom sheet during pipeline execution (both SELL and BUY i
 
 ### 7.6 SSE Event Types
 
-Actual event names emitted by `orchestrator.py` — do not rename:
+**Canonical source:** `backend/orchestrator.py` and `API_CONTRACT.md`. Event names use **snake_case** (underscores).
+
+**Core lifecycle (all pipelines):**
 
 ```
 pipeline_started   { input, mode }
-agent_started      { agent_name, attempt, mode }
+agent_started      { agent_name, attempt, mode }   # shape may include step/pipeline per payload
 agent_retrying     { agent_name, attempt, max_attempts }
 agent_completed    { agent_name, summary, output }
 agent_error        { agent_name, attempt, max_attempts, error, category }
 pipeline_complete  { mode, pipeline, outputs }
-pipeline_failed    { error }
+pipeline_failed    { error, partial_result, ... }
+pipeline_resumed   # sell correction and listing-decision resume paths
 ```
 
-Additional SELL-specific events emitted after each relevant agent completes:
+**Vision pause (when implemented end-to-end):** `vision_low_confidence` — session may stay `running` until `POST /sell/correct`.
 
-```
-vision_result      { brand, item_name, model, condition, confidence, clean_photo_url, search_query }
-pricing_result     { recommended_price, profit_margin, median_price,
-                     trend: { trend, delta_pct, signal },
-                     velocity: { label, detail } }
-listing_ready      { form_screenshot_b64, listing_preview: { title, price, description, condition, clean_photo_url },
-                     draft_url: str | null }
-```
+**SELL listing review (authoritative handoff from Agent Feed → Listing Review UI):**
 
-`listing_ready` triggers the mobile app transition from Agent Feed to the Listing Ready screen.
+- **`listing_review_required`** — includes `review_state`, `allowed_decisions`, listing preview fields, `output` / Depop payload. **Use this** to transition to State 3.
+- **`draft_created`** — **legacy compatibility** from the listing agent; do not treat as the sole source of truth if `listing_review_required` is present.
 
-Frontend updates in real time on each event. No polling. Fallback: poll `/result/{session_id}` if SSE connection drops.
+**After `POST /sell/listing-decision`:** `listing_decision_received`, `listing_submission_approved`, `listing_submit_requested`, `listing_submitted` or `listing_submission_failed`, `listing_revision_requested`, `listing_revision_applied`, `listing_submission_aborted`, `listing_abort_requested`, `listing_aborted`, `listing_review_expired`, cleanup events, then `pipeline_complete` or `pipeline_failed` as applicable.
+
+**Product insight:** Vision and pricing **do not** emit separate `vision_result` / `pricing_result` event types today — the UI should read **`agent_completed`** and inspect `output` (and `step` in the event payload) for each stage.
+
+Frontend updates in real time on each event. No polling. Fallback: poll `GET /result/{session_id}` if SSE drops (result includes `events`, `sell_listing_review`, and `status`).
 
 ---
 

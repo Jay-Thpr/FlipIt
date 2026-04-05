@@ -86,13 +86,13 @@ These have **automated tests** and run in CI; they still need **real marketplace
 
 ## P3 — Documentation Drift
 
-- [ ] Update `PRD.md` where it still describes ASI:One as the orchestrator instead of FastAPI plus the in-process orchestrator.
+- [x] Update `PRD.md` where it still describes ASI:One as the orchestrator instead of FastAPI plus the in-process orchestrator.
 
-- [ ] Update `PRD.md` where it still describes BUY search as sequential instead of parallel (where applicable).
+- [x] Update `PRD.md` where it still describes BUY search as sequential instead of parallel (where applicable).
 
-- [ ] Replace old `listing_ready` language with the actual sell review terms (`listing_review_required`, `POST /sell/listing-decision`).
+- [x] Replace old `listing_ready` language with the actual sell review terms (`listing_review_required`, `POST /sell/listing-decision`).
 
-- [ ] Keep the legacy `draft_created` event noted as compatibility-only.
+- [x] Keep the legacy `draft_created` event noted as compatibility-only.
 
 ## Verification Notes
 
