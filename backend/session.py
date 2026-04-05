@@ -78,6 +78,23 @@ class SessionManager:
                 and session.sell_listing_review is not None
             ]
 
+    async def get_latest_session_for_item(
+        self,
+        item_id: str,
+        *,
+        pipeline: str | None = None,
+    ) -> SessionState | None:
+        async with self._lock:
+            matches = [
+                session
+                for session in self._sessions.values()
+                if str(session.request.metadata.get("item_id", "")) == item_id
+                and (pipeline is None or session.pipeline == pipeline)
+            ]
+            if not matches:
+                return None
+            return max(matches, key=lambda session: (session.updated_at, session.created_at))
+
     async def append_event(self, event: SessionEvent) -> None:
         async with self._lock:
             session = self._sessions.get(event.session_id)

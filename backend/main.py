@@ -23,12 +23,15 @@ from backend.config import (
     get_agent_execution_mode,
 )
 from backend.fetch_runtime import list_fetch_agent_capabilities, list_fetch_agent_specs
+from backend.frontend_runs import build_run_payload, build_run_start_response
 from backend.orchestrator import get_pipeline_steps, run_pipeline
 from backend.schemas import (
     CorrectionRequest,
     InternalEventRequest,
     PipelineStartRequest,
     PipelineStartResponse,
+    RunCorrectionRequest,
+    RunSellListingDecisionRequest,
     SellListingDecisionRequest,
     SellListingDecisionResponse,
     SessionEvent,
@@ -86,7 +89,9 @@ app.add_middleware(
 KEEPALIVE_INTERVAL = 15.0
 
 
-async def start_session(pipeline: str, request: PipelineStartRequest) -> PipelineStartResponse:
+async def start_session(pipeline: str, request: PipelineStartRequest, *, item_id: str | None = None) -> dict:
+    if item_id is not None:
+        request = request.model_copy(update={"metadata": {**request.metadata, "item_id": item_id}})
     response = PipelineStartResponse(
         pipeline=pipeline,
         status="queued",
@@ -95,11 +100,16 @@ async def start_session(pipeline: str, request: PipelineStartRequest) -> Pipelin
     )
     await session_manager.create_session(session_id=response.session_id, pipeline=pipeline, request=request)
     asyncio.create_task(run_pipeline(response.session_id, pipeline, request))
-    return response.model_copy(
+    response_payload = response.model_copy(
         update={
             "stream_url": f"{APP_BASE_URL}/stream/{response.session_id}",
             "result_url": f"{APP_BASE_URL}/result/{response.session_id}",
         }
+    ).model_dump()
+    return build_run_start_response(
+        payload=response_payload,
+        item_id=item_id,
+        run_url=f"{APP_BASE_URL}/runs/{response.session_id}",
     )
 
 
@@ -163,6 +173,16 @@ async def sell_start(request: PipelineStartRequest) -> PipelineStartResponse:
 @app.post("/buy/start")
 async def buy_start(request: PipelineStartRequest) -> PipelineStartResponse:
     return await start_session("buy", request)
+
+
+@app.post("/items/{item_id}/sell/run")
+async def item_sell_run(item_id: str, request: PipelineStartRequest) -> dict:
+    return await start_session("sell", request, item_id=item_id)
+
+
+@app.post("/items/{item_id}/buy/run")
+async def item_buy_run(item_id: str, request: PipelineStartRequest) -> dict:
+    return await start_session("buy", request, item_id=item_id)
 
 
 @app.post("/sell/correct")
@@ -247,7 +267,20 @@ async def get_result(session_id: str) -> dict:
     session = await session_manager.get_session(session_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
-    return session.model_dump()
+    return build_run_payload(session)
+
+
+@app.get("/runs/{run_id}")
+async def get_run(run_id: str) -> dict:
+    return await get_result(run_id)
+
+
+@app.get("/items/{item_id}/runs/latest")
+async def get_latest_item_run(item_id: str) -> dict:
+    session = await session_manager.get_latest_session_for_item(item_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Run not found for item")
+    return build_run_payload(session)
 
 
 @app.post("/internal/event/{session_id}")
@@ -282,6 +315,27 @@ async def stream(session_id: str) -> StreamingResponse:
         raise HTTPException(status_code=404, detail="Session not found")
 
     return StreamingResponse(iter_session_events(session_id), media_type="text/event-stream")
+
+
+@app.get("/runs/{run_id}/stream")
+async def stream_run(run_id: str) -> StreamingResponse:
+    return await stream(run_id)
+
+
+@app.post("/runs/{run_id}/sell/correct")
+async def run_sell_correct(run_id: str, request: RunCorrectionRequest) -> dict[str, bool]:
+    return await sell_correct(CorrectionRequest(session_id=run_id, corrected_item=request.corrected_item))
+
+
+@app.post("/runs/{run_id}/sell/listing-decision")
+async def run_sell_listing_decision(run_id: str, request: RunSellListingDecisionRequest) -> SellListingDecisionResponse:
+    return await sell_listing_decision(
+        SellListingDecisionRequest(
+            session_id=run_id,
+            decision=request.decision,
+            revision_instructions=request.revision_instructions,
+        )
+    )
 
 
 async def iter_session_events(session_id: str):

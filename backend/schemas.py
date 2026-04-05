@@ -57,6 +57,50 @@ class SellListingDecisionResponse(BaseModel):
     revision_instructions: str | None = None
 
 
+class RunCorrectionRequest(BaseModel):
+    corrected_item: dict[str, Any]
+
+
+class RunSellListingDecisionRequest(BaseModel):
+    decision: Literal["confirm_submit", "revise", "abort"]
+    revision_instructions: str | None = None
+
+
+class RunNextAction(BaseModel):
+    type: Literal[
+        "wait",
+        "submit_correction",
+        "review_listing",
+        "show_result",
+        "show_error",
+    ]
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class RunProgress(BaseModel):
+    step: str | None = None
+    event_type: str | None = None
+
+
+class SellRunSummary(BaseModel):
+    detected_item: str | None = None
+    brand: str | None = None
+    confidence: float | None = None
+    recommended_price: float | None = None
+    listing_title: str | None = None
+    listing_price: float | None = None
+    listing_status: str | None = None
+    ready_for_confirmation: bool = False
+
+
+class SearchSummary(BaseModel):
+    total_results: int = 0
+    results_by_platform: dict[str, int] = Field(default_factory=dict)
+    platforms_searched: int = 0
+    platforms_failed: int = 0
+    median_price: float | None = None
+
+
 class AgentTaskRequest(BaseModel):
     session_id: str
     pipeline: Literal["sell", "buy"]
@@ -139,6 +183,14 @@ class NegotiationAttempt(BaseModel):
     browser_use_error: str | None = None
     attempt_source: Literal["prepared", "browser_use"] = "prepared"
     failure_category: str | None = None
+
+
+class OfferSummary(BaseModel):
+    total_offers: int = 0
+    offers_sent: int = 0
+    offers_failed: int = 0
+    offers: list[NegotiationAttempt] = Field(default_factory=list)
+    best_offer: NegotiationAttempt | None = None
 
 
 class VisionAnalysisOutput(AgentOutputBase):
