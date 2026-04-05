@@ -585,6 +585,13 @@ async def run_pipeline(session_id: str, pipeline: str, request: PipelineStartReq
 
         result = {"pipeline": pipeline, "outputs": outputs}
         await session_manager.update_status(session_id, status="completed", result=result)
+        if pipeline == "buy":
+            from backend.buy_writeback import write_back_buy_result
+            await write_back_buy_result(
+                session_id=session_id,
+                user_id=request.user_id,
+                outputs=outputs,
+            )
         await publish(session_id, "pipeline_complete", pipeline=pipeline, data={"mode": pipeline, **result})
     except LowConfidencePause:
         # Session stays paused; client calls POST /sell/correct to resume.
