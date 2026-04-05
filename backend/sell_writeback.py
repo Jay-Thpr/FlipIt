@@ -83,6 +83,18 @@ def build_sell_item_projection(outputs: Mapping[str, Any]) -> dict[str, Any]:
             if condition is not None:
                 updates["condition"] = condition
 
+        # Persist sell review artifacts for durable refresh
+        draft_url = _coerce_text(listing.get("draft_url"))
+        if draft_url is not None:
+            updates["draft_url"] = draft_url
+
+        form_screenshot_url = _coerce_text(listing.get("form_screenshot_url"))
+        if form_screenshot_url is not None:
+            updates["listing_screenshot_url"] = form_screenshot_url
+
+        if isinstance(listing_preview, Mapping) and listing_preview:
+            updates["listing_preview_payload"] = dict(listing_preview)
+
     vision = outputs.get("vision_analysis")
     if "condition" not in updates and isinstance(vision, Mapping):
         condition = _normalize_condition(vision.get("condition"))

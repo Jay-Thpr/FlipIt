@@ -102,6 +102,14 @@ def test_build_sell_item_projection_prefers_listing_fields() -> None:
         "condition": "Good",
         "min_price": 42.0,
         "max_price": 79.0,
+        "listing_screenshot_url": "artifact://preview",
+        "listing_preview_payload": {
+            "title": "Nike hoodie - Good Condition",
+            "price": 72.0,
+            "description": "Good prefilled draft",
+            "condition": "good",
+            "clean_photo_url": None,
+        },
     }
 
 
@@ -156,6 +164,14 @@ async def test_sell_writeback_manager_persists_item_projection_and_market_snapsh
                 "condition": "Good",
                 "min_price": 42.0,
                 "max_price": 79.0,
+                "listing_screenshot_url": "artifact://preview",
+                "listing_preview_payload": {
+                    "title": "Nike hoodie - Good Condition",
+                    "price": 72.0,
+                    "description": "Good prefilled draft",
+                    "condition": "good",
+                    "clean_photo_url": None,
+                },
             },
         }
     ]
@@ -279,3 +295,54 @@ async def test_handle_sell_listing_decision_confirm_persists_submitted_projectio
         and snapshot.request.metadata["item_id"] == ITEM_ID
         for snapshot in persisted_sessions
     )
+
+
+# ---------------------------------------------------------------------------
+# Sell review artifact persistence tests
+# ---------------------------------------------------------------------------
+
+
+def _sell_outputs_with_artifacts() -> dict:
+    outputs = _sell_outputs()
+    outputs["depop_listing"]["draft_url"] = "https://depop.com/drafts/abc123"
+    outputs["depop_listing"]["form_screenshot_url"] = "https://storage.example.com/screenshots/xyz.png"
+    outputs["depop_listing"]["listing_preview"] = {
+        "title": "Nike hoodie - Good Condition",
+        "price": 72.0,
+        "description": "Good prefilled draft",
+        "condition": "Good",
+        "category": "Men/Tops/Hoodies",
+    }
+    return outputs
+
+
+def test_build_sell_item_projection_includes_draft_url() -> None:
+    updates = build_sell_item_projection(_sell_outputs_with_artifacts())
+    assert updates.get("draft_url") == "https://depop.com/drafts/abc123"
+
+
+def test_build_sell_item_projection_includes_listing_screenshot_url() -> None:
+    updates = build_sell_item_projection(_sell_outputs_with_artifacts())
+    assert updates.get("listing_screenshot_url") == "https://storage.example.com/screenshots/xyz.png"
+
+
+def test_build_sell_item_projection_includes_listing_preview_payload() -> None:
+    updates = build_sell_item_projection(_sell_outputs_with_artifacts())
+    assert updates.get("listing_preview_payload") == {
+        "title": "Nike hoodie - Good Condition",
+        "price": 72.0,
+        "description": "Good prefilled draft",
+        "condition": "Good",
+        "category": "Men/Tops/Hoodies",
+    }
+
+
+def test_build_sell_item_projection_skips_none_artifacts() -> None:
+    outputs = _sell_outputs()
+    outputs["depop_listing"]["draft_url"] = None
+    outputs["depop_listing"]["form_screenshot_url"] = None
+    outputs["depop_listing"]["listing_preview"] = None
+    updates = build_sell_item_projection(outputs)
+    assert "draft_url" not in updates
+    assert "listing_screenshot_url" not in updates
+    assert "listing_preview_payload" not in updates
