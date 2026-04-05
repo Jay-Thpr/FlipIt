@@ -2,6 +2,68 @@
 
 This scaffold gives the team a stable local contract before Gemini work lands and now includes parallel integration paths for Browser Use execution and Fetch.ai registration.
 
+## Local Run
+
+Use the Makefile targets. They activate the correct virtualenvs for you.
+
+1. Install the main backend environment:
+
+```bash
+make install
+```
+
+2. Create the Fetch virtualenv once if you plan to run the Fetch agents:
+
+```bash
+make venv-fetch
+```
+
+3. Export the runtime variables in the shell that will launch the app:
+
+```bash
+export AGENT_EXECUTION_MODE=local_functions
+export INTERNAL_API_TOKEN=dev-internal-token
+export APP_HOST=0.0.0.0
+export APP_PORT=8000
+export APP_BASE_URL=http://localhost:8000
+export FETCH_ENABLED=false
+```
+
+4. Start the FastAPI backend:
+
+```bash
+make run
+```
+
+5. If you are validating Fetch agents, set the Fetch-specific variables in a second shell:
+
+```bash
+export AGENTVERSE_API_KEY=your_agentverse_key
+export FETCH_ENABLED=true
+export VISION_FETCH_AGENT_SEED=vision-fetch-agent-seed
+export EBAY_SOLD_COMPS_FETCH_AGENT_SEED=ebay-sold-comps-fetch-agent-seed
+export PRICING_FETCH_AGENT_SEED=pricing-fetch-agent-seed
+export DEPOP_LISTING_FETCH_AGENT_SEED=depop-listing-fetch-agent-seed
+export DEPOP_SEARCH_FETCH_AGENT_SEED=depop-search-fetch-agent-seed
+export EBAY_SEARCH_FETCH_AGENT_SEED=ebay-search-fetch-agent-seed
+export MERCARI_SEARCH_FETCH_AGENT_SEED=mercari-search-fetch-agent-seed
+export OFFERUP_SEARCH_FETCH_AGENT_SEED=offerup-search-fetch-agent-seed
+export RANKING_FETCH_AGENT_SEED=ranking-fetch-agent-seed
+export NEGOTIATION_FETCH_AGENT_SEED=negotiation-fetch-agent-seed
+```
+
+6. Start the Fetch agents:
+
+```bash
+make run-fetch-agents
+```
+
+7. Keep the ports in mind while debugging:
+
+- FastAPI backend: `8000`
+- Per-agent FastAPI apps from `make run-agents`: `9101-9110`
+- Fetch `uAgents` from `make run-fetch-agents`: `9201-9210`
+
 ## Current Endpoints
 
 - `GET /health`
@@ -24,8 +86,8 @@ This scaffold gives the team a stable local contract before Gemini work lands an
 - Each agent output is validated against a step-specific schema before it is emitted to SSE or saved in `/result`.
 - The orchestrator applies per-step timeouts, emits `agent_error` and `agent_retrying` events, retries transient `BUY` search failures once by default, and stores partial results on pipeline failure.
 - `AGENT_EXECUTION_MODE=local_functions` keeps the app runnable without launching separate agent processes.
-- `python -m backend.run_agents` starts one FastAPI process per agent scaffold when you want to validate the per-agent `/task` apps.
-- `python -m backend.run_fetch_agents` starts 10 Fetch `uAgents` that wrap the same local agent logic for Agentverse/ASI:One.
+- `make run-agents` starts one FastAPI process per agent scaffold when you want to validate the per-agent `/task` apps.
+- `make run-fetch-agents` starts 10 Fetch `uAgents` that wrap the same local agent logic for Agentverse/ASI:One.
 - When `FETCH_ENABLED=true`, orchestrator step execution routes through the Fetch adapter layer instead of the direct local registry.
 - `make check` is the current local verification path and mirrors CI.
 
@@ -34,11 +96,13 @@ This scaffold gives the team a stable local contract before Gemini work lands an
 Use the backend-only harness when you need repeatable Browser Use checks without frontend or Fetch.ai in the loop.
 
 ```bash
-python scripts/browser_use_validation.py --group buy_search
-python scripts/browser_use_validation.py --group pipeline --json
-python scripts/browser_use_validation.py --scenario depop_listing --require-live
+./.venv/bin/python -m backend.browser_use_runtime_audit --require-live
+./.venv/bin/python -m backend.browser_use_validation --group buy_search --require-live
+./.venv/bin/python -m backend.browser_use_validation --group pipeline --json
+./.venv/bin/python -m backend.browser_use_validation --scenario depop_listing --require-live
 ```
 
+- `--require-live` fails if the live Browser Use prerequisites are missing.
 - `--group buy_search` runs the four marketplace search agents.
 - `--group pipeline` runs full `sell` and `buy` smoke scenarios against the FastAPI app.
 - `--scenario ... --require-live` is useful for warmed-profile checks before demos.

@@ -6,6 +6,45 @@ This document explains the current Fetch.ai integration in the repo, what has al
 
 The project is mobile-first. The mobile app remains the main product surface. Fetch.ai exists as a parallel agent-discovery and judging path, not as the primary app runtime.
 
+## Local Run
+
+Use the Makefile targets for the supported runtime paths.
+
+1. Start the product backend:
+
+```bash
+make run
+```
+
+2. Start the Fetch agents when you want the Agentverse path active:
+
+```bash
+make run-fetch-agents
+```
+
+3. Keep the port map in mind:
+
+- FastAPI backend: `8000`
+- Per-agent FastAPI apps: `9101-9110`
+- Fetch `uAgents`: `9201-9210`
+
+4. Export the minimum Fetch env vars before starting `make run-fetch-agents`:
+
+- `AGENTVERSE_API_KEY`
+- `VISION_FETCH_AGENT_SEED`
+- `EBAY_SOLD_COMPS_FETCH_AGENT_SEED`
+- `PRICING_FETCH_AGENT_SEED`
+- `DEPOP_LISTING_FETCH_AGENT_SEED`
+- `DEPOP_SEARCH_FETCH_AGENT_SEED`
+- `EBAY_SEARCH_FETCH_AGENT_SEED`
+- `MERCARI_SEARCH_FETCH_AGENT_SEED`
+- `OFFERUP_SEARCH_FETCH_AGENT_SEED`
+- `RANKING_FETCH_AGENT_SEED`
+- `NEGOTIATION_FETCH_AGENT_SEED`
+- `FETCH_USE_LOCAL_ENDPOINT=false` for mailbox-backed runs
+- `FETCH_USE_LOCAL_ENDPOINT=true` only when you intentionally want the local endpoint inspector mode
+- Set `FETCH_ENABLED=true` in the backend shell only when you want the FastAPI app to route through Fetch instead of the direct local registry.
+
 ## Current Architecture
 
 There are now two parallel execution layers in the backend:
@@ -25,28 +64,28 @@ This keeps the mobile backend and the Fetch demo path aligned.
 
 ## Files Added For Fetch
 
-- [backend/fetch_runtime.py](/Users/eliotboda/Desktop/Projects/DiamondHacks/backend/fetch_runtime.py)
+- [backend/fetch_runtime.py](/Users/jt/Desktop/diamondhacks/backend/fetch_runtime.py)
   - Shared bridge from chat requests into the existing backend agent chain.
-- [backend/fetch_agents/builder.py](/Users/eliotboda/Desktop/Projects/DiamondHacks/backend/fetch_agents/builder.py)
+- [backend/fetch_agents/builder.py](/Users/jt/Desktop/diamondhacks/backend/fetch_agents/builder.py)
   - Builds ASI:One-compatible `uAgents` using `chat_protocol_spec`.
-- [backend/fetch_agents/launch.py](/Users/eliotboda/Desktop/Projects/DiamondHacks/backend/fetch_agents/launch.py)
+- [backend/fetch_agents/launch.py](/Users/jt/Desktop/diamondhacks/backend/fetch_agents/launch.py)
   - Launches one Fetch agent by slug.
-- [backend/run_fetch_agents.py](/Users/eliotboda/Desktop/Projects/DiamondHacks/backend/run_fetch_agents.py)
+- [backend/run_fetch_agents.py](/Users/jt/Desktop/diamondhacks/backend/run_fetch_agents.py)
   - Launches all Fetch agents as subprocesses.
-- [tests/test_fetch_runtime.py](/Users/eliotboda/Desktop/Projects/DiamondHacks/tests/test_fetch_runtime.py)
+- [tests/test_fetch_runtime.py](/Users/jt/Desktop/diamondhacks/tests/test_fetch_runtime.py)
   - Verifies the Fetch runtime bridge and chat-to-agent mapping.
 
 ## Existing Backend Files Updated
 
-- [requirements.txt](/Users/eliotboda/Desktop/Projects/DiamondHacks/requirements.txt)
+- [requirements.txt](/Users/jt/Desktop/diamondhacks/requirements.txt)
   - Added `uagents==0.24.0` and `uagents-core`.
-- [.env.example](/Users/eliotboda/Desktop/Projects/DiamondHacks/.env.example)
+- [.env.example](/Users/jt/Desktop/diamondhacks/.env.example)
   - Added Fetch/Agentverse env vars and agent seed vars.
-- [Makefile](/Users/eliotboda/Desktop/Projects/DiamondHacks/Makefile)
+- [Makefile](/Users/jt/Desktop/diamondhacks/Makefile)
   - Added `run-fetch-agents`.
-- [backend/README.md](/Users/eliotboda/Desktop/Projects/DiamondHacks/backend/README.md)
+- [backend/README.md](/Users/jt/Desktop/diamondhacks/backend/README.md)
   - Added setup notes for Fetch and how it fits with Browser Use.
-- [.gitignore](/Users/eliotboda/Desktop/Projects/DiamondHacks/.gitignore)
+- [.gitignore](/Users/jt/Desktop/diamondhacks/.gitignore)
   - Expanded to ignore local venvs and runtime clutter.
 
 ## What Is Implemented Now
@@ -60,7 +99,7 @@ Each agent slug now has a Fetch-side spec with:
 - seed env var
 - short capability description
 
-These specs live in [backend/fetch_runtime.py](/Users/eliotboda/Desktop/Projects/DiamondHacks/backend/fetch_runtime.py).
+These specs live in [backend/fetch_runtime.py](/Users/jt/Desktop/diamondhacks/backend/fetch_runtime.py).
 
 ### 2. ASI:One-compatible chat protocol wiring
 
@@ -145,6 +184,18 @@ Verified:
 Observed blocker:
 
 - Mailbox creation is not yet completed for the running local agent
+
+## Validation Checklist
+
+Use this sequence before demoing Fetch:
+
+1. Run `make run` and confirm the backend is reachable on `8000`.
+2. Export `AGENTVERSE_API_KEY` and all ten Fetch seed variables.
+3. Run `make run-fetch-agents` and confirm the Fetch ports `9201-9210` are occupied by the expected slugs.
+4. Send a smoke request to a search agent and confirm the response includes the mapped marketplace summary.
+5. Send a sell-side request and confirm the Fetch response reuses the same backend logic as the FastAPI path.
+6. If you are testing mailbox-backed Agentverse behavior, keep `FETCH_USE_LOCAL_ENDPOINT=false`.
+7. If you need the older local inspector mode for debugging, set `FETCH_USE_LOCAL_ENDPOINT=true` and document that the run is not mailbox-backed.
 
 ## Important Environment Note
 

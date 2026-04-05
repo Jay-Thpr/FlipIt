@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+from datetime import datetime, timezone
 from dataclasses import dataclass
 from uuid import uuid4
 
@@ -101,6 +102,7 @@ BUY_SEARCH_AGENT_CHAIN = (
     ("offerup_search_agent", "offerup_search"),
 )
 BUY_SEARCH_STEPS_BY_AGENT = {agent_slug: step_name for agent_slug, step_name in BUY_SEARCH_AGENT_CHAIN}
+BUY_SEARCH_STEPS = tuple(step_name for _, step_name in BUY_SEARCH_AGENT_CHAIN)
 
 
 def list_fetch_agent_slugs() -> list[str]:
@@ -140,6 +142,69 @@ def build_buy_input(text: str) -> dict[str, object]:
         "query": query or text.strip() or "resale item",
         "budget": extract_budget(text),
     }
+
+
+def _today_iso_date() -> str:
+    return datetime.now(timezone.utc).date().isoformat()
+
+
+def buy_search_results_are_empty(search_outputs: dict[str, dict[str, object]]) -> bool:
+    return not any(search_outputs.get(step_name, {}).get("results") for step_name in BUY_SEARCH_STEPS)
+
+
+def build_buy_no_results_outputs(
+    *,
+    buy_input: dict[str, object],
+    search_outputs: dict[str, dict[str, object]],
+) -> dict[str, dict[str, object]]:
+    query = normalize_text(str(buy_input.get("query") or ""))
+    summary_query = query or "the search query"
+    no_results_summary = f"No marketplace listings were found for {summary_query}."
+    top_choice = {
+        "platform": "depop",
+        "title": "No marketplace listings found",
+        "price": 0.0,
+        "score": 0.0,
+        "reason": no_results_summary,
+        "url": "",
+        "seller": "",
+        "seller_score": 0,
+        "posted_at": _today_iso_date(),
+    }
+    ranking_output = {
+        "agent": "ranking_agent",
+        "display_name": "Ranking Agent",
+        "summary": no_results_summary,
+        "top_choice": top_choice,
+        "candidate_count": 0,
+        "ranked_listings": [],
+        "median_price": 0.0,
+    }
+    negotiation_output = {
+        "agent": "negotiation_agent",
+        "display_name": "Negotiation Agent",
+        "summary": no_results_summary,
+        "offers": [],
+        "browser_use": None,
+    }
+    return {
+        "ranking": ranking_output,
+        "negotiation": negotiation_output,
+    }
+
+
+def build_buy_no_results_output(
+    *,
+    agent_slug: str,
+    buy_input: dict[str, object],
+    search_outputs: dict[str, dict[str, object]],
+) -> dict[str, object]:
+    no_results_outputs = build_buy_no_results_outputs(buy_input=buy_input, search_outputs=search_outputs)
+    if agent_slug == "ranking_agent":
+        return no_results_outputs["ranking"]
+    if agent_slug == "negotiation_agent":
+        return no_results_outputs["negotiation"]
+    raise ValueError(f"Unsupported no-results BUY agent: {agent_slug}")
 
 
 async def execute_agent(
@@ -192,6 +257,15 @@ async def run_fetch_query(
     task_request: AgentTaskRequest | None = None,
 ) -> dict[str, object]:
     if task_request is not None:
+        if agent_slug in {"ranking_agent", "negotiation_agent"}:
+            previous_outputs = task_request.input["previous_outputs"]
+            if buy_search_results_are_empty(previous_outputs):
+                buy_input = task_request.input["original_input"]
+                return build_buy_no_results_output(
+                    agent_slug=agent_slug,
+                    buy_input=buy_input,
+                    search_outputs=previous_outputs,
+                )
         return await execute_agent(
             agent_slug=agent_slug,
             pipeline=task_request.pipeline,
@@ -269,6 +343,13 @@ async def run_fetch_query(
         )
 
     search_outputs = await _run_fetch_search_agents(buy_input)
+
+    if buy_search_results_are_empty(search_outputs):
+        return build_buy_no_results_output(
+            agent_slug=agent_slug,
+            buy_input=buy_input,
+            search_outputs=search_outputs,
+        )
 
     ranking = await execute_agent(
         agent_slug="ranking_agent",
