@@ -9,6 +9,7 @@ from backend.config import get_agent_timeout_seconds, get_buy_agent_max_retries
 from backend.schemas import (
     AgentTaskRequest,
     PipelineStartRequest,
+    SellListingReviewState,
     SessionEvent,
     normalize_vision_correction,
     validate_agent_output,
@@ -164,12 +165,40 @@ async def _run_buy_search_parallel(
         )
         return step_name, validated
 
-    pairs = await asyncio.gather(*[run_one(slug, step) for slug, step in BUY_SEARCH_STEPS])
+    raw_results = await asyncio.gather(
+        *[run_one(slug, step) for slug, step in BUY_SEARCH_STEPS],
+        return_exceptions=True,
+    )
     completion_order = ("depop_search", "ebay_search", "mercari_search", "offerup_search")
-    by_step = dict(pairs)
+    slug_by_step = {step: slug for slug, step in BUY_SEARCH_STEPS}
+    display_by_step = {
+        "depop_search": "Depop Search Agent",
+        "ebay_search": "eBay Search Agent",
+        "mercari_search": "Mercari Search Agent",
+        "offerup_search": "OfferUp Search Agent",
+    }
+    by_step: dict[str, dict] = {}
+    for result in raw_results:
+        if isinstance(result, Exception):
+            # execute_step already published agent_error; inject empty fallback output
+            continue
+        step_name, validated = result
+        by_step[step_name] = validated
+
     for step_name in completion_order:
+        agent_slug = slug_by_step[step_name]
+        if step_name not in by_step:
+            # Agent failed — substitute empty fallback so ranking can still run
+            by_step[step_name] = {
+                "agent": agent_slug,
+                "display_name": display_by_step[step_name],
+                "summary": f"{display_by_step[step_name]} failed — no results",
+                "results": [],
+                "execution_mode": "fallback",
+                "browser_use_error": None,
+                "browser_use": None,
+            }
         validated_output = by_step[step_name]
-        agent_slug = next(slug for slug, name in BUY_SEARCH_STEPS if name == step_name)
         outputs[step_name] = validated_output
         context[step_name] = validated_output
         partial_result = {"pipeline": "buy", "outputs": outputs}
@@ -352,3 +381,52 @@ async def resume_sell_pipeline(session_id: str, corrected_item: dict[str, Any]) 
             pipeline="sell",
             data={"mode": "sell", "error": str(exc), "partial_result": partial_result},
         )
+
+
+async def handle_sell_listing_decision(
+    session_id: str,
+    decision: str,
+    *,
+    revision_instructions: str | None = None,
+) -> None:
+    """Records the latest paused sell-listing review decision and emits a transition event."""
+    session = await session_manager.get_session(session_id)
+    if session is None or session.pipeline != "sell":
+        return
+
+    review = session.sell_listing_review
+    if review is None:
+        return
+
+    event_type = "listing_decision_received"
+    event_data: dict[str, Any] = {"decision": decision}
+
+    if decision == "confirm_submit":
+        review.state = "submitting"
+        review.latest_decision = "confirm_submit"
+        review.revision_instructions = None
+        event_type = "listing_submit_requested"
+    elif decision == "revise":
+        review.state = "applying_revision"
+        review.latest_decision = "revise"
+        review.revision_instructions = revision_instructions
+        review.revision_count += 1
+        event_type = "listing_revision_requested"
+        event_data["revision_instructions"] = revision_instructions
+    elif decision == "abort":
+        review.state = "aborted"
+        review.latest_decision = "abort"
+        review.revision_instructions = None
+        event_type = "listing_abort_requested"
+    else:
+        return
+
+    session.sell_listing_review = SellListingReviewState.model_validate(review)
+    await session_manager.update_status(session_id, status=session.status, result=session.result)
+    await publish(
+        session_id,
+        event_type,
+        pipeline="sell",
+        step=review.step,
+        data=event_data,
+    )

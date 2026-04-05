@@ -20,6 +20,7 @@ from backend.schemas import (
     InternalEventRequest,
     PipelineStartRequest,
     PipelineStartResponse,
+    SellListingDecisionRequest,
     SessionEvent,
 )
 from backend.session import session_manager
@@ -104,6 +105,29 @@ async def sell_correct(request: CorrectionRequest) -> dict[str, bool]:
         raise HTTPException(status_code=404, detail="Session not found")
         
     asyncio.create_task(resume_sell_pipeline(request.session_id, request.corrected_item))
+    return {"ok": True}
+
+
+@app.post("/sell/listing-decision")
+async def sell_listing_decision(request: SellListingDecisionRequest) -> dict[str, bool]:
+    """Called by frontend when user confirms, revises, or aborts a paused sell listing review."""
+    from backend.orchestrator import handle_sell_listing_decision
+
+    session = await session_manager.get_session(request.session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.pipeline != "sell":
+        raise HTTPException(status_code=409, detail="Session is not a sell pipeline")
+    if session.status != "paused" or session.sell_listing_review is None:
+        raise HTTPException(status_code=409, detail="Session is not awaiting a sell listing decision")
+
+    asyncio.create_task(
+        handle_sell_listing_decision(
+            request.session_id,
+            request.decision,
+            revision_instructions=request.revision_instructions,
+        )
+    )
     return {"ok": True}
 
 
