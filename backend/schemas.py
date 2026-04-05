@@ -31,6 +31,21 @@ class CorrectionRequest(BaseModel):
     corrected_item: dict[str, Any]
 
 
+class SellListingDecisionRequest(BaseModel):
+    session_id: str
+    decision: Literal["confirm_submit", "revise", "abort"]
+    revision_instructions: str | None = None
+
+    def model_post_init(self, __context: Any) -> None:
+        if self.decision == "revise":
+            instructions = (self.revision_instructions or "").strip()
+            if not instructions:
+                raise ValueError("revision_instructions is required when decision='revise'")
+            self.revision_instructions = instructions
+        elif self.revision_instructions is not None:
+            self.revision_instructions = self.revision_instructions.strip() or None
+
+
 class AgentTaskRequest(BaseModel):
     session_id: str
     pipeline: Literal["sell", "buy"]
@@ -167,6 +182,8 @@ class DepopListingOutput(AgentOutputBase):
     description: str
     suggested_price: float
     category_path: str
+    listing_status: str | None = None
+    ready_for_confirmation: bool = False
     draft_status: str | None = None
     form_screenshot_url: str | None = None
     listing_preview: DepopListingPreview | None = None
@@ -288,16 +305,37 @@ class SessionEvent(BaseModel):
     timestamp: str = Field(default_factory=utc_now_iso)
 
 
+class SellListingReviewState(BaseModel):
+    state: Literal[
+        "filling_form",
+        "ready_for_confirmation",
+        "awaiting_revision",
+        "applying_revision",
+        "submitting",
+        "submitted",
+        "aborted",
+        "failed",
+    ]
+    step: str = "depop_listing"
+    platform: str = "depop"
+    latest_decision: Literal["confirm_submit", "revise", "abort"] | None = None
+    revision_instructions: str | None = None
+    revision_count: int = 0
+    paused_at: str | None = None
+    deadline_at: str | None = None
+
+
 class SessionState(BaseModel):
     session_id: str
     pipeline: Literal["sell", "buy"]
-    status: Literal["queued", "running", "completed", "failed"] = "queued"
+    status: Literal["queued", "running", "paused", "completed", "failed"] = "queued"
     created_at: str = Field(default_factory=utc_now_iso)
     updated_at: str = Field(default_factory=utc_now_iso)
     request: PipelineStartRequest
     result: dict[str, Any] = Field(default_factory=dict)
     error: str | None = None
     events: list[SessionEvent] = Field(default_factory=list)
+    sell_listing_review: SellListingReviewState | None = None
 
 
 AGENT_OUTPUT_MODELS = {
