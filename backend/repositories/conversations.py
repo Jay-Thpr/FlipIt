@@ -48,6 +48,21 @@ class ConversationRepository:
         if user_id and listing_url:
             existing = self.get_conversation_by_listing_url(str(user_id), str(listing_url))
             if existing:
+                update_fields = {
+                    k: v for k, v in payload.items()
+                    if k not in ("id", "user_id", "listing_url", "created_at") and v is not None
+                }
+                if update_fields:
+                    update_fields["updated_at"] = utc_now_iso()
+                    response = (
+                        self.client.table(self.conversations_table)
+                        .update(update_fields)
+                        .eq("id", existing["id"])
+                        .execute()
+                    )
+                    updated = self._first_row(response)
+                    if updated:
+                        return updated
                 return existing
         return self.create_conversation(payload)
 

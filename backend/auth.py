@@ -9,9 +9,12 @@ Usage:
 """
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 import jwt
 from fastapi import Depends, HTTPException, status
@@ -88,8 +91,9 @@ async def _validate_token(token: str) -> dict[str, Any]:
     if secret.strip():
         try:
             return _decode_hs256(token)
-        except jwt.PyJWTError:
-            pass  # fall through to RS256
+        except jwt.PyJWTError as exc:
+            logger.warning("HS256 decode failed: %s", exc)
+            # fall through to RS256
 
     if not is_supabase_configured():
         raise HTTPException(

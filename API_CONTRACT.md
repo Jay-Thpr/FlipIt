@@ -6,6 +6,7 @@ This document defines the interface for the backend REST endpoints and the real-
 
 | Date | Notes |
 |------|--------|
+| 2026-04-05 | Documented enriched response fields (`phase`, `next_action`, `progress`, `result_source`, `sell_summary`, `search_summary`, `top_choice`, `offer_summary`) on authenticated run endpoints (1.6.1, 1.6.3). |
 | 2026-04-05 | Added authenticated endpoints (Section 1.6); reorganized route index into public, authenticated, and legacy tables; added `/fetch-agent-capabilities` to route index. |
 | 2026-04-04 | Documented all public REST routes; aligned `GET /result` with `SessionState`; clarified `pipeline_failed.partial_result`; noted buy-side marketplace searches may run concurrently (SSE order for those steps is not guaranteed). |
 | 2026-04-04 | `GET /health` includes `fetch_enabled` and `agentverse_credentials_present` (booleans, no secrets). |
@@ -229,15 +230,23 @@ Enforces item ownership — the authenticated user must own `item_id`.
 **Response (200 OK):**
 ```json
 {
+  "session_id": "ab12cd34-5678-90ef-ghij",
   "run_id": "ab12cd34-5678-90ef-ghij",
   "item_id": "item-uuid",
   "run_url": "http://localhost:8000/runs/ab12cd34...",
   "stream_url": "http://localhost:8000/stream/ab12cd34...",
   "result_url": "http://localhost:8000/result/ab12cd34...",
   "pipeline": "sell",
-  "status": "queued"
+  "status": "queued",
+  "phase": "queued",
+  "next_action": { "type": "wait", "payload": {} },
+  "progress": null,
+  "result_source": null,
+  "created_at": "2026-04-05T12:00:00+00:00"
 }
 ```
+
+`phase` is one of `queued`, `running`, `completed`, `failed`, `awaiting_user_correction`, `awaiting_listing_review`. `next_action.type` is one of `wait`, `submit_correction`, `review_listing`, `show_result`, `show_error`. `result_source` is `null` until agents complete, then one of `httpx`, `browser_use`, `fallback`, or `mixed`.
 
 #### 1.6.2 Start BUY Pipeline (authenticated)
 
@@ -250,7 +259,20 @@ Enforces item ownership. Request body same as `POST /buy/start` (see 1.2). Respo
 
 **`GET /runs/{run_id}`**
 
-Enforces run ownership. Returns the same `SessionState`-shaped payload as `GET /result/{session_id}` (see 1.4), plus `run_id` and `item_id` fields.
+Enforces run ownership. Returns the full `SessionState`-shaped payload as `GET /result/{session_id}` (see 1.4), enriched with additional frontend-oriented fields:
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `run_id` | string | Same value as `session_id` |
+| `item_id` | string \| null | Item that owns this run |
+| `phase` | string | `queued` \| `running` \| `completed` \| `failed` \| `awaiting_user_correction` \| `awaiting_listing_review` |
+| `next_action` | object | `{ "type": "wait" | "submit_correction" | "review_listing" | "show_result" | "show_error", "payload": { ... } }` |
+| `progress` | object \| null | `{ "step": "vision_analysis", "event_type": "agent_started" }` — latest pipeline progress |
+| `result_source` | string \| null | `httpx`, `browser_use`, `fallback`, or `mixed` |
+| `sell_summary` | object | *(sell runs only)* `detected_item`, `brand`, `confidence`, `recommended_price`, `listing_title`, `listing_price`, `listing_status`, `ready_for_confirmation` |
+| `search_summary` | object | *(buy runs only)* `total_results`, `results_by_platform`, `platforms_searched`, `platforms_failed`, `median_price` |
+| `top_choice` | object \| null | *(buy runs only)* Top-ranked search result from the ranking agent |
+| `offer_summary` | object | *(buy runs only)* `total_offers`, `offers_sent`, `offers_failed`, `offers`, `best_offer` |
 
 **404** if the run is unknown. **403** if the caller does not own the run.
 

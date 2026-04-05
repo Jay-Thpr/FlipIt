@@ -8,22 +8,12 @@ import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { PlatformConnection } from '../../lib/types';
 
-interface PlatformDisplay {
-  id: string;
-  name: string;
-  shortLabel: string;
-  color: string;
-  bg: string;
-  darkColor: string;
-  darkBg: string;
-}
-
-const PLATFORM_META: Record<string, PlatformDisplay> = {
-  ebay: { id: 'ebay', name: 'eBay', shortLabel: 'eB', color: '#E53935', bg: '#FEE2E2', darkColor: '#FC8181', darkBg: '#3D0F0F' },
-  depop: { id: 'depop', name: 'Depop', shortLabel: 'Dp', color: '#D1156B', bg: '#FCE7F3', darkColor: '#F472B6', darkBg: '#3D0A24' },
-  mercari: { id: 'mercari', name: 'Mercari', shortLabel: 'Mc', color: '#1E40AF', bg: '#DBEAFE', darkColor: '#60A5FA', darkBg: '#0F1E3D' },
-  offerup: { id: 'offerup', name: 'OfferUp', shortLabel: 'Ou', color: '#D97706', bg: '#FEF3C7', darkColor: '#FBBF24', darkBg: '#3D2000' },
-  facebook: { id: 'facebook', name: 'Facebook Marketplace', shortLabel: 'Fb', color: '#1877F2', bg: '#EFF6FF', darkColor: '#60A5FA', darkBg: '#0F1E3D' },
+const PLATFORM_NAMES: Record<string, string> = {
+  ebay: 'eBay',
+  depop: 'Depop',
+  mercari: 'Mercari',
+  offerup: 'OfferUp',
+  facebook: 'Facebook Marketplace',
 };
 
 const PLATFORM_ORDER = ['ebay', 'depop', 'mercari', 'offerup', 'facebook'];
@@ -97,20 +87,15 @@ export default function PlatformsScreen() {
             </View>
           ) : (
             PLATFORM_ORDER.map((pid, idx) => {
-              const meta = PLATFORM_META[pid];
+              const name = PLATFORM_NAMES[pid] ?? pid;
               const conn = connections.find(c => c.platform === pid);
               const isConnected = conn?.connected ?? false;
-              const iconColor = isDark ? meta.darkColor : meta.color;
-              const iconBg = isDark ? meta.darkBg : meta.bg;
               return (
                 <React.Fragment key={pid}>
                   {idx > 0 && <View style={[styles.divider, { backgroundColor: colors.divider }]} />}
                   <TouchableOpacity style={styles.platformRow} onPress={() => togglePlatform(pid)} activeOpacity={0.7}>
-                    <View style={[styles.platformIcon, { backgroundColor: iconBg }]}>
-                      <Text style={[styles.platformIconText, { color: iconColor }]}>{meta.shortLabel}</Text>
-                    </View>
                     <View style={styles.platformInfo}>
-                      <Text style={[styles.platformName, { color: colors.textPrimary }]}>{meta.name}</Text>
+                      <Text style={[styles.platformName, { color: colors.textPrimary }]}>{name}</Text>
                       {isConnected && conn?.username ? (
                         <Text style={[styles.platformSub, { color: colors.textMuted }]}>{conn.username}</Text>
                       ) : (
@@ -149,8 +134,6 @@ const styles = StyleSheet.create({
   card: { borderRadius: 12, overflow: 'hidden' },
   divider: { height: 1 },
   platformRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12, gap: 10 },
-  platformIcon: { width: 36, height: 36, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  platformIconText: { fontSize: 11, fontWeight: '800' },
   platformInfo: { flex: 1, gap: 2 },
   platformName: { fontSize: 15, fontWeight: '600' },
   platformSub: { fontSize: 12 },

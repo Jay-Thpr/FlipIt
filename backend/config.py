@@ -38,8 +38,8 @@ BUY_AGENT_MAX_RETRIES = int(os.getenv("BUY_AGENT_MAX_RETRIES", "1"))
 EBAY_APP_ID = os.getenv("EBAY_APP_ID", "")
 EBAY_CERT_ID = os.getenv("EBAY_CERT_ID", "")
 
-# Fetch.ai (optional; uAgent / Agentverse wiring is separate from /task contracts)
-FETCH_ENABLED = os.getenv("FETCH_ENABLED", "").lower() in ("1", "true", "yes")
+# Fetch.ai — always enabled; all pipeline execution routes through Fetch agents.
+FETCH_ENABLED = True
 AGENTVERSE_API_KEY = os.getenv("AGENTVERSE_API_KEY", "")
 
 # Supabase
@@ -62,7 +62,8 @@ def get_buy_agent_max_retries() -> int:
 
 
 def is_fetch_enabled() -> bool:
-    return os.getenv("FETCH_ENABLED", "true" if FETCH_ENABLED else "false").lower() in ("1", "true", "yes")
+    """Always True — Fetch agent routing is mandatory."""
+    return True
 
 
 def get_agentverse_api_key() -> str:

@@ -1,7 +1,8 @@
 import { TouchableOpacity, Image, View, StyleSheet, Linking } from 'react-native';
+import { API_BASE_URL } from '../constants/config';
 
 const FALLBACK_AGENT_ADDRESS = 'agent1q_placeholder'; // TODO: replace with real agent address
-const BACKEND_URL = 'http://localhost:8000'; // TODO: replace with real backend URL
+const BACKEND_URL = API_BASE_URL;
 
 export default function MasterAgentFAB() {
   const handlePress = () => {

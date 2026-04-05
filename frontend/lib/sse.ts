@@ -87,6 +87,10 @@ export function connectToRunStream(
           }
         }
       }
+      // Stream ended without a terminal event (e.g., server closed connection during pause)
+      if (!stopped) {
+        onComplete?.();
+      }
     } catch (err: any) {
       if (err.name === 'AbortError' || stopped) return;
       onError?.(err instanceof Error ? err : new Error(String(err)));

@@ -21,7 +21,7 @@ class CompletedTradeRepository:
         row = {**payload}
         if "id" not in row:
             row["id"] = str(uuid4())
-        row.setdefault("created_at", utc_now_iso())
+        row.setdefault("completed_at", utc_now_iso())
         response = self.client.table(self.trades_table).insert(row).execute()
         result = self._first_row(response)
         if result is None:

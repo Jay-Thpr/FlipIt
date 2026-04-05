@@ -19,7 +19,7 @@ EVENT_PING = "ping"
 
 SELL_AGENT_SEQUENCE = [
     "vision_agent",
-    "ebay_research_agent",
+    "ebay_sold_comps_agent",
     "pricing_agent",
     "depop_listing_agent",
 ]
@@ -30,7 +30,7 @@ BUY_AGENT_SEQUENCE = [
     "mercari_search_agent",
     "offerup_search_agent",
     "ranking_agent",
-    "haggling_agent",
+    "negotiation_agent",
 ]
 
 STREAM_KEEPALIVE_SECONDS = 15.0

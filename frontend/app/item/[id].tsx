@@ -1,19 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity, Switch, Alert, Image,
-  Animated, ActivityIndicator,
+  Animated, ActivityIndicator, TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
-import { ArrowLeft, ChevronRight, ChevronLeft, Plus, X } from 'lucide-react-native';
+import { ArrowLeft, ChevronRight, ChevronLeft, Plus, X, Check } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { pickImage } from '../../lib/imagePicker';
 import { emit } from '../../lib/events';
 import { PLATFORM_NAMES, MarketData, Conversation } from '../../data/mockData';
-import { startSellRun, startBuyRun, getLatestRun, submitSellCorrection, submitListingDecision, AgentRunResult } from '../../lib/api';
-import { connectToRunStream, SSEEvent } from '../../lib/sse';
+import type { Platform, NegotiationStyle, ReplyTone } from '../../lib/types';
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -26,15 +25,20 @@ function timeAgo(dateStr: string): string {
   return `${days}d ago`;
 }
 
+// ---- Constants for picker options ----
+
+const CONDITION_OPTIONS = ['New', 'Like New', 'Good', 'Fair', 'Poor'];
+const NEGOTIATION_OPTIONS: NegotiationStyle[] = ['moderate', 'aggressive', 'passive'];
+const REPLY_TONE_OPTIONS: ReplyTone[] = ['professional', 'casual', 'firm'];
+const RESPONSE_DELAY_OPTIONS = ['1 min', '5 min', '15 min', '30 min', '1 hr'];
+const ALL_PLATFORMS: Platform[] = ['ebay', 'depop', 'mercari', 'offerup', 'facebook'];
+
 interface ItemDetail {
   id: string;
   type: 'buy' | 'sell';
   name: string;
   description: string;
   condition: string;
-  targetPrice: number;
-  minPrice?: number;
-  maxPrice?: number;
   autoAcceptThreshold?: number;
   initialPrice?: number;
   bestOffer?: number;
@@ -42,6 +46,7 @@ interface ItemDetail {
   quantity: number;
   negotiationStyle: string;
   replyTone: string;
+  responseDelay: string;
   platforms: string[];
   photos: { id: string; url: string; sortOrder: number }[];
   marketData: MarketData[];
@@ -55,9 +60,6 @@ function mapDbToDetail(row: any): ItemDetail {
     name: row.name,
     description: row.description ?? '',
     condition: row.condition ?? 'Good',
-    targetPrice: row.target_price ?? 0,
-    minPrice: row.min_price ?? undefined,
-    maxPrice: row.max_price ?? undefined,
     autoAcceptThreshold: row.auto_accept_threshold ?? undefined,
     initialPrice: row.initial_price ?? undefined,
     bestOffer: row.best_offer ?? undefined,
@@ -65,6 +67,7 @@ function mapDbToDetail(row: any): ItemDetail {
     quantity: row.quantity ?? 1,
     negotiationStyle: row.negotiation_style ?? 'moderate',
     replyTone: row.reply_tone ?? 'professional',
+    responseDelay: row.response_delay ?? '5 min',
     platforms: row.item_platforms?.map((p: any) => p.platform) ?? [],
     photos: (row.item_photos ?? [])
       .sort((a: any, b: any) => a.sort_order - b.sort_order)
@@ -102,26 +105,17 @@ export default function ItemDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [aiActive, setAiActive] = useState(false);
   const [photos, setPhotos] = useState<{ id: string; url: string; sortOrder: number }[]>([]);
-  const [run, setRun] = useState<AgentRunResult | null>(null);
-  const [runLoading, setRunLoading] = useState(false);
-  const [agentSteps, setAgentSteps] = useState<{ name: string; status: string; summary?: string }[]>([]);
-  const [runError, setRunError] = useState<string | null>(null);
-  const stopStreamRef = useRef<(() => void) | null>(null);
   const userToggledRef = React.useRef(false);
+
+  // Inline-edit state
+  const [editingField, setEditingField] = useState<string | null>(null);
+  const [savingField, setSavingField] = useState<string | null>(null);
+  const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   useEffect(() => {
     if (!id) return;
     loadItem();
   }, [id]);
-
-  useEffect(() => {
-    if (!id) return;
-    getLatestRun(id).then(setRun).catch(() => {});
-  }, [id]);
-
-  useEffect(() => {
-    return () => { stopStreamRef.current?.(); };
-  }, []);
 
   async function loadItem() {
     const { data } = await supabase
@@ -145,6 +139,61 @@ export default function ItemDetailScreen() {
     setLoading(false);
   }
 
+  // ---- Auto-save helpers ----
+
+  async function updateField(field: string, value: any) {
+    setSavingField(field);
+    const { error } = await supabase.from('items').update({ [field]: value }).eq('id', id);
+    if (error) console.error(`Failed to update ${field}:`, error.message);
+    // Brief indicator
+    setTimeout(() => setSavingField(prev => prev === field ? null : prev), 600);
+  }
+
+  async function updatePlatforms(platforms: string[]) {
+    setSavingField('platforms');
+    await supabase.from('item_platforms').delete().eq('item_id', id);
+    if (platforms.length > 0) {
+      await supabase.from('item_platforms').insert(platforms.map(p => ({ item_id: id, platform: p })));
+    }
+    setTimeout(() => setSavingField(prev => prev === 'platforms' ? null : prev), 600);
+  }
+
+  function updateFieldDebounced(field: string, value: any) {
+    if (debounceTimers.current[field]) clearTimeout(debounceTimers.current[field]);
+    debounceTimers.current[field] = setTimeout(() => {
+      updateField(field, value);
+    }, 800);
+  }
+
+  function handleTextChange(field: string, dbField: string, value: string) {
+    if (!item) return;
+    setItem({ ...item, [field]: value });
+    updateFieldDebounced(dbField, value);
+  }
+
+  function handleNumberChange(field: string, dbField: string, value: string) {
+    if (!item) return;
+    const num = value === '' ? null : parseFloat(value);
+    setItem({ ...item, [field]: num ?? undefined });
+    updateFieldDebounced(dbField, num);
+  }
+
+  function handlePickerChange(field: string, dbField: string, value: string) {
+    if (!item) return;
+    setItem({ ...item, [field]: value });
+    setEditingField(null);
+    updateField(dbField, value);
+  }
+
+  function handlePlatformToggle(platform: string) {
+    if (!item) return;
+    const newPlatforms = item.platforms.includes(platform)
+      ? item.platforms.filter(p => p !== platform)
+      : [...item.platforms, platform];
+    setItem({ ...item, platforms: newPlatforms });
+    updatePlatforms(newPlatforms);
+  }
+
   const photoOpacity = useRef(new Animated.Value(1)).current;
 
   if (loading) {
@@ -163,12 +212,16 @@ export default function ItemDetailScreen() {
     );
   }
 
-  function handleAiToggle(value: boolean) {
+  async function handleAiToggle(value: boolean) {
     const newStatus = value ? 'active' : 'paused';
     userToggledRef.current = true;
     setAiActive(value);
     emit('item:statusChanged', id, newStatus);
-    supabase.from('items').update({ status: newStatus }).eq('id', id);
+    const { error } = await supabase.from('items').update({ status: newStatus }).eq('id', id);
+    if (error) {
+      console.error('Failed to update item status:', error.message);
+      setAiActive(!value);
+    }
   }
 
   function movePhoto(index: number, direction: 'up' | 'down') {
@@ -181,7 +234,6 @@ export default function ItemDetailScreen() {
     ]).start();
     [newPhotos[index], newPhotos[targetIndex]] = [newPhotos[targetIndex], newPhotos[index]];
     setPhotos(newPhotos);
-    // Update sort orders in DB
     newPhotos.forEach((p, i) => {
       supabase.from('item_photos').update({ sort_order: i }).eq('id', p.id);
     });
@@ -243,9 +295,14 @@ export default function ItemDetailScreen() {
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Delete', style: 'destructive', onPress: () => {
+          text: 'Delete', style: 'destructive', onPress: async () => {
+            await supabase.from('agent_runs').delete().eq('item_id', id);
+            const { error } = await supabase.from('items').delete().eq('id', id);
+            if (error) {
+              Alert.alert('Error', `Failed to delete item: ${error.message}`);
+              return;
+            }
             emit('item:deleted', id);
-            supabase.from('items').delete().eq('id', id);
             router.back();
           }
         },
@@ -253,70 +310,7 @@ export default function ItemDetailScreen() {
     );
   }
 
-  async function handleStartRun() {
-    if (!item || !id) return;
-    setRunLoading(true);
-    setRunError(null);
-    setAgentSteps([]);
-    try {
-      let response;
-      if (item.type === 'sell') {
-        const imageUrls = photos.map(p => p.url);
-        response = await startSellRun(id, { image_urls: imageUrls, notes: item.description });
-      } else {
-        response = await startBuyRun(id, { query: item.name, budget: item.targetPrice });
-      }
-      const runId = response.run_id || response.session_id;
-
-      // Connect to SSE stream
-      stopStreamRef.current = connectToRunStream(
-        runId,
-        (event: SSEEvent) => {
-          if (event.event === 'agent_started') {
-            setAgentSteps(prev => [...prev, { name: event.data.agent_name || event.data.step, status: 'running' }]);
-          } else if (event.event === 'agent_completed') {
-            setAgentSteps(prev => prev.map(s =>
-              s.name === (event.data.agent_name || event.data.step)
-                ? { ...s, status: 'completed', summary: event.data.summary }
-                : s
-            ));
-          } else if (event.event === 'agent_error') {
-            setAgentSteps(prev => prev.map(s =>
-              s.name === (event.data.agent_name || event.data.step)
-                ? { ...s, status: 'error', summary: event.data.error }
-                : s
-            ));
-          } else if (event.event === 'pipeline_complete') {
-            getLatestRun(id).then(setRun).catch(() => {});
-          } else if (event.event === 'pipeline_failed') {
-            setRunError(event.data.error || 'Pipeline failed');
-          } else if (event.event === 'vision_low_confidence') {
-            setRun(prev => prev ? { ...prev, status: 'running' as const, sell_listing_review: null } : prev);
-            getLatestRun(id).then(setRun).catch(() => {});
-          } else if (event.event === 'listing_review_required') {
-            getLatestRun(id).then(setRun).catch(() => {});
-          }
-        },
-        (err) => { setRunError(err.message); },
-        () => { setRunLoading(false); },
-      );
-    } catch (err: any) {
-      setRunError(err.message);
-      setRunLoading(false);
-    }
-  }
-
-  async function handleListingDecision(decision: 'confirm_submit' | 'revise' | 'abort', instructions?: string) {
-    if (!run) return;
-    try {
-      await submitListingDecision(run.session_id, decision, instructions);
-      getLatestRun(id!).then(setRun).catch(() => {});
-    } catch (err: any) {
-      Alert.alert('Error', err.message);
-    }
-  }
-
-  const modeLabel = item.type === 'buy' ? 'Buying' : 'Selling';
+  const modeLabel = item?.type === 'buy' ? 'Buying' : 'Selling';
 
   return (
     <SafeAreaView
@@ -357,171 +351,21 @@ export default function ItemDetailScreen() {
           </View>
           <View style={[styles.heroDivider, { backgroundColor: colors.divider }]} />
           <View style={styles.heroMetric}>
-            <Text style={[styles.heroMetricLabel, { color: colors.textMuted }]}>TARGET</Text>
+            <Text style={[styles.heroMetricLabel, { color: colors.textMuted }]}>INITIAL</Text>
             <Text style={[styles.heroMetricValue, { color: colors.textPrimary }]}>
-              ${item.targetPrice}
+              {item.initialPrice != null ? `$${item.initialPrice}` : '--'}
             </Text>
           </View>
         </View>
       </View>
 
-      {/* Agent Run Section */}
-      {!run || run.status === 'completed' || run.status === 'failed' ? (
-        <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
-          <TouchableOpacity
-            style={{
-              backgroundColor: colors.accent,
-              borderRadius: 12,
-              paddingVertical: 14,
-              alignItems: 'center',
-              opacity: runLoading ? 0.6 : 1,
-            }}
-            onPress={handleStartRun}
-            disabled={runLoading}
-            activeOpacity={0.7}
-          >
-            <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '700' }}>
-              {runLoading ? 'Starting...' : item.type === 'sell' ? '🔍 Start Selling' : '🛒 Start Buying'}
-            </Text>
-          </TouchableOpacity>
-          {runError && (
-            <Text style={{ color: colors.destructive, fontSize: 13, marginTop: 8, textAlign: 'center' }}>{runError}</Text>
-          )}
-        </View>
-      ) : null}
-
-      {/* Agent Steps Progress */}
-      {agentSteps.length > 0 && (
-        <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
-          <Text style={[styles.sectionLabel, { color: colors.textMuted, paddingHorizontal: 4 }]}>AGENT PROGRESS</Text>
-          <View style={[styles.cardBody, { backgroundColor: colors.surface }]}>
-            {agentSteps.map((step, idx) => (
-              <View key={idx}>
-                {idx > 0 && <View style={[styles.divider, { backgroundColor: colors.divider }]} />}
-                <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, gap: 10 }}>
-                  <Text style={{ fontSize: 14 }}>
-                    {step.status === 'running' ? '⏳' : step.status === 'completed' ? '✅' : '❌'}
-                  </Text>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: '600' }}>
-                      {step.name?.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
-                    </Text>
-                    {step.summary && (
-                      <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }} numberOfLines={2}>
-                        {step.summary}
-                      </Text>
-                    )}
-                  </View>
-                </View>
-              </View>
-            ))}
-          </View>
-        </View>
-      )}
-
-      {/* Sell Listing Review */}
-      {run?.sell_listing_review && run.status === 'running' && (
-        <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
-          <Text style={[styles.sectionLabel, { color: colors.textMuted, paddingHorizontal: 4 }]}>LISTING REVIEW</Text>
-          <View style={[styles.cardBody, { backgroundColor: colors.surface, padding: 14 }]}>
-            <Text style={{ color: colors.textPrimary, fontSize: 15, fontWeight: '600', marginBottom: 8 }}>
-              Review your listing before posting
-            </Text>
-            {run.sell_listing_review.listing_preview && (
-              <View style={{ gap: 4, marginBottom: 12 }}>
-                <Text style={{ color: colors.textMuted, fontSize: 12 }}>Title: {run.sell_listing_review.listing_preview.title}</Text>
-                <Text style={{ color: colors.textMuted, fontSize: 12 }}>Price: ${run.sell_listing_review.listing_preview.price}</Text>
-                {run.sell_listing_review.listing_preview.description && (
-                  <Text style={{ color: colors.textMuted, fontSize: 12 }} numberOfLines={3}>
-                    {run.sell_listing_review.listing_preview.description}
-                  </Text>
-                )}
-              </View>
-            )}
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              <TouchableOpacity
-                style={{ flex: 1, backgroundColor: colors.accent, borderRadius: 8, paddingVertical: 10, alignItems: 'center' }}
-                onPress={() => handleListingDecision('confirm_submit')}
-              >
-                <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 14 }}>Confirm & Post</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={{ flex: 1, backgroundColor: colors.muted, borderRadius: 8, paddingVertical: 10, alignItems: 'center' }}
-                onPress={() => handleListingDecision('abort')}
-              >
-                <Text style={{ color: colors.textPrimary, fontWeight: '600', fontSize: 14 }}>Abort</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      )}
-
-      {/* Buy Results */}
-      {run?.status === 'completed' && run.pipeline === 'buy' && run.result?.outputs && (
-        <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
-          <Text style={[styles.sectionLabel, { color: colors.textMuted, paddingHorizontal: 4 }]}>SEARCH RESULTS</Text>
-          <View style={[styles.cardBody, { backgroundColor: colors.surface, padding: 14 }]}>
-            {run.result.outputs.ranking?.top_choice && (
-              <View style={{ marginBottom: 8 }}>
-                <Text style={{ color: colors.accent, fontSize: 14, fontWeight: '700' }}>Top Choice</Text>
-                <Text style={{ color: colors.textPrimary, fontSize: 16, fontWeight: '800', marginTop: 2 }}>
-                  ${run.result.outputs.ranking.top_choice.price} — {run.result.outputs.ranking.top_choice.platform}
-                </Text>
-                {run.result.outputs.ranking.top_choice.seller && (
-                  <Text style={{ color: colors.textMuted, fontSize: 12 }}>Seller: {run.result.outputs.ranking.top_choice.seller}</Text>
-                )}
-              </View>
-            )}
-            {run.result.outputs.negotiation?.offers && (
-              <View>
-                <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: '600', letterSpacing: 0.5, marginTop: 8, marginBottom: 4 }}>OFFERS SENT</Text>
-                {run.result.outputs.negotiation.offers.map((offer: any, idx: number) => (
-                  <View key={idx} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6 }}>
-                    <Text style={{ color: colors.textPrimary, fontSize: 13 }}>{offer.seller || offer.platform}</Text>
-                    <Text style={{ color: offer.status === 'sent' ? colors.accent : colors.textMuted, fontSize: 13, fontWeight: '600' }}>
-                      {offer.status === 'sent' ? '✓ Sent' : offer.status}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
-        </View>
-      )}
-
-      {/* Sell Results */}
-      {run?.status === 'completed' && run.pipeline === 'sell' && run.result?.outputs && (
-        <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
-          <Text style={[styles.sectionLabel, { color: colors.textMuted, paddingHorizontal: 4 }]}>SELL RESULTS</Text>
-          <View style={[styles.cardBody, { backgroundColor: colors.surface, padding: 14 }]}>
-            {run.result.outputs.pricing && (
-              <View style={{ marginBottom: 8 }}>
-                <Text style={{ color: colors.accent, fontSize: 14, fontWeight: '700' }}>Recommended Price</Text>
-                <Text style={{ color: colors.textPrimary, fontSize: 24, fontWeight: '800', marginTop: 2 }}>
-                  ${run.result.outputs.pricing.recommended_list_price || run.result.outputs.pricing.recommended_price}
-                </Text>
-                {run.result.outputs.pricing.profit_margin != null && (
-                  <Text style={{ color: colors.accent, fontSize: 14, marginTop: 2 }}>
-                    Profit margin: ${run.result.outputs.pricing.profit_margin}
-                  </Text>
-                )}
-              </View>
-            )}
-            {run.result.outputs.ebay_sold_comps && (
-              <Text style={{ color: colors.textMuted, fontSize: 12 }}>
-                Based on {run.result.outputs.ebay_sold_comps.sample_size || '?'} eBay sold comps
-              </Text>
-            )}
-          </View>
-        </View>
-      )}
-
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
         style={{ backgroundColor: colors.background }}
+        keyboardShouldPersistTaps="handled"
       >
-        {/* Photos gallery */}
+        {/* 1. Photos gallery */}
         <View style={styles.section}>
           <View style={styles.photoHeaderRow}>
             <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>
@@ -599,48 +443,215 @@ export default function ItemDetailScreen() {
           )}
         </View>
 
-        {/* Details card */}
+        {/* 2. Item Details section */}
         <View style={styles.sectionLarge}>
-          <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>DETAILS</Text>
+          <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>ITEM DETAILS</Text>
           <View style={[styles.cardBody, { backgroundColor: colors.surface }]}>
-            <View style={styles.descriptionBlock}>
-              <Text style={[styles.descriptionValue, { color: colors.textPrimary }]}>
-                {item.description}
-              </Text>
-            </View>
+            {/* Name */}
+            <EditableTextField
+              label="Name"
+              value={item.name}
+              field="name"
+              dbField="name"
+              colors={colors}
+              editingField={editingField}
+              savingField={savingField}
+              onStartEdit={setEditingField}
+              onChange={handleTextChange}
+              onEndEdit={() => setEditingField(null)}
+            />
             <View style={[styles.divider, { backgroundColor: colors.divider }]} />
-            <View style={styles.infoGrid}>
-              <InfoCell label="Condition" value={item.condition} colors={colors} />
-              <InfoCell label="Quantity" value={`${item.quantity}`} colors={colors} />
-              <InfoCell label="Negotiation" value={item.negotiationStyle.charAt(0).toUpperCase() + item.negotiationStyle.slice(1)} colors={colors} />
-              <InfoCell label="Tone" value={item.replyTone.charAt(0).toUpperCase() + item.replyTone.slice(1)} colors={colors} />
-            </View>
+
+            {/* Description */}
+            <EditableTextField
+              label="Description"
+              value={item.description}
+              field="description"
+              dbField="description"
+              colors={colors}
+              editingField={editingField}
+              savingField={savingField}
+              onStartEdit={setEditingField}
+              onChange={handleTextChange}
+              onEndEdit={() => setEditingField(null)}
+              multiline
+            />
             <View style={[styles.divider, { backgroundColor: colors.divider }]} />
-            {item.initialPrice != null && <SettingRow label="Initial Price" value={`$${item.initialPrice}`} colors={colors} />}
-            <SettingRow label="Target Price" value={`$${item.targetPrice}`} colors={colors} />
-            {item.minPrice != null && <SettingRow label="Min Acceptable" value={`$${item.minPrice}`} colors={colors} />}
-            {item.maxPrice != null && <SettingRow label="Max Acceptable" value={`$${item.maxPrice}`} colors={colors} />}
-            {item.autoAcceptThreshold != null && <SettingRow label="Auto-Accept" value={`$${item.autoAcceptThreshold}`} colors={colors} />}
+
+            {/* Condition */}
+            <EditablePickerField
+              label="Condition"
+              value={item.condition}
+              field="condition"
+              dbField="condition"
+              options={CONDITION_OPTIONS}
+              colors={colors}
+              editingField={editingField}
+              savingField={savingField}
+              onStartEdit={setEditingField}
+              onChange={handlePickerChange}
+            />
             <View style={[styles.divider, { backgroundColor: colors.divider }]} />
-            <SettingRow label="Platforms" value={item.platforms.map(p => PLATFORM_NAMES[p as keyof typeof PLATFORM_NAMES] ?? p).join(', ')} colors={colors} />
+
+            {/* Quantity */}
+            <EditableNumberField
+              label="Quantity"
+              value={item.quantity}
+              field="quantity"
+              dbField="quantity"
+              colors={colors}
+              editingField={editingField}
+              savingField={savingField}
+              onStartEdit={setEditingField}
+              onChange={handleNumberChange}
+              onEndEdit={() => setEditingField(null)}
+            />
           </View>
         </View>
 
-        {/* Market Overview */}
+        {/* 3. Pricing section */}
+        <View style={styles.sectionLarge}>
+          <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>PRICING</Text>
+          <View style={[styles.cardBody, { backgroundColor: colors.surface }]}>
+            {/* Initial Price */}
+            <EditableNumberField
+              label="Initial Price"
+              value={item.initialPrice}
+              field="initialPrice"
+              dbField="initial_price"
+              colors={colors}
+              editingField={editingField}
+              savingField={savingField}
+              onStartEdit={setEditingField}
+              onChange={handleNumberChange}
+              onEndEdit={() => setEditingField(null)}
+              prefix="$"
+              placeholder="Not set"
+            />
+            <View style={[styles.divider, { backgroundColor: colors.divider }]} />
+
+            {/* Auto-Accept Threshold */}
+            <EditableNumberField
+              label="Auto-Accept Threshold"
+              value={item.autoAcceptThreshold}
+              field="autoAcceptThreshold"
+              dbField="auto_accept_threshold"
+              colors={colors}
+              editingField={editingField}
+              savingField={savingField}
+              onStartEdit={setEditingField}
+              onChange={handleNumberChange}
+              onEndEdit={() => setEditingField(null)}
+              prefix="$"
+              placeholder="Not set"
+            />
+          </View>
+        </View>
+
+        {/* 4. Agent Settings section */}
+        <View style={styles.sectionLarge}>
+          <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>AGENT SETTINGS</Text>
+          <View style={[styles.cardBody, { backgroundColor: colors.surface }]}>
+            {/* Negotiation Style */}
+            <SegmentedField
+              label="Negotiation Style"
+              value={item.negotiationStyle}
+              field="negotiationStyle"
+              dbField="negotiation_style"
+              options={NEGOTIATION_OPTIONS}
+              colors={colors}
+              savingField={savingField}
+              onChange={handlePickerChange}
+            />
+            <View style={[styles.divider, { backgroundColor: colors.divider }]} />
+
+            {/* Reply Tone */}
+            <SegmentedField
+              label="Reply Tone"
+              value={item.replyTone}
+              field="replyTone"
+              dbField="reply_tone"
+              options={REPLY_TONE_OPTIONS}
+              colors={colors}
+              savingField={savingField}
+              onChange={handlePickerChange}
+            />
+            <View style={[styles.divider, { backgroundColor: colors.divider }]} />
+
+            {/* Response Delay */}
+            <EditablePickerField
+              label="Response Delay"
+              value={item.responseDelay}
+              field="responseDelay"
+              dbField="response_delay"
+              options={RESPONSE_DELAY_OPTIONS}
+              colors={colors}
+              editingField={editingField}
+              savingField={savingField}
+              onStartEdit={setEditingField}
+              onChange={handlePickerChange}
+            />
+          </View>
+        </View>
+
+        {/* 5. Platforms section */}
+        <View style={styles.sectionLarge}>
+          <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>PLATFORMS</Text>
+          <View style={[styles.cardBody, { backgroundColor: colors.surface }]}>
+            {ALL_PLATFORMS.map((platform, idx) => (
+              <React.Fragment key={platform}>
+                {idx > 0 && <View style={[styles.divider, { backgroundColor: colors.divider }]} />}
+                <TouchableOpacity
+                  style={styles.platformRow}
+                  onPress={() => handlePlatformToggle(platform)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.platformLabel, { color: colors.textPrimary }]}>
+                    {PLATFORM_NAMES[platform as keyof typeof PLATFORM_NAMES] ?? platform}
+                  </Text>
+                  <View style={styles.platformRight}>
+                    {savingField === 'platforms' && (
+                      <ActivityIndicator size="small" color={colors.accent} style={{ marginRight: 6 }} />
+                    )}
+                    <View style={[
+                      styles.checkBox,
+                      { borderColor: item.platforms.includes(platform) ? colors.accent : colors.muted },
+                      item.platforms.includes(platform) && { backgroundColor: colors.accent },
+                    ]}>
+                      {item.platforms.includes(platform) && (
+                        <Check size={14} color={colors.white} />
+                      )}
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              </React.Fragment>
+            ))}
+          </View>
+        </View>
+
+        {/* 6. Market Overview */}
         <View style={styles.sectionLarge}>
           <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>MARKET OVERVIEW</Text>
         </View>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.marketScroll}
-        >
-          {item.marketData.map(md => (
-            <MarketCard key={md.platform} data={md} />
-          ))}
-        </ScrollView>
+        {item.marketData.length === 0 ? (
+          <View style={[styles.cardBody, { backgroundColor: colors.surface, marginHorizontal: 16 }]}>
+            <Text style={[styles.emptyText, { color: colors.textMuted }]}>
+              No market data yet. Run an agent to populate.
+            </Text>
+          </View>
+        ) : (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.marketScroll}
+          >
+            {item.marketData.map(md => (
+              <MarketCard key={md.platform} data={md} />
+            ))}
+          </ScrollView>
+        )}
 
-        {/* Conversations */}
+        {/* 7. Conversations */}
         <View style={styles.sectionLarge}>
           <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>
             CONVERSATIONS ({item.conversations.length})
@@ -664,7 +675,7 @@ export default function ItemDetailScreen() {
           </View>
         </View>
 
-        {/* Archive */}
+        {/* 8. Delete */}
         <TouchableOpacity
           style={styles.deleteBtn}
           onPress={handleDelete}
@@ -681,25 +692,229 @@ export default function ItemDetailScreen() {
   );
 }
 
-// ─── Sub-components ────────────────────────────────────────────────────────────
+// ---- Editable field sub-components ----
 
-function InfoCell({ label, value, colors }: { label: string; value: string; colors: any }) {
+function SaveIndicator({ visible, colors }: { visible: boolean; colors: any }) {
+  if (!visible) return null;
   return (
-    <View style={styles.infoCell}>
-      <Text style={[styles.infoCellLabel, { color: colors.textMuted }]}>{label}</Text>
-      <Text style={[styles.infoCellValue, { color: colors.textPrimary }]}>{value}</Text>
+    <View style={editStyles.saveIndicator}>
+      <Check size={12} color={colors.accent} />
     </View>
   );
 }
 
-function SettingRow({ label, value, colors }: { label: string; value: string; colors: any }) {
+function EditableTextField({
+  label, value, field, dbField, colors, editingField, savingField,
+  onStartEdit, onChange, onEndEdit, multiline,
+}: {
+  label: string; value: string; field: string; dbField: string; colors: any;
+  editingField: string | null; savingField: string | null;
+  onStartEdit: (f: string) => void; onChange: (field: string, dbField: string, val: string) => void;
+  onEndEdit: () => void; multiline?: boolean;
+}) {
+  const isEditing = editingField === field;
+  const isSaving = savingField === dbField;
+
+  if (isEditing) {
+    return (
+      <View style={editStyles.fieldContainer}>
+        <Text style={[editStyles.fieldLabel, { color: colors.textMuted }]}>{label}</Text>
+        <TextInput
+          style={[
+            editStyles.textInput,
+            { color: colors.textPrimary, backgroundColor: colors.surfaceRaised, borderColor: colors.accent },
+            multiline && { minHeight: 72, textAlignVertical: 'top' },
+          ]}
+          value={value}
+          onChangeText={(text) => onChange(field, dbField, text)}
+          onBlur={onEndEdit}
+          autoFocus
+          multiline={multiline}
+          returnKeyType={multiline ? 'default' : 'done'}
+          blurOnSubmit={!multiline}
+          placeholderTextColor={colors.textMuted}
+        />
+      </View>
+    );
+  }
+
   return (
-    <View style={styles.settingRow}>
-      <Text style={[styles.settingLabel, { color: colors.textMuted }]}>{label}</Text>
-      <Text style={[styles.settingValue, { color: colors.textPrimary }]}>{value}</Text>
+    <TouchableOpacity
+      style={editStyles.fieldContainer}
+      onPress={() => onStartEdit(field)}
+      activeOpacity={0.7}
+    >
+      <View style={editStyles.fieldRow}>
+        <Text style={[editStyles.fieldLabel, { color: colors.textMuted }]}>{label}</Text>
+        <SaveIndicator visible={isSaving} colors={colors} />
+      </View>
+      <Text style={[editStyles.fieldValue, { color: colors.textPrimary }]}>
+        {value || 'Tap to edit'}
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
+function EditableNumberField({
+  label, value, field, dbField, colors, editingField, savingField,
+  onStartEdit, onChange, onEndEdit, prefix, placeholder,
+}: {
+  label: string; value?: number; field: string; dbField: string; colors: any;
+  editingField: string | null; savingField: string | null;
+  onStartEdit: (f: string) => void; onChange: (field: string, dbField: string, val: string) => void;
+  onEndEdit: () => void; prefix?: string; placeholder?: string;
+}) {
+  const isEditing = editingField === field;
+  const isSaving = savingField === dbField;
+  const displayValue = value != null ? `${prefix ?? ''}${value}` : (placeholder ?? 'Not set');
+
+  if (isEditing) {
+    return (
+      <View style={editStyles.fieldContainer}>
+        <Text style={[editStyles.fieldLabel, { color: colors.textMuted }]}>{label}</Text>
+        <View style={editStyles.numberInputRow}>
+          {prefix && <Text style={[editStyles.numberPrefix, { color: colors.textMuted }]}>{prefix}</Text>}
+          <TextInput
+            style={[
+              editStyles.textInput,
+              editStyles.numberInput,
+              { color: colors.textPrimary, backgroundColor: colors.surfaceRaised, borderColor: colors.accent },
+            ]}
+            value={value != null ? String(value) : ''}
+            onChangeText={(text) => onChange(field, dbField, text)}
+            onBlur={onEndEdit}
+            autoFocus
+            keyboardType="numeric"
+            returnKeyType="done"
+            blurOnSubmit
+            placeholder="0"
+            placeholderTextColor={colors.textMuted}
+          />
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <TouchableOpacity
+      style={editStyles.fieldContainer}
+      onPress={() => onStartEdit(field)}
+      activeOpacity={0.7}
+    >
+      <View style={editStyles.fieldRow}>
+        <Text style={[editStyles.fieldLabel, { color: colors.textMuted }]}>{label}</Text>
+        <SaveIndicator visible={isSaving} colors={colors} />
+      </View>
+      <Text style={[
+        editStyles.fieldValue,
+        { color: value != null ? colors.textPrimary : colors.textMuted },
+        value != null && { fontVariant: ['tabular-nums'] as any },
+      ]}>
+        {displayValue}
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
+function EditablePickerField({
+  label, value, field, dbField, options, colors, editingField, savingField,
+  onStartEdit, onChange,
+}: {
+  label: string; value: string; field: string; dbField: string;
+  options: string[]; colors: any;
+  editingField: string | null; savingField: string | null;
+  onStartEdit: (f: string) => void;
+  onChange: (field: string, dbField: string, val: string) => void;
+}) {
+  const isEditing = editingField === field;
+  const isSaving = savingField === dbField;
+
+  return (
+    <View>
+      <TouchableOpacity
+        style={editStyles.fieldContainer}
+        onPress={() => onStartEdit(isEditing ? '' : field)}
+        activeOpacity={0.7}
+      >
+        <View style={editStyles.fieldRow}>
+          <Text style={[editStyles.fieldLabel, { color: colors.textMuted }]}>{label}</Text>
+          <View style={editStyles.fieldRow}>
+            <SaveIndicator visible={isSaving} colors={colors} />
+            <Text style={[editStyles.fieldValue, { color: colors.textPrimary }]}>
+              {value}
+            </Text>
+            <ChevronRight size={14} color={colors.textMuted} style={{ marginLeft: 4 }} />
+          </View>
+        </View>
+      </TouchableOpacity>
+      {isEditing && (
+        <View style={[editStyles.pickerOptions, { backgroundColor: colors.surfaceRaised }]}>
+          {options.map((opt) => (
+            <TouchableOpacity
+              key={opt}
+              style={[
+                editStyles.pickerOption,
+                value === opt && { backgroundColor: colors.accent + '18' },
+              ]}
+              onPress={() => onChange(field, dbField, opt)}
+              activeOpacity={0.7}
+            >
+              <Text style={[
+                editStyles.pickerOptionText,
+                { color: value === opt ? colors.accent : colors.textPrimary },
+                value === opt && { fontWeight: '700' },
+              ]}>
+                {opt}
+              </Text>
+              {value === opt && <Check size={14} color={colors.accent} />}
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
     </View>
   );
 }
+
+function SegmentedField({
+  label, value, field, dbField, options, colors, savingField, onChange,
+}: {
+  label: string; value: string; field: string; dbField: string;
+  options: string[]; colors: any; savingField: string | null;
+  onChange: (field: string, dbField: string, val: string) => void;
+}) {
+  const isSaving = savingField === dbField;
+
+  return (
+    <View style={editStyles.segmentContainer}>
+      <View style={editStyles.fieldRow}>
+        <Text style={[editStyles.segmentLabel, { color: colors.textPrimary }]}>{label}</Text>
+        <SaveIndicator visible={isSaving} colors={colors} />
+      </View>
+      <View style={[editStyles.segmented, { backgroundColor: colors.muted }]}>
+        {options.map((opt) => {
+          const active = value === opt;
+          return (
+            <TouchableOpacity
+              key={opt}
+              style={[editStyles.segBtn, active && { backgroundColor: colors.surface }]}
+              onPress={() => onChange(field, dbField, opt)}
+            >
+              <Text style={[
+                editStyles.segText,
+                { color: active ? colors.textPrimary : colors.textMuted },
+                active && editStyles.segTextActive,
+              ]}>
+                {opt.charAt(0).toUpperCase() + opt.slice(1)}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+// ---- Existing sub-components ----
 
 function MarketCard({ data }: { data: MarketData }) {
   const { colors } = useTheme();
@@ -724,7 +939,7 @@ function MarketCard({ data }: { data: MarketData }) {
 
 function ConvRow({ conv, onPress }: { conv: Conversation; onPress: () => void }) {
   const { colors } = useTheme();
-  const initial = conv.username[0].toUpperCase();
+  const initial = (conv.username || '?')[0].toUpperCase();
   return (
     <TouchableOpacity style={styles.convRow} onPress={onPress} activeOpacity={0.7}>
       <View style={[styles.convAvatar, { backgroundColor: colors.surfaceRaised }]}>
@@ -756,7 +971,30 @@ function ConvRow({ conv, onPress }: { conv: Conversation; onPress: () => void })
   );
 }
 
-// ─── Styles ────────────────────────────────────────────────────────────────────
+// ---- Styles for editable fields ----
+
+const editStyles = StyleSheet.create({
+  fieldContainer: { paddingHorizontal: 14, paddingVertical: 12 },
+  fieldRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  fieldLabel: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 4 },
+  fieldValue: { fontSize: 14, fontWeight: '600', lineHeight: 20 },
+  textInput: { fontSize: 14, fontWeight: '500', borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, marginTop: 4 },
+  numberInputRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
+  numberPrefix: { fontSize: 16, fontWeight: '600', marginRight: 4 },
+  numberInput: { flex: 1 },
+  saveIndicator: { width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  pickerOptions: { marginHorizontal: 14, borderRadius: 8, overflow: 'hidden', marginBottom: 8 },
+  pickerOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 11 },
+  pickerOptionText: { fontSize: 14, fontWeight: '500' },
+  segmentContainer: { paddingHorizontal: 14, paddingVertical: 13, gap: 10 },
+  segmentLabel: { fontSize: 15, fontWeight: '500' },
+  segmented: { flexDirection: 'row', borderRadius: 8, padding: 2, gap: 2 },
+  segBtn: { flex: 1, alignItems: 'center', paddingVertical: 7, borderRadius: 6 },
+  segText: { fontSize: 12, fontWeight: '500' },
+  segTextActive: { fontWeight: '700' },
+});
+
+// ---- Main styles ----
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
@@ -779,15 +1017,10 @@ const styles = StyleSheet.create({
   sectionLabel: { fontSize: 11, fontWeight: '600', letterSpacing: 0.8, marginBottom: 8, paddingHorizontal: 4 },
   cardBody: { borderRadius: 12, overflow: 'hidden' },
   divider: { height: 1 },
-  descriptionBlock: { paddingHorizontal: 14, paddingVertical: 14 },
-  descriptionValue: { fontSize: 14, lineHeight: 21 },
-  infoGrid: { flexDirection: 'row', flexWrap: 'wrap' },
-  infoCell: { width: '50%', paddingHorizontal: 14, paddingVertical: 10, gap: 2 },
-  infoCellLabel: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.3 },
-  infoCellValue: { fontSize: 14, fontWeight: '600' },
-  settingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 12 },
-  settingLabel: { fontSize: 14, fontWeight: '500' },
-  settingValue: { fontSize: 14, fontWeight: '600', maxWidth: '55%', textAlign: 'right', fontVariant: ['tabular-nums'] },
+  platformRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 13 },
+  platformLabel: { fontSize: 15, fontWeight: '500' },
+  platformRight: { flexDirection: 'row', alignItems: 'center' },
+  checkBox: { width: 22, height: 22, borderRadius: 6, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   marketScroll: { paddingHorizontal: 16, gap: 10, paddingBottom: 4 },
   marketCard: { borderRadius: 12, padding: 14, minWidth: 130, gap: 8 },
   marketName: { fontSize: 13, fontWeight: '700' },

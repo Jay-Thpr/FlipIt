@@ -2,7 +2,7 @@
 // These are used by the Supabase client for type safety.
 
 export type Platform = 'ebay' | 'depop' | 'mercari' | 'offerup' | 'facebook';
-export type ItemStatus = 'active' | 'paused' | 'archived';
+export type ItemStatus = 'active' | 'paused' | 'archived' | 'draft';
 export type ItemType = 'buy' | 'sell';
 export type NegotiationStyle = 'aggressive' | 'moderate' | 'passive';
 export type ReplyTone = 'professional' | 'casual' | 'firm';
@@ -56,8 +56,12 @@ export interface DbItem {
   negotiation_style: NegotiationStyle;
   reply_tone: ReplyTone;
   best_offer: number | null;
+  draft_url: string | null;
+  listing_screenshot_url: string | null;
+  listing_preview_payload: any | null;
   created_at: string;
   updated_at: string;
+  last_viewed_at: string;
   // Joined relations
   item_platforms?: { platform: Platform }[];
   item_photos?: DbItemPhoto[];
@@ -85,13 +89,19 @@ export interface DbMarketData {
 
 export interface DbConversation {
   id: string;
-  item_id: string;
+  item_id: string | null;
+  user_id: string | null;
   username: string;
   platform: Platform;
   last_message: string;
   last_message_at: string;
   unread: boolean;
+  listing_url: string | null;
+  listing_title: string | null;
+  seller: string | null;
+  status: string;
   created_at: string;
+  updated_at: string;
   messages?: DbMessage[];
 }
 

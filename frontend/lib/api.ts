@@ -35,23 +35,44 @@ export interface RunStartResponse {
   run_url?: string;
 }
 
+export interface SellListingReviewState {
+  state: string;
+  step: string;
+  platform: string;
+  latest_decision: 'confirm_submit' | 'revise' | 'abort' | null;
+  revision_instructions: string | null;
+  revision_count: number;
+  paused_at: string | null;
+  deadline_at: string | null;
+}
+
 export interface AgentRunResult {
   session_id: string;
+  run_id: string;
+  item_id: string | null;
   pipeline: 'sell' | 'buy';
-  status: 'queued' | 'running' | 'completed' | 'failed';
+  status: 'queued' | 'running' | 'paused' | 'completed' | 'failed';
+  phase: string;
   created_at: string;
   updated_at: string;
   request: any;
   result: any;
   error: string | null;
   events: any[];
-  sell_listing_review?: {
-    review_state: string;
-    allowed_decisions: string[];
-    deadline_at: string;
-    listing_preview?: any;
-    output?: any;
-  } | null;
+  next_action: { type: string; payload: any };
+  progress: { step: string | null; event_type: string | null } | null;
+  result_source: string | null;
+  sell_listing_review: SellListingReviewState | null;
+  sell_summary?: {
+    detected_item: string | null;
+    brand: string | null;
+    confidence: number | null;
+    recommended_price: number | null;
+    listing_title: string | null;
+    listing_price: number | null;
+    listing_status: string | null;
+    ready_for_confirmation: boolean;
+  };
 }
 
 export interface AgentInfo {
@@ -141,4 +162,26 @@ export async function getHealth() {
 /** Build the SSE stream URL for a run */
 export function getStreamUrl(runId: string): string {
   return `${API_BASE_URL}/runs/${runId}/stream`;
+}
+
+/** AI-powered item analysis and professional photo generation */
+export interface AnalyzeItemRequest {
+  photo_url: string;
+  item_id: string;
+  generate_photos: boolean;
+  photo_count?: number;
+}
+
+export interface AnalyzeItemResponse {
+  name: string;
+  description: string;
+  condition: string;
+  generated_photo_urls: string[];
+}
+
+export async function analyzeItem(request: AnalyzeItemRequest) {
+  return apiFetch<AnalyzeItemResponse>('/ai/analyze-item', {
+    method: 'POST',
+    body: JSON.stringify(request),
+  });
 }

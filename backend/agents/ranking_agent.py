@@ -8,6 +8,7 @@ from backend.schemas import AgentTaskRequest, RankingOutput
 
 class RankingAgent(BaseAgent):
     CONDITION_SCORES = {
+        "new": 1.0,
         "excellent": 1.0,
         "great": 0.93,
         "good": 0.84,
@@ -41,7 +42,10 @@ class RankingAgent(BaseAgent):
             price_fit = max(0.0, 1 - abs(budget - price) / max(budget, 1.0))
 
         credibility = min(1.0, seller_score / 250.0)
-        days_old = max(0, (date.today() - date.fromisoformat(posted_at)).days)
+        try:
+            days_old = max(0, (date.today() - date.fromisoformat(posted_at[:10])).days)
+        except (ValueError, TypeError):
+            days_old = 30
         recency = max(0.0, 1 - (days_old / 14.0))
 
         score = (
@@ -90,12 +94,18 @@ class RankingAgent(BaseAgent):
                     "seller": listing["seller"],
                     "seller_score": listing["seller_score"],
                     "posted_at": listing["posted_at"],
+                    "condition": listing.get("condition", "good"),
                 }
             )
 
         ranked_candidates.sort(key=lambda item: (-item["score"], item["price"], item["title"]))
         top_choice = ranked_candidates[0]
-        median_price = round(sum(float(item["price"]) for item in candidates) / len(candidates), 2)
+        sorted_prices = sorted(float(item["price"]) for item in candidates)
+        n = len(sorted_prices)
+        if n % 2 == 1:
+            median_price = round(sorted_prices[n // 2], 2)
+        else:
+            median_price = round((sorted_prices[n // 2 - 1] + sorted_prices[n // 2]) / 2, 2)
 
         return {
             "agent": self.slug,

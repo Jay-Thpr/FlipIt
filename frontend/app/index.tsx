@@ -85,6 +85,7 @@ export default function HomeScreen() {
   const displayName = user?.user_metadata?.display_name ?? user?.user_metadata?.full_name ?? user?.email ?? 'User';
   const initials = displayName
     .split(' ')
+    .filter(Boolean)
     .map((w: string) => w[0])
     .join('')
     .toUpperCase()
@@ -99,7 +100,8 @@ export default function HomeScreen() {
         supabase
           .from('items')
           .select(`*, item_platforms(platform), item_photos(id, photo_url, sort_order), market_data(platform, best_buy_price, best_sell_price, volume), conversations(id, username, platform, last_message, last_message_at, unread)`)
-          .eq('user_id', user.id),
+          .eq('user_id', user.id)
+          .neq('status', 'draft'),
         supabase
           .from('completed_trades')
           .select('*')
@@ -129,7 +131,7 @@ export default function HomeScreen() {
       if (tradesResult.data) {
         const chartData: PnLDataPoint[] = tradesResult.data.map((t: any) => {
           let profit = 0;
-          if (t.type === 'Sold') {
+          if (t.type?.toLowerCase() === 'sold') {
             profit = (t.price ?? 0) - (t.initial_price ?? 0);
           } else {
             profit = (t.initial_price ?? 0) - (t.price ?? 0);
@@ -154,10 +156,8 @@ export default function HomeScreen() {
   // Initial load
   useFocusEffect(
     useCallback(() => {
-      if (items.length === 0) {
-        refreshData();
-      }
-    }, [refreshData, items.length])
+      refreshData();
+    }, [refreshData])
   );
 
   // Listen for item status changes from detail page

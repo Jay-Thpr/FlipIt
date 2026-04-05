@@ -167,6 +167,7 @@ class RankedListing(BaseModel):
     seller: str
     seller_score: int = 0
     posted_at: str
+    condition: str = "good"
 
 
 class NegotiationAttempt(BaseModel):

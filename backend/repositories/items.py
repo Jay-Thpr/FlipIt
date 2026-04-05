@@ -26,6 +26,16 @@ class ItemRepository:
         )
         return self._first_row(response)
 
+    def list_active_items(self) -> list[dict[str, Any]]:
+        """Return all items with status='active', including their photos."""
+        response = (
+            self.client.table(self.items_table)
+            .select("*", "item_photos(photo_url,sort_order)")
+            .eq("status", "active")
+            .execute()
+        )
+        return self._response_rows(response)
+
     def _first_row(self, response: Any) -> dict[str, Any] | None:
         rows = self._response_rows(response)
         if not rows:

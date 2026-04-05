@@ -44,6 +44,7 @@ class SessionManager:
         status: str,
         result: dict | None = None,
         error: str | None = None,
+        clear_error: bool = False,
     ) -> SessionState | None:
         async with self._lock:
             session = self._sessions.get(session_id)
@@ -55,6 +56,8 @@ class SessionManager:
                 session.result = result
             if error is not None:
                 session.error = error
+            elif clear_error:
+                session.error = None
             snapshot = session.model_copy(deep=True)
         await self._persist_session_updated(snapshot)
         return session

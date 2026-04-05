@@ -43,6 +43,7 @@ export default function AccountScreen() {
       supabase
         .from('messages')
         .select('id, conversation_id, conversations!inner(item_id, items!inner(user_id))', { count: 'exact' })
+        .eq('conversations.items.user_id', user.id)
         .gte('created_at', monthStart)
         .lte('created_at', monthEnd),
     ]);

@@ -9,7 +9,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { NegotiationStyle, ReplyTone } from '../../lib/types';
-import { getAgents, getHealth, AgentInfo } from '../../lib/api';
+import { getAgents, getFetchAgents, getHealth, AgentInfo, FetchAgentInfo } from '../../lib/api';
 
 export default function AgentsScreen() {
   const { colors } = useTheme();
@@ -20,6 +20,8 @@ export default function AgentsScreen() {
   const [negotiationStyle, setNegotiationStyle] = useState<NegotiationStyle>('moderate');
   const [replyTone, setReplyTone] = useState<ReplyTone>('professional');
   const [agents, setAgents] = useState<AgentInfo[]>([]);
+  const [fetchAgents, setFetchAgents] = useState<FetchAgentInfo[]>([]);
+  const [fetchAgentsError, setFetchAgentsError] = useState<string | null>(null);
   const [backendStatus, setBackendStatus] = useState<string | null>(null);
 
   useEffect(() => {
@@ -34,6 +36,9 @@ export default function AgentsScreen() {
     getAgents()
       .then(data => setAgents(data.agents))
       .catch(() => {});
+    getFetchAgents()
+      .then(data => setFetchAgents(data.agents))
+      .catch(() => setFetchAgentsError('Could not load Fetch.ai agents'));
   }, []);
 
   async function loadSettings() {
@@ -218,6 +223,40 @@ export default function AgentsScreen() {
               </View>
             </React.Fragment>
           ))}
+        </View>
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>FETCH.AI AGENTS</Text>
+        </View>
+        <View style={[styles.card, { backgroundColor: colors.surface }]}>
+          {fetchAgentsError ? (
+            <View style={styles.row}>
+              <Text style={[styles.rowValue, { color: colors.textMuted }]}>{fetchAgentsError}</Text>
+            </View>
+          ) : fetchAgents.length === 0 ? (
+            <View style={styles.row}>
+              <Text style={[styles.rowValue, { color: colors.textMuted }]}>No Fetch.ai agents available</Text>
+            </View>
+          ) : (
+            fetchAgents.map((agent, idx) => (
+              <React.Fragment key={agent.slug}>
+                {idx > 0 && <View style={[styles.divider, { backgroundColor: colors.divider }]} />}
+                <View style={styles.row}>
+                  <View style={styles.rowLeft}>
+                    <View style={[styles.iconWrap, { backgroundColor: colors.muted }]}>
+                      <Zap size={15} color={colors.textSecondary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.rowLabel, { color: colors.textPrimary }]}>{agent.name}</Text>
+                      {agent.description ? (
+                        <Text style={[styles.rowValue, { color: colors.textMuted }]} numberOfLines={1}>{agent.description}</Text>
+                      ) : null}
+                    </View>
+                  </View>
+                  <Text style={[styles.rowValue, { color: colors.textMuted }]}>:{agent.port}</Text>
+                </View>
+              </React.Fragment>
+            ))
+          )}
         </View>
         <View style={{ height: 32 }} />
       </ScrollView>

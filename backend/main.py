@@ -10,9 +10,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+import time as _time
+
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 
 from backend.config import (
     AGENTS,
@@ -26,6 +29,7 @@ from backend.config import (
 from backend.fetch_runtime import list_fetch_agent_capabilities, list_fetch_agent_specs
 from backend.frontend_runs import build_run_payload, build_run_start_response
 from backend.orchestrator import get_pipeline_steps, run_pipeline
+from backend.scheduler import scheduler_loop
 from backend.run_queries import (
     event_identity,
     get_latest_persisted_run_for_item,
@@ -49,6 +53,7 @@ from backend.auth import AuthenticatedUser, get_current_user
 from backend.repositories.items import ItemRepository
 from backend.session import session_manager
 
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -156,14 +161,17 @@ async def _sell_review_cleanup_loop() -> None:
 async def _app_lifespan(_app: FastAPI):
     assert_fetch_agent_ports_do_not_overlap()
     cleanup_task = asyncio.create_task(_sell_review_cleanup_loop())
+    scheduler_task = asyncio.create_task(scheduler_loop())
     try:
         yield
     finally:
         cleanup_task.cancel()
-        try:
-            await cleanup_task
-        except asyncio.CancelledError:
-            pass
+        scheduler_task.cancel()
+        for task in (cleanup_task, scheduler_task):
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
 
 app = FastAPI(title="DiamondHacks Backend", version="0.1.0", lifespan=_app_lifespan)
@@ -174,6 +182,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start = _time.time()
+    logger.info(">>> %s %s", request.method, request.url.path)
+    response = await call_next(request)
+    elapsed = (_time.time() - start) * 1000
+    logger.info("<<< %s %s %d (%.0fms)", request.method, request.url.path, response.status_code, elapsed)
+    return response
+
 
 KEEPALIVE_INTERVAL = 15.0
 
@@ -560,3 +578,129 @@ async def iter_run_events(run_id: str):
 
 def format_sse(event: SessionEvent) -> str:
     return f"event: {event.event_type}\ndata: {json.dumps(event.model_dump())}\n\n"
+
+
+# ---------------------------------------------------------------------------
+# AI Analyze / Generate Photos endpoint
+# ---------------------------------------------------------------------------
+
+class AnalyzeItemRequest(BaseModel):
+    photo_url: str
+    item_id: str
+    generate_photos: bool = False
+    photo_count: int = Field(default=4, ge=1, le=8)
+
+
+class AnalyzeItemResponse(BaseModel):
+    name: str
+    description: str
+    condition: str
+    generated_photo_urls: list[str] = []
+
+
+@app.post("/ai/analyze-item")
+async def ai_analyze_item(
+    request: AnalyzeItemRequest,
+    user: AuthenticatedUser = Depends(get_current_user),
+) -> AnalyzeItemResponse:
+    """Analyze a product photo with Gemini Vision and optionally generate professional photos."""
+    import base64
+
+    from backend.ai_generate import analyze_item_photo, generate_professional_photos
+    from backend.config import is_supabase_configured
+    from backend.supabase import get_supabase_client
+
+    logger.info("AI analyze-item: user=%s item=%s photo_url=%s generate=%s",
+                user.user_id, request.item_id, request.photo_url[:80], request.generate_photos)
+
+    # Verify item ownership
+    if not is_supabase_configured():
+        raise HTTPException(status_code=503, detail="Supabase not configured")
+    client = get_supabase_client()
+    repo = ItemRepository(client)
+    item = repo.get_item_for_user(request.item_id, user.user_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    # Step 1: Analyze the photo with Gemini Vision
+    try:
+        analysis = await analyze_item_photo(request.photo_url)
+    except Exception as exc:
+        logger.exception("Gemini analysis failed for item %s", request.item_id)
+        raise HTTPException(status_code=502, detail=f"AI analysis failed: {exc}")
+
+    generated_photo_urls: list[str] = []
+
+    # Step 2: Optionally generate professional photos
+    if request.generate_photos:
+        try:
+            base64_images = await generate_professional_photos(
+                photo_url=request.photo_url,
+                item_name=analysis["name"],
+                count=request.photo_count,
+            )
+
+            # Step 3: Upload generated photos to Supabase storage and record in DB
+            supabase_url = os.getenv("SUPABASE_URL", "").rstrip("/")
+
+            for i, img_b64 in enumerate(base64_images):
+                storage_path = f"{user.user_id}/{request.item_id}/ai_generated_{i}.jpg"
+                try:
+                    img_bytes = base64.b64decode(img_b64)
+
+                    # Upload to Supabase Storage via REST API (binary body, not JSON)
+                    import httpx as _httpx
+                    async with _httpx.AsyncClient(timeout=30.0) as http:
+                        upload_resp = await http.post(
+                            f"{supabase_url}/storage/v1/object/item-photos/{storage_path}",
+                            content=img_bytes,
+                            headers={
+                                "apikey": client._headers["apikey"],
+                                "Authorization": client._headers["Authorization"],
+                                "Content-Type": "image/jpeg",
+                                "x-upsert": "true",
+                            },
+                        )
+                        upload_resp.raise_for_status()
+
+                    # Build the public URL
+                    public_url = f"{supabase_url}/storage/v1/object/public/item-photos/{storage_path}"
+                    generated_photo_urls.append(public_url)
+
+                    # Insert record into item_photos table
+                    existing_photos = (
+                        client.table("item_photos")
+                        .select("sort_order")
+                        .eq("item_id", request.item_id)
+                        .order("sort_order", desc=True)
+                        .limit(1)
+                        .execute()
+                    )
+                    max_sort = 0
+                    if existing_photos.data:
+                        max_sort = existing_photos.data[0].get("sort_order", 0) + 1
+
+                    client.table("item_photos").insert({
+                        "item_id": request.item_id,
+                        "photo_url": public_url,
+                        "sort_order": max_sort + i,
+                    }).execute()
+
+                except Exception:
+                    logger.exception(
+                        "Failed to upload/record generated photo %d for item %s",
+                        i,
+                        request.item_id,
+                    )
+                    # Continue with remaining photos
+
+        except Exception:
+            logger.exception("Photo generation failed for item %s", request.item_id)
+            # Still return the text analysis even if photo generation fails
+
+    return AnalyzeItemResponse(
+        name=analysis["name"],
+        description=analysis["description"],
+        condition=analysis["condition"],
+        generated_photo_urls=generated_photo_urls,
+    )

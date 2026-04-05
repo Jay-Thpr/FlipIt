@@ -1,0 +1,1169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlipIt - Autonomous Resale Agents</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --color-primary: #00E676;
+            --color-primary-dim: rgba(0, 230, 118, 0.15);
+            --color-secondary: #7C4DFF;
+            --color-accent: #FF6B35;
+            --color-background: #0A0A0F;
+            --color-surface: #12121A;
+            --color-surface-elevated: #1A1A25;
+            --color-text: #EEEEF0;
+            --color-text-dim: #8888A0;
+            --color-sell: #00E676;
+            --color-buy: #7C4DFF;
+            --color-danger: #FF4757;
+            --gradient-primary: linear-gradient(135deg, #00E676 0%, #00BFA5 100%);
+            --gradient-secondary: linear-gradient(135deg, #7C4DFF 0%, #536DFE 100%);
+            --gradient-accent: linear-gradient(135deg, #FF6B35 0%, #FF8F65 100%);
+            --gradient-hero: linear-gradient(135deg, #00E676 0%, #7C4DFF 50%, #FF6B35 100%);
+            --font-heading: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, 'Segoe UI', Roboto, sans-serif;
+            --font-body: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, 'Segoe UI', Roboto, sans-serif;
+            --radius: 16px;
+            --radius-sm: 8px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: var(--color-background);
+            color: var(--color-text);
+            font-family: var(--font-body);
+            overflow: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .slide-deck {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        @media (min-width: 769px) {
+            .slide-deck {
+                max-width: calc(100vh * 16 / 9);
+                max-height: calc(100vw * 9 / 16);
+                margin: auto;
+                position: absolute;
+                inset: 0;
+            }
+        }
+
+        .slide {
+            position: absolute;
+            width: 100%; height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 60px 80px;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.5s ease;
+            background: var(--color-background);
+            overflow: hidden;
+        }
+
+        .slide.active { opacity: 1; visibility: visible; }
+
+        .slide-content {
+            width: 100%;
+            max-width: 100%;
+            max-height: 100%;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+        }
+
+        /* Typography */
+        h1, h2, h3 { font-family: var(--font-heading); font-weight: 700; }
+
+        .slide-title {
+            font-size: clamp(36px, 5.5vw, 72px);
+            background: var(--gradient-hero);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            line-height: 1.1;
+            letter-spacing: -0.02em;
+        }
+
+        .slide-title-green {
+            font-size: clamp(36px, 5.5vw, 72px);
+            background: var(--gradient-primary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            line-height: 1.1;
+            letter-spacing: -0.02em;
+        }
+
+        .slide-title-purple {
+            font-size: clamp(36px, 5.5vw, 72px);
+            background: var(--gradient-secondary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            line-height: 1.1;
+            letter-spacing: -0.02em;
+        }
+
+        h2 {
+            font-size: clamp(24px, 3.5vw, 44px);
+            line-height: 1.2;
+            letter-spacing: -0.01em;
+        }
+
+        h3 {
+            font-size: clamp(18px, 2vw, 28px);
+            color: var(--color-text-dim);
+            font-weight: 500;
+        }
+
+        p {
+            font-size: clamp(16px, 1.8vw, 22px);
+            line-height: 1.6;
+            color: var(--color-text-dim);
+            max-width: 800px;
+        }
+
+        .subtitle {
+            font-size: clamp(18px, 2.2vw, 28px);
+            color: var(--color-text-dim);
+            font-weight: 400;
+        }
+
+        .label {
+            font-size: 13px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            color: var(--color-primary);
+        }
+
+        .label-purple {
+            font-size: 13px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            color: var(--color-secondary);
+        }
+
+        /* Grids */
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 32px;
+            width: 100%;
+            text-align: left;
+        }
+
+        .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+            width: 100%;
+            text-align: left;
+        }
+
+        .grid-4 {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+            width: 100%;
+            text-align: center;
+        }
+
+        /* Cards */
+        .card {
+            background: var(--color-surface);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: var(--radius);
+            padding: 28px;
+            transition: transform 0.3s, border-color 0.3s;
+        }
+
+        .card:hover {
+            border-color: rgba(255,255,255,0.12);
+            transform: translateY(-2px);
+        }
+
+        .card-green { border-left: 3px solid var(--color-sell); }
+        .card-purple { border-left: 3px solid var(--color-secondary); }
+
+        .card h3 {
+            color: var(--color-text);
+            font-size: 18px;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+
+        .card p {
+            font-size: 15px;
+            line-height: 1.5;
+            color: var(--color-text-dim);
+        }
+
+        /* Metric Cards */
+        .metric-card {
+            background: var(--color-surface);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: var(--radius);
+            padding: 24px 20px;
+        }
+
+        .metric-number {
+            font-family: var(--font-heading);
+            font-size: clamp(36px, 4vw, 56px);
+            font-weight: 700;
+            line-height: 1;
+            margin-bottom: 8px;
+        }
+
+        .metric-number.green {
+            background: var(--gradient-primary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .metric-number.purple {
+            background: var(--gradient-secondary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .metric-number.orange {
+            background: var(--gradient-accent);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .metric-label {
+            font-size: 14px;
+            color: var(--color-text-dim);
+            font-weight: 500;
+        }
+
+        /* Flow Steps */
+        .flow-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+            justify-content: center;
+        }
+
+        .flow-step {
+            background: var(--color-surface);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: var(--radius-sm);
+            padding: 16px 12px;
+            flex: 1;
+            max-width: 160px;
+            text-align: center;
+        }
+
+        .flow-step .step-num {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .flow-step .step-num.green {
+            background: var(--color-primary-dim);
+            color: var(--color-sell);
+        }
+
+        .flow-step .step-num.purple {
+            background: rgba(124, 77, 255, 0.15);
+            color: var(--color-secondary);
+        }
+
+        .flow-step .step-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--color-text);
+            line-height: 1.3;
+        }
+
+        .flow-step .step-agent {
+            font-size: 10px;
+            color: var(--color-primary);
+            font-weight: 600;
+            margin-top: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .flow-arrow {
+            font-size: 18px;
+            color: rgba(255,255,255,0.2);
+            flex-shrink: 0;
+        }
+
+        /* Agent Badge */
+        .agent-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(0, 230, 118, 0.08);
+            border: 1px solid rgba(0, 230, 118, 0.2);
+            border-radius: 20px;
+            padding: 6px 14px;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--color-primary);
+        }
+
+        .agent-badge.purple {
+            background: rgba(124, 77, 255, 0.08);
+            border-color: rgba(124, 77, 255, 0.2);
+            color: var(--color-secondary);
+        }
+
+        .agent-badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: center;
+        }
+
+        /* Before/After */
+        .before-after {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            gap: 32px;
+            align-items: center;
+            width: 100%;
+        }
+
+        .pain-box {
+            background: var(--color-surface);
+            border-radius: var(--radius);
+            padding: 32px;
+            text-align: left;
+        }
+
+        .pain-box.sell { border: 1px solid rgba(255, 71, 87, 0.3); }
+        .pain-box.buy { border: 1px solid rgba(124, 77, 255, 0.3); }
+
+        .pain-box h3 {
+            font-size: 16px;
+            margin-bottom: 16px;
+        }
+
+        .pain-box.sell h3 { color: var(--color-danger); }
+        .pain-box.buy h3 { color: var(--color-secondary); }
+
+        .pain-box ul {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .pain-box li {
+            font-size: 15px;
+            color: var(--color-text-dim);
+            padding-left: 24px;
+            position: relative;
+        }
+
+        .pain-box li::before {
+            content: "\00D7";
+            position: absolute;
+            left: 0;
+            font-weight: 700;
+        }
+
+        .pain-box.sell li::before { color: var(--color-danger); }
+        .pain-box.buy li::before { color: var(--color-secondary); }
+
+        .vs-divider {
+            font-family: var(--font-heading);
+            font-size: 28px;
+            font-weight: 700;
+            color: rgba(255,255,255,0.2);
+        }
+
+        /* Architecture */
+        .arch-container {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            align-items: center;
+        }
+
+        .arch-row {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .arch-box {
+            background: var(--color-surface);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: var(--radius-sm);
+            padding: 12px 18px;
+            font-size: 12px;
+            font-weight: 600;
+            text-align: center;
+            min-width: 120px;
+        }
+
+        .arch-box.highlight-green {
+            border-color: var(--color-sell);
+            background: rgba(0, 230, 118, 0.06);
+            color: var(--color-sell);
+        }
+
+        .arch-box.highlight-purple {
+            border-color: var(--color-secondary);
+            background: rgba(124, 77, 255, 0.06);
+            color: var(--color-secondary);
+        }
+
+        .arch-box.highlight-orange {
+            border-color: var(--color-accent);
+            background: rgba(255, 107, 53, 0.06);
+            color: var(--color-accent);
+        }
+
+        .arch-connector {
+            color: rgba(255,255,255,0.15);
+            font-size: 18px;
+            text-align: center;
+        }
+
+        /* Tech pills inline */
+        .tech-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 16px;
+        }
+
+        .tech-pill {
+            background: var(--color-surface);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 20px;
+            padding: 8px 16px;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--color-text-dim);
+        }
+
+        /* Demo placeholder */
+        .demo-placeholder {
+            width: 100%;
+            max-width: 900px;
+            aspect-ratio: 16 / 9;
+            border: 2px dashed rgba(255,255,255,0.15);
+            border-radius: var(--radius);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 12px;
+            background: var(--color-surface);
+        }
+
+        .demo-placeholder .placeholder-label {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--color-text-dim);
+        }
+
+        .demo-placeholder .placeholder-hint {
+            font-size: 14px;
+            color: rgba(255,255,255,0.25);
+        }
+
+        /* Expand pills */
+        .expand-card {
+            background: var(--color-surface);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: var(--radius);
+            padding: 24px;
+            text-align: left;
+        }
+
+        .expand-card h3 {
+            font-size: 16px;
+            color: var(--color-text);
+            margin-bottom: 12px;
+        }
+
+        .expand-card .items {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .expand-card .item-pill {
+            background: rgba(255,255,255,0.05);
+            border-radius: 20px;
+            padding: 6px 14px;
+            font-size: 13px;
+            color: var(--color-text-dim);
+        }
+
+        /* Big Number */
+        .big-number {
+            font-family: var(--font-heading);
+            font-size: clamp(72px, 12vw, 160px);
+            font-weight: 700;
+            line-height: 1;
+            letter-spacing: -0.03em;
+        }
+
+        /* Hackathon Track Badges */
+        .track-badges {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .track-badge {
+            background: var(--color-surface);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            padding: 10px 18px;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--color-text-dim);
+        }
+
+        .track-badge.main {
+            border-color: var(--color-primary);
+            color: var(--color-primary);
+        }
+
+        /* Background Decorations */
+        .bg-gradient-tl {
+            position: absolute;
+            top: -200px; left: -200px;
+            width: 500px; height: 500px;
+            background: radial-gradient(circle, rgba(0, 230, 118, 0.08) 0%, transparent 70%);
+            pointer-events: none;
+        }
+
+        .bg-gradient-br {
+            position: absolute;
+            bottom: -200px; right: -200px;
+            width: 500px; height: 500px;
+            background: radial-gradient(circle, rgba(124, 77, 255, 0.08) 0%, transparent 70%);
+            pointer-events: none;
+        }
+
+        .bg-gradient-center {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 600px; height: 600px;
+            background: radial-gradient(circle, rgba(0, 230, 118, 0.05) 0%, transparent 70%);
+            pointer-events: none;
+        }
+
+        /* Logo */
+        .logo-mark {
+            position: fixed;
+            top: 20px;
+            left: 28px;
+            z-index: 1001;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .logo-mark img {
+            height: 32px;
+            width: auto;
+        }
+
+        .logo-mark .logo-text {
+            font-family: var(--font-heading);
+            font-size: 17px;
+            font-weight: 700;
+            color: var(--color-primary);
+            letter-spacing: 0.02em;
+        }
+
+        /* Pulse dot */
+        .pulse-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--color-primary);
+            border-radius: 50%;
+            display: inline-block;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.5); }
+        }
+
+        /* Animations */
+        .animate-fade-up {
+            animation: fadeUp 0.6s ease-out forwards;
+            opacity: 0;
+        }
+
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .animate-scale {
+            animation: scaleIn 0.5s ease-out forwards;
+            opacity: 0;
+        }
+
+        @keyframes scaleIn {
+            from { opacity: 0; transform: scale(0.9); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        .animate-stagger > * {
+            opacity: 0;
+            animation: fadeUp 0.5s ease-out forwards;
+        }
+        .animate-stagger > *:nth-child(1) { animation-delay: 0.1s; }
+        .animate-stagger > *:nth-child(2) { animation-delay: 0.2s; }
+        .animate-stagger > *:nth-child(3) { animation-delay: 0.3s; }
+        .animate-stagger > *:nth-child(4) { animation-delay: 0.4s; }
+        .animate-stagger > *:nth-child(5) { animation-delay: 0.5s; }
+        .animate-stagger > *:nth-child(6) { animation-delay: 0.6s; }
+
+        .slide:not(.active) .animate-fade-up,
+        .slide:not(.active) .animate-scale,
+        .slide:not(.active) .animate-stagger > * {
+            animation: none;
+            opacity: 0;
+        }
+
+        .slide.active .animate-fade-up { animation: fadeUp 0.6s ease-out forwards; }
+        .slide.active .animate-scale { animation: scaleIn 0.5s ease-out forwards; }
+        .slide.active .animate-stagger > * { animation: fadeUp 0.5s ease-out forwards; }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .slide { padding: 32px 24px; }
+            .grid-3 { grid-template-columns: repeat(2, 1fr); }
+            .grid-4 { grid-template-columns: repeat(2, 1fr); }
+            .before-after { grid-template-columns: 1fr; gap: 16px; }
+            .vs-divider { display: none; }
+            .flow-container { flex-wrap: wrap; }
+        }
+
+        @media (max-width: 480px) {
+            .slide { padding: 24px 16px; }
+            .grid-3 { grid-template-columns: 1fr; }
+            .grid-4 { grid-template-columns: 1fr; }
+        }
+
+        /* Navigation */
+        .progress-bar {
+            position: fixed;
+            top: 0; left: 0;
+            height: 3px;
+            background: var(--gradient-primary);
+            transition: width 0.3s;
+            z-index: 1000;
+        }
+
+        .nav-controls {
+            position: fixed;
+            bottom: 28px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            z-index: 1000;
+            background: rgba(10, 10, 15, 0.8);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 40px;
+            padding: 8px 20px;
+        }
+
+        .nav-btn {
+            background: rgba(255,255,255,0.08);
+            border: none;
+            color: #fff;
+            width: 36px; height: 36px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .nav-btn:hover { background: rgba(255,255,255,0.15); }
+
+        .slide-counter {
+            color: var(--color-text-dim);
+            font-size: 13px;
+            font-weight: 500;
+            min-width: 48px;
+            text-align: center;
+        }
+
+        .key-hint {
+            position: fixed;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 12px;
+            color: rgba(255,255,255,0.2);
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <!-- Logo -->
+    <div class="logo-mark">
+        <img src="../frontend/assets/logo.png" alt="FlipIt">
+        <span class="logo-text">FlipIt</span>
+    </div>
+
+    <!-- Progress Bar -->
+    <div class="progress-bar" id="progressBar"></div>
+
+    <div class="slide-deck">
+
+        <!-- ========== SLIDE 1: HOOK ========== -->
+        <div class="slide active">
+            <div class="bg-gradient-tl"></div>
+            <div class="bg-gradient-br"></div>
+            <div class="slide-content">
+                <div class="animate-fade-up" style="margin-bottom: 8px;">
+                    <span class="label">DiamondHacks 2026</span>
+                </div>
+                <h1 class="slide-title animate-fade-up" style="animation-delay: 0.1s;">
+                    You found this at Goodwill.<br>Is it worth buying?
+                </h1>
+                <p class="subtitle animate-fade-up" style="animation-delay: 0.2s; max-width: 720px;">
+                    What if an AI agent could answer that in 60 seconds, <em>and list it for you?</em>
+                </p>
+                <div class="animate-fade-up" style="animation-delay: 0.4s; margin-top: 24px;">
+                    <div class="track-badges">
+                        <span class="track-badge main">Enchanted Commerce</span>
+                        <span class="track-badge">Best Use of Fetch.ai</span>
+                        <span class="track-badge">Best Use of Browser Use</span>
+                        <span class="track-badge">Best Use of Gemini</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== SLIDE 2: PROBLEM ========== -->
+        <div class="slide">
+            <div class="bg-gradient-br"></div>
+            <div class="slide-content">
+                <span class="label animate-fade-up">The Problem</span>
+                <h2 class="animate-fade-up" style="animation-delay: 0.1s; margin-bottom: 12px;">
+                    Reselling is a <span style="color: var(--color-danger);">20-minute grind</span> per item
+                </h2>
+                <div class="before-after animate-stagger" style="margin-top: 16px;">
+                    <div class="pain-box sell">
+                        <h3>Selling Today</h3>
+                        <ul>
+                            <li>Google the item manually</li>
+                            <li>Open 4+ tabs to compare prices</li>
+                            <li>Take and edit listing photos</li>
+                            <li>Write a title and description</li>
+                            <li>Fill out listing forms by hand</li>
+                        </ul>
+                    </div>
+                    <div class="vs-divider">vs</div>
+                    <div class="pain-box buy">
+                        <h3>Buying Today</h3>
+                        <ul>
+                            <li>Search each platform one by one</li>
+                            <li>Compare prices across tabs</li>
+                            <li>Message sellers individually</li>
+                            <li>Negotiate manually or pay full price</li>
+                            <li>Miss better deals on other platforms</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== SLIDE 3: SOLUTION ========== -->
+        <div class="slide">
+            <div class="bg-gradient-center"></div>
+            <div class="slide-content">
+                <span class="label animate-fade-up">The Solution</span>
+                <h1 class="slide-title animate-fade-up" style="animation-delay: 0.1s; font-size: clamp(40px, 6vw, 80px);">
+                    FlipIt
+                </h1>
+                <p class="subtitle animate-fade-up" style="animation-delay: 0.2s; max-width: 800px;">
+                    The first autonomous agent system that closes the loop on both sides of resale
+                </p>
+                <div class="grid-2 animate-stagger" style="margin-top: 24px; max-width: 800px; margin-left: auto; margin-right: auto;">
+                    <div class="card card-green" style="text-align: center;">
+                        <h3>SELL</h3>
+                        <p style="font-size: 14px;">Photo > Identified > Priced > Listed<br><strong style="color: var(--color-sell);">60 seconds. Zero typing.</strong></p>
+                    </div>
+                    <div class="card card-purple" style="text-align: center;">
+                        <h3>BUY</h3>
+                        <p style="font-size: 14px;">Link > Searched > Ranked > Offered<br><strong style="color: var(--color-secondary);">4 platforms. Auto-negotiated.</strong></p>
+                    </div>
+                </div>
+                <p class="animate-fade-up" style="animation-delay: 0.5s; font-size: 16px; margin-top: 16px; font-style: italic;">
+                    Competitors stop at information. FlipIt takes action.
+                </p>
+            </div>
+        </div>
+
+        <!-- ========== SLIDE 4: SELL FLOW ========== -->
+        <div class="slide">
+            <div class="bg-gradient-tl"></div>
+            <div class="slide-content">
+                <span class="label animate-fade-up">Sell Flow</span>
+                <h2 class="slide-title-green animate-fade-up" style="animation-delay: 0.1s; font-size: clamp(28px, 4vw, 48px);">
+                    Photo to Posted Listing in 60 Seconds
+                </h2>
+                <div class="flow-container animate-stagger" style="margin-top: 20px;">
+                    <div class="flow-step" style="border-top: 2px solid var(--color-sell);">
+                        <div class="step-num green">1</div>
+                        <div class="step-label">Take Photo</div>
+                        <div class="step-agent">Camera</div>
+                    </div>
+                    <div class="flow-arrow">&rsaquo;</div>
+                    <div class="flow-step" style="border-top: 2px solid var(--color-sell);">
+                        <div class="step-num green">2</div>
+                        <div class="step-label">Identify Item</div>
+                        <div class="step-agent">Vision Agent</div>
+                    </div>
+                    <div class="flow-arrow">&rsaquo;</div>
+                    <div class="flow-step" style="border-top: 2px solid var(--color-sell);">
+                        <div class="step-num green">3</div>
+                        <div class="step-label">Generate Photo</div>
+                        <div class="step-agent">Nano Banana</div>
+                    </div>
+                    <div class="flow-arrow">&rsaquo;</div>
+                    <div class="flow-step" style="border-top: 2px solid var(--color-sell);">
+                        <div class="step-num green">4</div>
+                        <div class="step-label">Price Research</div>
+                        <div class="step-agent">eBay Research</div>
+                    </div>
+                    <div class="flow-arrow">&rsaquo;</div>
+                    <div class="flow-step" style="border-top: 2px solid var(--color-sell);">
+                        <div class="step-num green">5</div>
+                        <div class="step-label">Calculate Profit</div>
+                        <div class="step-agent">Pricing Agent</div>
+                    </div>
+                    <div class="flow-arrow">&rsaquo;</div>
+                    <div class="flow-step" style="border-top: 2px solid var(--color-sell);">
+                        <div class="step-num green">6</div>
+                        <div class="step-label">Post to Depop</div>
+                        <div class="step-agent">Listing Agent</div>
+                    </div>
+                </div>
+                <div class="animate-fade-up" style="animation-delay: 0.7s; margin-top: 20px;">
+                    <p style="font-size: 18px;">
+                        <span style="color: var(--color-danger); text-decoration: line-through;">20 minutes manual</span>
+                        &nbsp;&nbsp;&rsaquo;&nbsp;&nbsp;
+                        <strong style="color: var(--color-sell); font-size: 22px;">60 seconds with FlipIt</strong>
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== SLIDE 5: SELL DEMO CLIP ========== -->
+        <div class="slide">
+            <div class="bg-gradient-tl"></div>
+            <div class="slide-content">
+                <span class="label animate-fade-up">Sell Demo</span>
+                <div class="demo-placeholder animate-scale" style="animation-delay: 0.1s;">
+                    <div class="placeholder-label">Sell Flow Demo Clip</div>
+                    <div class="placeholder-hint">Replace this slide with your recorded demo</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== SLIDE 6: BUY FLOW ========== -->
+        <div class="slide">
+            <div class="bg-gradient-br"></div>
+            <div class="slide-content">
+                <span class="label-purple animate-fade-up">Buy Flow</span>
+                <h2 class="slide-title-purple animate-fade-up" style="animation-delay: 0.1s; font-size: clamp(28px, 4vw, 48px);">
+                    Paste a Link. Agents Handle Everything.
+                </h2>
+                <div class="flow-container animate-stagger" style="margin-top: 20px;">
+                    <div class="flow-step" style="border-top: 2px solid var(--color-secondary);">
+                        <div class="step-num purple">1</div>
+                        <div class="step-label">Paste Link</div>
+                        <div class="step-agent" style="color: var(--color-secondary);">Input</div>
+                    </div>
+                    <div class="flow-arrow">&rsaquo;</div>
+                    <div class="flow-step" style="border-top: 2px solid var(--color-secondary);">
+                        <div class="step-num purple">2</div>
+                        <div class="step-label">Search 4 Platforms</div>
+                        <div class="step-agent" style="color: var(--color-secondary);">Search Agents</div>
+                    </div>
+                    <div class="flow-arrow">&rsaquo;</div>
+                    <div class="flow-step" style="border-top: 2px solid var(--color-secondary);">
+                        <div class="step-num purple">3</div>
+                        <div class="step-label">31+ Results Ranked</div>
+                        <div class="step-agent" style="color: var(--color-secondary);">Ranking Agent</div>
+                    </div>
+                    <div class="flow-arrow">&rsaquo;</div>
+                    <div class="flow-step" style="border-top: 2px solid var(--color-secondary);">
+                        <div class="step-num purple">4</div>
+                        <div class="step-label">Auto-Negotiate</div>
+                        <div class="step-agent" style="color: var(--color-secondary);">Negotiation Agent</div>
+                    </div>
+                    <div class="flow-arrow">&rsaquo;</div>
+                    <div class="flow-step" style="border-top: 2px solid var(--color-secondary);">
+                        <div class="step-num purple">5</div>
+                        <div class="step-label">Real Seller Reply</div>
+                        <div class="step-agent" style="color: var(--color-secondary);">Deal Closed</div>
+                    </div>
+                </div>
+                <div class="animate-fade-up" style="animation-delay: 0.7s; margin-top: 20px; display: flex; flex-direction: column; align-items: center; gap: 8px;">
+                    <div class="agent-badges">
+                        <span class="agent-badge purple">eBay</span>
+                        <span class="agent-badge purple">Depop</span>
+                        <span class="agent-badge purple">Mercari</span>
+                        <span class="agent-badge purple">OfferUp</span>
+                    </div>
+                    <p style="font-size: 15px; margin-top: 8px;">
+                        <span class="pulse-dot"></span>&nbsp;&nbsp;We sent real offers during this hackathon. <strong style="color: var(--color-secondary);">A seller already replied.</strong>
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== SLIDE 7: BUY DEMO CLIP ========== -->
+        <div class="slide">
+            <div class="bg-gradient-br"></div>
+            <div class="slide-content">
+                <span class="label-purple animate-fade-up">Buy Demo</span>
+                <div class="demo-placeholder animate-scale" style="animation-delay: 0.1s; border-color: rgba(124, 77, 255, 0.25);">
+                    <div class="placeholder-label">Buy Flow Demo Clip</div>
+                    <div class="placeholder-hint">Replace this slide with your recorded demo</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== SLIDE 8: ARCHITECTURE + TECH ========== -->
+        <div class="slide">
+            <div class="bg-gradient-tl"></div>
+            <div class="slide-content">
+                <span class="label animate-fade-up">Implementation</span>
+                <h2 class="animate-fade-up" style="animation-delay: 0.1s;">
+                    10 Real Agents. Two Front Doors.
+                </h2>
+                <div class="arch-container animate-stagger" style="margin-top: 16px;">
+                    <div class="arch-row">
+                        <div class="arch-box" style="min-width: 200px;">React Native (Expo)</div>
+                    </div>
+                    <div class="arch-connector">|</div>
+                    <div class="arch-row">
+                        <div class="arch-box highlight-green">FastAPI<br><small style="opacity: 0.7;">Low-latency mobile</small></div>
+                        <div class="arch-box highlight-purple">ASI:One<br><small style="opacity: 0.7;">Fetch.ai discoverability</small></div>
+                    </div>
+                    <div class="arch-connector">|</div>
+                    <div class="arch-row">
+                        <div class="arch-box highlight-green">Vision</div>
+                        <div class="arch-box highlight-green">Research</div>
+                        <div class="arch-box highlight-green">Pricing</div>
+                        <div class="arch-box highlight-green">Listing</div>
+                        <div class="arch-box highlight-orange">Photo Gen</div>
+                    </div>
+                    <div class="arch-row">
+                        <div class="arch-box highlight-purple">eBay Search</div>
+                        <div class="arch-box highlight-purple">Depop Search</div>
+                        <div class="arch-box highlight-purple">Mercari Search</div>
+                        <div class="arch-box highlight-purple">Ranking</div>
+                        <div class="arch-box highlight-purple">Negotiation</div>
+                    </div>
+                    <div class="arch-connector">|</div>
+                    <div class="arch-row">
+                        <div class="arch-box">Browser Use<br><small style="opacity: 0.7;">Live web navigation</small></div>
+                        <div class="arch-box">Supabase<br><small style="opacity: 0.7;">Auth + DB + Storage</small></div>
+                        <div class="arch-box">Render<br><small style="opacity: 0.7;">Agent hosting</small></div>
+                    </div>
+                </div>
+                <div class="tech-row animate-fade-up" style="animation-delay: 0.6s;">
+                    <span class="tech-pill">Fetch.ai uAgents</span>
+                    <span class="tech-pill">Browser Use</span>
+                    <span class="tech-pill">Gemini Vision</span>
+                    <span class="tech-pill">Nano Banana API</span>
+                    <span class="tech-pill">SSE Streaming</span>
+                    <span class="tech-pill">Chat Protocol</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== SLIDE 9: IMPACT + EXPANDABILITY ========== -->
+        <div class="slide">
+            <div class="bg-gradient-center"></div>
+            <div class="slide-content">
+                <span class="label animate-fade-up">Impact and Expansion</span>
+                <h2 class="animate-fade-up" style="animation-delay: 0.1s;">
+                    The Behavior Already Exists at <span style="background: var(--gradient-primary); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Massive Scale</span>
+                </h2>
+                <div class="grid-4 animate-stagger" style="margin-top: 20px;">
+                    <div class="metric-card">
+                        <div class="metric-number green">60s</div>
+                        <div class="metric-label">Photo to Listed</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-number purple">4</div>
+                        <div class="metric-label">Platforms Searched</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-number orange">10</div>
+                        <div class="metric-label">Autonomous Agents</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-number green">20x</div>
+                        <div class="metric-label">Faster Than Manual</div>
+                    </div>
+                </div>
+                <div class="grid-3 animate-stagger" style="margin-top: 20px;">
+                    <div class="expand-card">
+                        <h3>New Platforms</h3>
+                        <div class="items">
+                            <span class="item-pill">Poshmark</span>
+                            <span class="item-pill">Vinted</span>
+                            <span class="item-pill">FB Marketplace</span>
+                        </div>
+                    </div>
+                    <div class="expand-card">
+                        <h3>New Verticals</h3>
+                        <div class="items">
+                            <span class="item-pill">Electronics</span>
+                            <span class="item-pill">Furniture</span>
+                            <span class="item-pill">Books</span>
+                        </div>
+                    </div>
+                    <div class="expand-card">
+                        <h3>New Features</h3>
+                        <div class="items">
+                            <span class="item-pill">Price History</span>
+                            <span class="item-pill">Batch Scanning</span>
+                            <span class="item-pill">Offer Tracking</span>
+                        </div>
+                    </div>
+                </div>
+                <p class="animate-fade-up" style="animation-delay: 0.6s; font-size: 15px; margin-top: 12px;">
+                    Hundreds of millions of active resale users. No behavior change required. Adding a platform = adding one agent.
+                </p>
+            </div>
+        </div>
+
+        <!-- ========== SLIDE 10: CLOSE ========== -->
+        <div class="slide">
+            <div class="bg-gradient-tl"></div>
+            <div class="bg-gradient-br"></div>
+            <div class="slide-content">
+                <div class="animate-fade-up">
+                    <div class="big-number" style="background: var(--gradient-hero); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+                        10 agents.
+                    </div>
+                </div>
+                <h2 class="animate-fade-up" style="animation-delay: 0.15s; font-size: clamp(24px, 3vw, 40px); color: var(--color-text-dim); font-weight: 400;">
+                    24 hours. Two complete flows.
+                </h2>
+                <div class="animate-fade-up" style="animation-delay: 0.3s; margin-top: 32px;">
+                    <div style="display: flex; align-items: center; justify-content: center; gap: 16px;">
+                        <img src="../frontend/assets/logo.png" alt="FlipIt" style="height: 80px; width: auto;">
+                        <h1 style="font-family: var(--font-heading); font-size: clamp(48px, 7vw, 96px); background: var(--gradient-hero); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: -0.02em;">
+                            FlipIt
+                        </h1>
+                    </div>
+                </div>
+                <p class="animate-fade-up" style="animation-delay: 0.4s; font-size: 20px; color: var(--color-text-dim); margin-top: 12px;">
+                    Stop researching. Start flipping.
+                </p>
+                <div class="animate-fade-up" style="animation-delay: 0.5s; margin-top: 28px;">
+                    <div class="agent-badges">
+                        <span class="agent-badge">Fetch.ai</span>
+                        <span class="agent-badge">Browser Use</span>
+                        <span class="agent-badge">Gemini Vision</span>
+                        <span class="agent-badge purple">ASI:One</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div><!-- /.slide-deck -->
+
+    <!-- Navigation -->
+    <div class="nav-controls">
+        <button class="nav-btn" onclick="prevSlide()">&lsaquo;</button>
+        <span class="slide-counter"><span id="current">1</span> / <span id="total">10</span></span>
+        <button class="nav-btn" onclick="nextSlide()">&rsaquo;</button>
+    </div>
+
+    <div class="key-hint">Arrow keys to navigate</div>
+
+    <script>
+        let current = 1;
+        const total = document.querySelectorAll('.slide').length;
+        document.getElementById('total').textContent = total;
+
+        function showSlide(n) {
+            if (n < 1) n = 1;
+            if (n > total) n = total;
+            current = n;
+            document.querySelectorAll('.slide').forEach((s, i) => {
+                s.classList.toggle('active', i === n - 1);
+            });
+            document.getElementById('current').textContent = n;
+            document.getElementById('progressBar').style.width = (n / total * 100) + '%';
+        }
+
+        function nextSlide() { showSlide(current + 1); }
+        function prevSlide() { showSlide(current - 1); }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); nextSlide(); }
+            if (e.key === 'ArrowLeft') { e.preventDefault(); prevSlide(); }
+        });
+
+        let touchStartX = 0;
+        document.addEventListener('touchstart', (e) => { touchStartX = e.touches[0].clientX; });
+        document.addEventListener('touchend', (e) => {
+            const diff = touchStartX - e.changedTouches[0].clientX;
+            if (Math.abs(diff) > 50) {
+                if (diff > 0) nextSlide();
+                else prevSlide();
+            }
+        });
+
+        showSlide(1);
+    </script>
+</body>
+</html>
