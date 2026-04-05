@@ -269,11 +269,11 @@ export default function NewListingScreen() {
     }
 
     const totalPhotos = photos.length + aiGeneratedPhotos.length;
-    const requiredPhotos = listingType === 'sell' ? 4 : 1;
+    const requiredPhotos = 1;
     if (totalPhotos < requiredPhotos) {
       Alert.alert(
         'Not Enough Photos',
-        `${listingType === 'sell' ? 'Sell' : 'Buy'} listings require at least ${requiredPhotos} photo${requiredPhotos > 1 ? 's' : ''}.`
+        `Listings require at least 1 photo.`
       );
       return false;
     }
@@ -407,9 +407,7 @@ export default function NewListingScreen() {
                 Tap to add photos
               </Text>
               <Text style={[styles.emptyPhotosHint, { color: colors.textMuted }]}>
-                {listingType === 'sell'
-                  ? '4 photos required for sell listings'
-                  : '1 photo required for buy listings'}
+                {'1 photo required'}
               </Text>
             </TouchableOpacity>
           ) : (
@@ -829,7 +827,7 @@ export default function NewListingScreen() {
   // ─── Render: AI Review Step (after analysis) ────────────────────────────────
 
   function renderAiReviewForm() {
-    const requiredPhotos = listingType === 'sell' ? 4 : 1;
+    const requiredPhotos = 1;
     return (
       <>
         {/* Success banner */}
@@ -876,7 +874,7 @@ export default function NewListingScreen() {
   // ─── Render: Manual Full Form ───────────────────────────────────────────────
 
   function renderManualForm() {
-    const requiredPhotos = listingType === 'sell' ? 4 : 1;
+    const requiredPhotos = 1;
     return (
       <>
         {renderPhotos('Photos', requiredPhotos)}
