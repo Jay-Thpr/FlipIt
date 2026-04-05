@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
+import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -27,7 +30,45 @@ from backend.schemas import (
 )
 from backend.session import session_manager
 
-app = FastAPI(title="DiamondHacks Backend", version="0.1.0")
+logger = logging.getLogger(__name__)
+
+SELL_REVIEW_CLEANUP_INTERVAL_SECONDS = int(os.environ.get("SELL_REVIEW_CLEANUP_INTERVAL", "60"))
+
+
+async def run_sell_review_cleanup_sweep() -> None:
+    """Expire paused sell-listing reviews whose deadline has passed (used by tests and the background loop)."""
+    from backend.orchestrator import expire_sell_listing_review_if_needed
+
+    session_ids = await session_manager.list_paused_sell_review_session_ids()
+    for session_id in session_ids:
+        await expire_sell_listing_review_if_needed(session_id)
+
+
+async def _sell_review_cleanup_loop() -> None:
+    while True:
+        try:
+            await asyncio.sleep(SELL_REVIEW_CLEANUP_INTERVAL_SECONDS)
+            await run_sell_review_cleanup_sweep()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("sell review cleanup sweep failed")
+
+
+@asynccontextmanager
+async def _app_lifespan(_app: FastAPI):
+    cleanup_task = asyncio.create_task(_sell_review_cleanup_loop())
+    try:
+        yield
+    finally:
+        cleanup_task.cancel()
+        try:
+            await cleanup_task
+        except asyncio.CancelledError:
+            pass
+
+
+app = FastAPI(title="DiamondHacks Backend", version="0.1.0", lifespan=_app_lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

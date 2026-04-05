@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -13,6 +15,10 @@ client = TestClient(app)
 @pytest.mark.asyncio
 async def test_sell_listing_result_endpoint_preserves_paused_review_state() -> None:
     await session_manager.reset()
+    now = datetime.now(timezone.utc)
+    paused_at = (now - timedelta(minutes=5)).isoformat()
+    deadline_at = (now + timedelta(hours=1)).isoformat()
+
     session = await session_manager.create_session(
         session_id="sell-paused-result-session",
         pipeline="sell",
@@ -24,8 +30,8 @@ async def test_sell_listing_result_endpoint_preserves_paused_review_state() -> N
         latest_decision="revise",
         revision_instructions="Lower the price",
         revision_count=2,
-        paused_at="2026-04-04T12:00:00+00:00",
-        deadline_at="2026-04-04T12:15:00+00:00",
+        paused_at=paused_at,
+        deadline_at=deadline_at,
     )
     session.result = {
         "pipeline": "sell",
@@ -56,8 +62,8 @@ async def test_sell_listing_result_endpoint_preserves_paused_review_state() -> N
         "latest_decision": "revise",
         "revision_instructions": "Lower the price",
         "revision_count": 2,
-        "paused_at": "2026-04-04T12:00:00+00:00",
-        "deadline_at": "2026-04-04T12:15:00+00:00",
+        "paused_at": paused_at,
+        "deadline_at": deadline_at,
     }
     assert payload["result"]["outputs"]["depop_listing"]["ready_for_confirmation"] is True
     assert payload["result"]["outputs"]["depop_listing"]["listing_status"] == "ready_for_confirmation"

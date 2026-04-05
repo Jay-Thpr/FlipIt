@@ -68,6 +68,16 @@ class SessionManager:
     async def clear_sell_listing_review(self, session_id: str) -> SessionState | None:
         return await self.update_sell_listing_review(session_id, None)
 
+    async def list_paused_sell_review_session_ids(self) -> list[str]:
+        async with self._lock:
+            return [
+                sid
+                for sid, session in self._sessions.items()
+                if session.pipeline == "sell"
+                and session.status == "paused"
+                and session.sell_listing_review is not None
+            ]
+
     async def append_event(self, event: SessionEvent) -> None:
         async with self._lock:
             session = self._sessions.get(event.session_id)

@@ -11,7 +11,8 @@ from backend.session import session_manager
 
 
 @pytest.fixture(autouse=True)
-def clean_sessions() -> Iterator[None]:
+def clean_sessions(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    monkeypatch.delenv("AGENTVERSE_API_KEY", raising=False)
     asyncio.run(session_manager.reset())
     yield
     asyncio.run(session_manager.reset())
