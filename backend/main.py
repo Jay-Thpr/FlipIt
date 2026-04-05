@@ -14,6 +14,7 @@ from backend.config import (
     AGENTS,
     APP_BASE_URL,
     INTERNAL_API_TOKEN,
+    assert_fetch_agent_ports_do_not_overlap,
     fetch_integration_flags,
     get_agent_execution_mode,
 )
@@ -57,6 +58,7 @@ async def _sell_review_cleanup_loop() -> None:
 
 @asynccontextmanager
 async def _app_lifespan(_app: FastAPI):
+    assert_fetch_agent_ports_do_not_overlap()
     cleanup_task = asyncio.create_task(_sell_review_cleanup_loop())
     try:
         yield

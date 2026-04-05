@@ -20,7 +20,7 @@ Use the Makefile targets. They activate the correct virtualenvs for you.
 make install
 ```
 
-2. Create the Fetch virtualenv once if you plan to run the Fetch agents (`make venv-fetch` installs `uagents` and `uagents-core` into `.venv-fetch` with Python 3.12 by default):
+2. Create the Fetch virtualenv once if you plan to run the Fetch agents (`make venv-fetch` installs **`requirements.txt`** into `.venv-fetch` with Python 3.12 by default, including `uagents` and the rest of the backend stack):
 
 ```bash
 make venv-fetch

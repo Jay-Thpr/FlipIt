@@ -201,6 +201,8 @@ Observed blocker:
 
 ## Validation Checklist
 
+**Agentverse run + registration:** For the full local runbook (`.venv-fetch`, `source .env`, `make run-fetch-agents`) and capturing each `agent1q...` into `*_AGENTVERSE_ADDRESS`, follow **[AGENTVERSE_IMPLEMENTATION_PLAN.md](AGENTVERSE_IMPLEMENTATION_PLAN.md)** Phases A–B. For Agentverse profile fields, mailbox inspector flow, three interactions per agent, and ASI:One / Devpost URL collection, use **[AGENTVERSE_SETUP.md](AGENTVERSE_SETUP.md)**. For a paste-ready URL matrix, use **[docs/AGENTVERSE_DELIVERABLES_TEMPLATE.md](docs/AGENTVERSE_DELIVERABLES_TEMPLATE.md)**.
+
 Use this sequence before demoing Fetch:
 
 1. Run `make run` and confirm the backend is reachable on `8000`.
@@ -223,7 +225,7 @@ Use a Python `3.12` or `3.13` virtual environment for the Fetch agents.
 make venv-fetch
 ```
 
-This creates `.venv-fetch` with `python3.12` (override with `FETCH_PYTHON=...`) and installs **`uagents`** and **`uagents-core`** only. `make run-fetch-agents` sets `PYTHONPATH` to the repo root so processes can import `backend.*`; the same machine should also have `make install` (`.venv`) for the main app and shared agent code paths. Use `.venv-fetch/bin/python` for the Fetch processes and demo client so the main Python 3.14 app environment does not interfere with `uagents`.
+This creates `.venv-fetch` with `python3.12` (override with `FETCH_PYTHON=...`) and installs **`requirements.txt`** (same backend deps as the main app plus `uagents`, so `backend.fetch_runtime` and the agent registry import cleanly). `make run-fetch-agents` sets `PYTHONPATH` to the repo root. Use `.venv-fetch/bin/python` for Fetch processes and [`scripts/fetch_demo.py`](scripts/fetch_demo.py) so the main Python 3.14 app environment does not interfere with the Fetch stack.
 
 If a Fetch subprocess fails with `ImportError` for a transitive dependency, install that package into `.venv-fetch` (or align versions with `requirements.txt`) and document the one-off fix.
 
@@ -236,6 +238,8 @@ export FETCH_USE_LOCAL_ENDPOINT=true
 ## Live validation with `FETCH_ENABLED=true`
 
 The mobile path does **not** require this. Use it when you want the FastAPI orchestrator to route steps through the Fetch adapter instead of the direct local registry.
+
+**Phase F quick smoke (optional):** With `FETCH_ENABLED=true` and all Fetch seeds + `AGENTVERSE_API_KEY` exported in **Terminal A** (`make run`), and **`make run-fetch-agents`** in **Terminal B** (after `set -a && source .env && set +a`), call `GET /health` and expect `fetch_enabled: true`, then `GET /fetch-agents`, then run a short **buy** or **sell** pipeline smoke and confirm agents still complete (same checks as `make check` with `FETCH_ENABLED=false` in CI).
 
 1. **Terminal A — backend:** `make install` once, then:
 
@@ -256,7 +260,7 @@ The mobile path does **not** require this. Use it when you want the FastAPI orch
 
 4. `GET /fetch-agents` — expect ten agents, ports `9201`–`9210`.
 
-5. Smoke a search agent from the host (requires a running uAgent on that port), e.g. `python scripts/fetch_demo.py 9205 "Vintage Nike tee under $45"` using `.venv` for script dependencies.
+5. Optional mailbox chat smoke: with a registered destination address, from repo root use `.venv-fetch/bin/python scripts/fetch_demo.py --address agent1q... --message "Vintage Nike tee under $45"` (see [AGENTVERSE_SETUP.md](AGENTVERSE_SETUP.md) Step 3).
 
 6. **Mailbox-backed Agentverse:** keep `FETCH_USE_LOCAL_ENDPOINT=false` (default).
 

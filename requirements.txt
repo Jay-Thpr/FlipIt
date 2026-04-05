@@ -11,3 +11,4 @@ uagents-core
 uvicorn[standard]==0.34.0
 PyYAML==6.0.2
 python-dateutil>=2.9,<3.0
+python-dotenv>=1.0,<2.0

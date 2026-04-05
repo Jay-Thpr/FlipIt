@@ -49,7 +49,7 @@ Derived from [`backend/fetch_runtime.py`](backend/fetch_runtime.py) `FETCH_AGENT
 
 1. Install main app: `make install` (`.venv`; may be Python 3.14).
 2. Ensure **Python 3.12** available as `python3.12` (or set `FETCH_PYTHON` for `venv-fetch`).
-3. `make venv-fetch` → creates `.venv-fetch` with `uagents` / `uagents-core`.
+3. `make venv-fetch` → creates `.venv-fetch` with **`requirements.txt`** (backend deps + `uagents`, so `backend.fetch_runtime` imports cleanly).
 4. Copy [`.env.example`](.env.example) to `.env` if needed; set:
    - `AGENTVERSE_API_KEY`
    - **Ten unique** values for each `*_FETCH_AGENT_SEED` (do not reuse across agents)

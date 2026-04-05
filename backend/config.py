@@ -85,6 +85,3 @@ def fetch_integration_flags() -> dict[str, bool]:
         "fetch_enabled": is_fetch_enabled(),
         "agentverse_credentials_present": bool(get_agentverse_api_key().strip()),
     }
-
-
-assert_fetch_agent_ports_do_not_overlap()

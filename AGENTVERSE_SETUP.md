@@ -8,7 +8,7 @@
 ## This repository (DiamondHacks backend)
 
 - Fetch **uAgents** are built by [`backend/fetch_agents/builder.py`](backend/fetch_agents/builder.py) from [`FETCH_AGENT_SPECS`](backend/fetch_runtime.py). There are **no** per-agent scripts such as `python run_agents.py` or `agents/vision_agent.py`.
-- **Python:** use **`make venv-fetch`** (defaults to `python3.12`) so `uagents` runs outside the main app venv. Main app: `make install` (`.venv`).
+- **Python:** use **`make venv-fetch`** (defaults to `python3.12`) so Fetch processes use a 3.12 venv with **`requirements.txt`** (includes `uagents` and backend deps for `backend.fetch_runtime`). Main app: `make install` (`.venv`).
 - **Run all ten:** load `.env` into your shell (`set -a && source .env && set +a` in bash/zsh), then **`make run-fetch-agents`**. [`backend/run_fetch_agents.py`](backend/run_fetch_agents.py) does not call `load_dotenv`; the shell must export `AGENTVERSE_API_KEY` and all `*_FETCH_AGENT_SEED` vars.
 - **uAgent listen ports** in this repo are **9201–9210** (one port per slug). Optional HTTP `/task` microservices for the same logical agents use **9101–9110** ([`backend/config.py`](backend/config.py)) — a **separate** process from the Fetch uAgent.
 
@@ -528,15 +528,40 @@ Part of the autonomous BUY pipeline that negotiates on behalf of the user.
 
 Do this for each of the 10 agents. The flow is the same; only the **slug** and **port** change (see Quick Reference below).
 
-### Start one agent (debug):
+### Start one agent at a time (recommended for mailbox setup)
+
+So you only see **one** Agent inspector URL in the terminal at a time: **stop** any `make run-fetch-agents` process first (Ctrl+C), then run one slug, complete Mailbox in the browser, Ctrl+C, and repeat with the next slug.
+
 ```bash
 set -a && source .env && set +a   # bash/zsh — exports AGENTVERSE_API_KEY and seeds
+make run-fetch-agent AGENT=vision_agent
+```
+
+Replace `vision_agent` with any slug (e.g. `negotiation_agent`, `depop_search_agent`). Same as:
+
+```bash
 PYTHONPATH=$PWD .venv-fetch/bin/python -m backend.fetch_agents.launch vision_agent
 ```
 
-Replace `vision_agent` with any slug (e.g. `negotiation_agent`, `depop_search_agent`).
+**Suggested order** (matches [backend/fetch_runtime.py](backend/fetch_runtime.py) `FETCH_AGENT_SPECS` — sell pipeline first, then buy search chain, ranking, negotiation). For each step: run the command → open the one inspector link → Mailbox → copy `agent1q...` into the `.env` variable → Ctrl+C → next.
 
-### Start all ten:
+| # | Agent | Port | Command |
+|---|-------|------|---------|
+| 1 | VisionAgent | 9201 | `make run-fetch-agent AGENT=vision_agent` |
+| 2 | EbaySoldCompsAgent | 9202 | `make run-fetch-agent AGENT=ebay_sold_comps_agent` |
+| 3 | PricingAgent | 9203 | `make run-fetch-agent AGENT=pricing_agent` |
+| 4 | DepopListingAgent | 9204 | `make run-fetch-agent AGENT=depop_listing_agent` |
+| 5 | DepopSearchAgent | 9205 | `make run-fetch-agent AGENT=depop_search_agent` |
+| 6 | EbaySearchAgent | 9206 | `make run-fetch-agent AGENT=ebay_search_agent` |
+| 7 | MercariSearchAgent | 9207 | `make run-fetch-agent AGENT=mercari_search_agent` |
+| 8 | OfferUpSearchAgent | 9208 | `make run-fetch-agent AGENT=offerup_search_agent` |
+| 9 | RankingAgent | 9209 | `make run-fetch-agent AGENT=ranking_agent` |
+| 10 | NegotiationAgent | 9210 | `make run-fetch-agent AGENT=negotiation_agent` |
+
+`.env` keys for each address: `VISION_AGENT_AGENTVERSE_ADDRESS`, `EBAY_SOLD_COMPS_AGENT_AGENTVERSE_ADDRESS`, `PRICING_AGENT_AGENTVERSE_ADDRESS`, `DEPOP_LISTING_AGENT_AGENTVERSE_ADDRESS`, `DEPOP_SEARCH_AGENT_AGENTVERSE_ADDRESS`, `EBAY_SEARCH_AGENT_AGENTVERSE_ADDRESS`, `MERCARI_SEARCH_AGENT_AGENTVERSE_ADDRESS`, `OFFERUP_SEARCH_AGENT_AGENTVERSE_ADDRESS`, `RANKING_AGENT_AGENTVERSE_ADDRESS`, `NEGOTIATION_AGENT_AGENTVERSE_ADDRESS` (full table in [AGENTVERSE_IMPLEMENTATION_PLAN.md](AGENTVERSE_IMPLEMENTATION_PLAN.md) §2).
+
+### Start all ten (many inspector URLs at once)
+
 ```bash
 set -a && source .env && set +a
 make run-fetch-agents
@@ -680,6 +705,8 @@ NegotiationAgent:         https://agentverse.ai/agents/...
 ```
 
 Paste all 11 URLs into Devpost submission under Fetch.ai deliverables.
+
+A fill-in table lives at [docs/AGENTVERSE_DELIVERABLES_TEMPLATE.md](docs/AGENTVERSE_DELIVERABLES_TEMPLATE.md).
 
 ---
 
