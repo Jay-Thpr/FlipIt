@@ -616,6 +616,7 @@ async def run_pipeline(session_id: str, pipeline: str, request: PipelineStartReq
             await write_back_buy_result(
                 session_id=session_id,
                 user_id=request.user_id,
+                item_id=(request.metadata or {}).get("item_id"),
                 outputs=outputs,
             )
         await publish(session_id, "pipeline_complete", pipeline=pipeline, data={"mode": pipeline, **result})

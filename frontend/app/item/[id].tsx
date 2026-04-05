@@ -12,6 +12,8 @@ import { supabase } from '../../lib/supabase';
 import { pickImage } from '../../lib/imagePicker';
 import { emit } from '../../lib/events';
 import { PLATFORM_NAMES, MarketData, Conversation } from '../../data/mockData';
+import { startSellRun, startBuyRun, getLatestRun, submitSellCorrection, submitListingDecision, AgentRunResult } from '../../lib/api';
+import { connectToRunStream, SSEEvent } from '../../lib/sse';
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -100,12 +102,26 @@ export default function ItemDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [aiActive, setAiActive] = useState(false);
   const [photos, setPhotos] = useState<{ id: string; url: string; sortOrder: number }[]>([]);
+  const [run, setRun] = useState<AgentRunResult | null>(null);
+  const [runLoading, setRunLoading] = useState(false);
+  const [agentSteps, setAgentSteps] = useState<{ name: string; status: string; summary?: string }[]>([]);
+  const [runError, setRunError] = useState<string | null>(null);
+  const stopStreamRef = useRef<(() => void) | null>(null);
   const userToggledRef = React.useRef(false);
 
   useEffect(() => {
     if (!id) return;
     loadItem();
   }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    getLatestRun(id).then(setRun).catch(() => {});
+  }, [id]);
+
+  useEffect(() => {
+    return () => { stopStreamRef.current?.(); };
+  }, []);
 
   async function loadItem() {
     const { data } = await supabase
@@ -237,6 +253,69 @@ export default function ItemDetailScreen() {
     );
   }
 
+  async function handleStartRun() {
+    if (!item || !id) return;
+    setRunLoading(true);
+    setRunError(null);
+    setAgentSteps([]);
+    try {
+      let response;
+      if (item.type === 'sell') {
+        const imageUrls = photos.map(p => p.url);
+        response = await startSellRun(id, { image_urls: imageUrls, notes: item.description });
+      } else {
+        response = await startBuyRun(id, { query: item.name, budget: item.targetPrice });
+      }
+      const runId = response.run_id || response.session_id;
+
+      // Connect to SSE stream
+      stopStreamRef.current = connectToRunStream(
+        runId,
+        (event: SSEEvent) => {
+          if (event.event === 'agent_started') {
+            setAgentSteps(prev => [...prev, { name: event.data.agent_name || event.data.step, status: 'running' }]);
+          } else if (event.event === 'agent_completed') {
+            setAgentSteps(prev => prev.map(s =>
+              s.name === (event.data.agent_name || event.data.step)
+                ? { ...s, status: 'completed', summary: event.data.summary }
+                : s
+            ));
+          } else if (event.event === 'agent_error') {
+            setAgentSteps(prev => prev.map(s =>
+              s.name === (event.data.agent_name || event.data.step)
+                ? { ...s, status: 'error', summary: event.data.error }
+                : s
+            ));
+          } else if (event.event === 'pipeline_complete') {
+            getLatestRun(id).then(setRun).catch(() => {});
+          } else if (event.event === 'pipeline_failed') {
+            setRunError(event.data.error || 'Pipeline failed');
+          } else if (event.event === 'vision_low_confidence') {
+            setRun(prev => prev ? { ...prev, status: 'running' as const, sell_listing_review: null } : prev);
+            getLatestRun(id).then(setRun).catch(() => {});
+          } else if (event.event === 'listing_review_required') {
+            getLatestRun(id).then(setRun).catch(() => {});
+          }
+        },
+        (err) => { setRunError(err.message); },
+        () => { setRunLoading(false); },
+      );
+    } catch (err: any) {
+      setRunError(err.message);
+      setRunLoading(false);
+    }
+  }
+
+  async function handleListingDecision(decision: 'confirm_submit' | 'revise' | 'abort', instructions?: string) {
+    if (!run) return;
+    try {
+      await submitListingDecision(run.session_id, decision, instructions);
+      getLatestRun(id!).then(setRun).catch(() => {});
+    } catch (err: any) {
+      Alert.alert('Error', err.message);
+    }
+  }
+
   const modeLabel = item.type === 'buy' ? 'Buying' : 'Selling';
 
   return (
@@ -285,6 +364,157 @@ export default function ItemDetailScreen() {
           </View>
         </View>
       </View>
+
+      {/* Agent Run Section */}
+      {!run || run.status === 'completed' || run.status === 'failed' ? (
+        <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
+          <TouchableOpacity
+            style={{
+              backgroundColor: colors.accent,
+              borderRadius: 12,
+              paddingVertical: 14,
+              alignItems: 'center',
+              opacity: runLoading ? 0.6 : 1,
+            }}
+            onPress={handleStartRun}
+            disabled={runLoading}
+            activeOpacity={0.7}
+          >
+            <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '700' }}>
+              {runLoading ? 'Starting...' : item.type === 'sell' ? '🔍 Start Selling' : '🛒 Start Buying'}
+            </Text>
+          </TouchableOpacity>
+          {runError && (
+            <Text style={{ color: colors.destructive, fontSize: 13, marginTop: 8, textAlign: 'center' }}>{runError}</Text>
+          )}
+        </View>
+      ) : null}
+
+      {/* Agent Steps Progress */}
+      {agentSteps.length > 0 && (
+        <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
+          <Text style={[styles.sectionLabel, { color: colors.textMuted, paddingHorizontal: 4 }]}>AGENT PROGRESS</Text>
+          <View style={[styles.cardBody, { backgroundColor: colors.surface }]}>
+            {agentSteps.map((step, idx) => (
+              <View key={idx}>
+                {idx > 0 && <View style={[styles.divider, { backgroundColor: colors.divider }]} />}
+                <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, gap: 10 }}>
+                  <Text style={{ fontSize: 14 }}>
+                    {step.status === 'running' ? '⏳' : step.status === 'completed' ? '✅' : '❌'}
+                  </Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: '600' }}>
+                      {step.name?.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                    </Text>
+                    {step.summary && (
+                      <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }} numberOfLines={2}>
+                        {step.summary}
+                      </Text>
+                    )}
+                  </View>
+                </View>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
+
+      {/* Sell Listing Review */}
+      {run?.sell_listing_review && run.status === 'running' && (
+        <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
+          <Text style={[styles.sectionLabel, { color: colors.textMuted, paddingHorizontal: 4 }]}>LISTING REVIEW</Text>
+          <View style={[styles.cardBody, { backgroundColor: colors.surface, padding: 14 }]}>
+            <Text style={{ color: colors.textPrimary, fontSize: 15, fontWeight: '600', marginBottom: 8 }}>
+              Review your listing before posting
+            </Text>
+            {run.sell_listing_review.listing_preview && (
+              <View style={{ gap: 4, marginBottom: 12 }}>
+                <Text style={{ color: colors.textMuted, fontSize: 12 }}>Title: {run.sell_listing_review.listing_preview.title}</Text>
+                <Text style={{ color: colors.textMuted, fontSize: 12 }}>Price: ${run.sell_listing_review.listing_preview.price}</Text>
+                {run.sell_listing_review.listing_preview.description && (
+                  <Text style={{ color: colors.textMuted, fontSize: 12 }} numberOfLines={3}>
+                    {run.sell_listing_review.listing_preview.description}
+                  </Text>
+                )}
+              </View>
+            )}
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <TouchableOpacity
+                style={{ flex: 1, backgroundColor: colors.accent, borderRadius: 8, paddingVertical: 10, alignItems: 'center' }}
+                onPress={() => handleListingDecision('confirm_submit')}
+              >
+                <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 14 }}>Confirm & Post</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ flex: 1, backgroundColor: colors.muted, borderRadius: 8, paddingVertical: 10, alignItems: 'center' }}
+                onPress={() => handleListingDecision('abort')}
+              >
+                <Text style={{ color: colors.textPrimary, fontWeight: '600', fontSize: 14 }}>Abort</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* Buy Results */}
+      {run?.status === 'completed' && run.pipeline === 'buy' && run.result?.outputs && (
+        <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
+          <Text style={[styles.sectionLabel, { color: colors.textMuted, paddingHorizontal: 4 }]}>SEARCH RESULTS</Text>
+          <View style={[styles.cardBody, { backgroundColor: colors.surface, padding: 14 }]}>
+            {run.result.outputs.ranking?.top_choice && (
+              <View style={{ marginBottom: 8 }}>
+                <Text style={{ color: colors.accent, fontSize: 14, fontWeight: '700' }}>Top Choice</Text>
+                <Text style={{ color: colors.textPrimary, fontSize: 16, fontWeight: '800', marginTop: 2 }}>
+                  ${run.result.outputs.ranking.top_choice.price} — {run.result.outputs.ranking.top_choice.platform}
+                </Text>
+                {run.result.outputs.ranking.top_choice.seller && (
+                  <Text style={{ color: colors.textMuted, fontSize: 12 }}>Seller: {run.result.outputs.ranking.top_choice.seller}</Text>
+                )}
+              </View>
+            )}
+            {run.result.outputs.negotiation?.offers && (
+              <View>
+                <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: '600', letterSpacing: 0.5, marginTop: 8, marginBottom: 4 }}>OFFERS SENT</Text>
+                {run.result.outputs.negotiation.offers.map((offer: any, idx: number) => (
+                  <View key={idx} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6 }}>
+                    <Text style={{ color: colors.textPrimary, fontSize: 13 }}>{offer.seller || offer.platform}</Text>
+                    <Text style={{ color: offer.status === 'sent' ? colors.accent : colors.textMuted, fontSize: 13, fontWeight: '600' }}>
+                      {offer.status === 'sent' ? '✓ Sent' : offer.status}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        </View>
+      )}
+
+      {/* Sell Results */}
+      {run?.status === 'completed' && run.pipeline === 'sell' && run.result?.outputs && (
+        <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
+          <Text style={[styles.sectionLabel, { color: colors.textMuted, paddingHorizontal: 4 }]}>SELL RESULTS</Text>
+          <View style={[styles.cardBody, { backgroundColor: colors.surface, padding: 14 }]}>
+            {run.result.outputs.pricing && (
+              <View style={{ marginBottom: 8 }}>
+                <Text style={{ color: colors.accent, fontSize: 14, fontWeight: '700' }}>Recommended Price</Text>
+                <Text style={{ color: colors.textPrimary, fontSize: 24, fontWeight: '800', marginTop: 2 }}>
+                  ${run.result.outputs.pricing.recommended_list_price || run.result.outputs.pricing.recommended_price}
+                </Text>
+                {run.result.outputs.pricing.profit_margin != null && (
+                  <Text style={{ color: colors.accent, fontSize: 14, marginTop: 2 }}>
+                    Profit margin: ${run.result.outputs.pricing.profit_margin}
+                  </Text>
+                )}
+              </View>
+            )}
+            {run.result.outputs.ebay_sold_comps && (
+              <Text style={{ color: colors.textMuted, fontSize: 12 }}>
+                Based on {run.result.outputs.ebay_sold_comps.sample_size || '?'} eBay sold comps
+              </Text>
+            )}
+          </View>
+        </View>
+      )}
 
       <ScrollView
         showsVerticalScrollIndicator={false}

@@ -201,8 +201,8 @@ async def test_write_back_creates_message_when_conv_and_message_present():
     msg_repo.create_message.assert_called_once()
     msg_kwargs = msg_repo.create_message.call_args[0][0]
     assert msg_kwargs["conversation_id"] == "conv-id-1"
-    assert msg_kwargs["role"] == "user"
-    assert msg_kwargs["content"] == "Would you take $32?"
+    assert msg_kwargs["sender"] == "agent"
+    assert msg_kwargs["text"] == "Would you take $32?"
     assert msg_kwargs["target_price"] == 32.0
 
 

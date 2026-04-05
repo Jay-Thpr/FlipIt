@@ -9,6 +9,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { NegotiationStyle, ReplyTone } from '../../lib/types';
+import { getAgents, getHealth, AgentInfo } from '../../lib/api';
 
 export default function AgentsScreen() {
   const { colors } = useTheme();
@@ -18,11 +19,22 @@ export default function AgentsScreen() {
   const [responseDelay, setResponseDelay] = useState('5 min');
   const [negotiationStyle, setNegotiationStyle] = useState<NegotiationStyle>('moderate');
   const [replyTone, setReplyTone] = useState<ReplyTone>('professional');
+  const [agents, setAgents] = useState<AgentInfo[]>([]);
+  const [backendStatus, setBackendStatus] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
     loadSettings();
   }, [user]);
+
+  useEffect(() => {
+    getHealth()
+      .then(h => setBackendStatus(h.status))
+      .catch(() => setBackendStatus('offline'));
+    getAgents()
+      .then(data => setAgents(data.agents))
+      .catch(() => {});
+  }, []);
 
   async function loadSettings() {
     if (!user) return;
@@ -176,6 +188,36 @@ export default function AgentsScreen() {
               })}
             </View>
           </View>
+        </View>
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>BACKEND AGENTS</Text>
+        </View>
+        <View style={[styles.card, { backgroundColor: colors.surface }]}>
+          <View style={styles.row}>
+            <View style={styles.rowLeft}>
+              <View style={[styles.iconWrap, { backgroundColor: backendStatus === 'ok' ? '#D1FAE5' : colors.muted }]}>
+                <Zap size={15} color={backendStatus === 'ok' ? '#059669' : colors.textSecondary} />
+              </View>
+              <Text style={[styles.rowLabel, { color: colors.textPrimary }]}>Backend Status</Text>
+            </View>
+            <Text style={[styles.rowValue, { color: backendStatus === 'ok' ? '#059669' : colors.textMuted }]}>
+              {backendStatus === 'ok' ? 'Connected' : backendStatus === 'offline' ? 'Offline' : 'Checking...'}
+            </Text>
+          </View>
+          {agents.map((agent, idx) => (
+            <React.Fragment key={agent.slug}>
+              <View style={[styles.divider, { backgroundColor: colors.divider }]} />
+              <View style={styles.row}>
+                <View style={styles.rowLeft}>
+                  <View style={[styles.iconWrap, { backgroundColor: colors.muted }]}>
+                    <Zap size={15} color={colors.textSecondary} />
+                  </View>
+                  <Text style={[styles.rowLabel, { color: colors.textPrimary }]}>{agent.name}</Text>
+                </View>
+                <Text style={[styles.rowValue, { color: colors.textMuted }]}>:{agent.port}</Text>
+              </View>
+            </React.Fragment>
+          ))}
         </View>
         <View style={{ height: 32 }} />
       </ScrollView>

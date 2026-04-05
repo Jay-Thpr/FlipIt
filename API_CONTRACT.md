@@ -6,6 +6,7 @@ This document defines the interface for the backend REST endpoints and the real-
 
 | Date | Notes |
 |------|--------|
+| 2026-04-05 | Added authenticated endpoints (Section 1.6); reorganized route index into public, authenticated, and legacy tables; added `/fetch-agent-capabilities` to route index. |
 | 2026-04-04 | Documented all public REST routes; aligned `GET /result` with `SessionState`; clarified `pipeline_failed.partial_result`; noted buy-side marketplace searches may run concurrently (SSE order for those steps is not guaranteed). |
 | 2026-04-04 | `GET /health` includes `fetch_enabled` and `agentverse_credentials_present` (booleans, no secrets). |
 
@@ -20,18 +21,43 @@ This document defines the interface for the backend REST endpoints and the real-
 
 ## 0. Route index
 
+### Public / unauthenticated
+
 | Method | Path | Purpose |
 |--------|------|---------|
 | `GET` | `/health` | Liveness + execution mode + agent count |
 | `GET` | `/agents` | List agent display names, slugs, and HTTP ports |
 | `GET` | `/fetch-agents` | List Fetch/Agentverse agent names, slugs, ports, descriptions, and recorded Agentverse addresses |
+| `GET` | `/fetch-agent-capabilities` | List Fetch agent capabilities |
 | `GET` | `/pipelines` | Ordered sell/buy steps (agent slug + step name) |
-| `POST` | `/sell/start` | Queue sell pipeline |
-| `POST` | `/buy/start` | Queue buy pipeline |
-| `POST` | `/sell/correct` | Resume sell pipeline after user corrects low-confidence vision |
-| `GET` | `/result/{session_id}` | Full session snapshot (`SessionState`) |
-| `GET` | `/stream/{session_id}` | SSE event stream |
 | `POST` | `/internal/event/{session_id}` | Inject an SSE event (requires `X-Internal-Token`) |
+
+### Authenticated (primary frontend contract)
+
+All endpoints below require `Authorization: Bearer <supabase-jwt-token>`. The backend validates the JWT using the `SUPABASE_JWT_SECRET` env var. Ownership checks ensure the authenticated user owns the referenced item or run.
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `POST` | `/items/{item_id}/sell/run` | Start sell pipeline for an item (enforces item ownership) |
+| `POST` | `/items/{item_id}/buy/run` | Start buy pipeline for an item (enforces item ownership) |
+| `GET` | `/runs/{run_id}` | Get the state of a specific run (enforces run ownership) |
+| `GET` | `/items/{item_id}/runs/latest` | Get the latest run for an item (enforces item ownership) |
+| `GET` | `/runs/{run_id}/stream` | SSE stream for a run (enforces run ownership) |
+| `POST` | `/runs/{run_id}/sell/correct` | Submit vision correction for a run (enforces run ownership) |
+| `POST` | `/runs/{run_id}/sell/listing-decision` | Submit listing decision for a run (enforces run ownership) |
+
+### Legacy (backward compatibility)
+
+These endpoints bypass auth and item ownership enforcement. The frontend should prefer the authenticated endpoints above.
+
+| Method | Path | Preferred replacement |
+|--------|------|-----------------------|
+| `POST` | `/sell/start` | `POST /items/{item_id}/sell/run` |
+| `POST` | `/buy/start` | `POST /items/{item_id}/buy/run` |
+| `POST` | `/sell/correct` | `POST /runs/{run_id}/sell/correct` |
+| `POST` | `/sell/listing-decision` | `POST /runs/{run_id}/sell/listing-decision` |
+| `GET` | `/result/{session_id}` | `GET /runs/{run_id}` |
+| `GET` | `/stream/{session_id}` | `GET /runs/{run_id}/stream` |
 
 ---
 
@@ -186,6 +212,131 @@ Body: `{ "event_type": "string", "data": { } }`
 Appends a `SessionEvent` to the session and fans it out to active SSE subscribers. Used for agent-originated auxiliary events (e.g. `listing_found`, `search_method`).
 
 **401** invalid/missing token. **404** unknown session.
+
+### 1.6 Authenticated Endpoints
+
+All endpoints in this section require the header `Authorization: Bearer <supabase-jwt-token>`. The backend validates the token against the `SUPABASE_JWT_SECRET` environment variable. Unauthorized or expired tokens return **401**. Ownership violations return **403**. Unknown items or runs return **404**.
+
+#### 1.6.1 Start SELL Pipeline (authenticated)
+
+**`POST /items/{item_id}/sell/run`**
+**Content-Type:** `application/json`
+
+Enforces item ownership — the authenticated user must own `item_id`.
+
+**Request Body:** Same as `POST /sell/start` (see 1.1).
+
+**Response (200 OK):**
+```json
+{
+  "run_id": "ab12cd34-5678-90ef-ghij",
+  "item_id": "item-uuid",
+  "run_url": "http://localhost:8000/runs/ab12cd34...",
+  "stream_url": "http://localhost:8000/stream/ab12cd34...",
+  "result_url": "http://localhost:8000/result/ab12cd34...",
+  "pipeline": "sell",
+  "status": "queued"
+}
+```
+
+#### 1.6.2 Start BUY Pipeline (authenticated)
+
+**`POST /items/{item_id}/buy/run`**
+**Content-Type:** `application/json`
+
+Enforces item ownership. Request body same as `POST /buy/start` (see 1.2). Response same shape as 1.6.1.
+
+#### 1.6.3 Get Run State
+
+**`GET /runs/{run_id}`**
+
+Enforces run ownership. Returns the same `SessionState`-shaped payload as `GET /result/{session_id}` (see 1.4), plus `run_id` and `item_id` fields.
+
+**404** if the run is unknown. **403** if the caller does not own the run.
+
+#### 1.6.4 Get Latest Run for Item
+
+**`GET /items/{item_id}/runs/latest`**
+
+Enforces item ownership. Returns the most recent run payload for the given item (same shape as 1.6.3).
+
+**404** if no run exists for the item.
+
+#### 1.6.5 SSE Stream for Run
+
+**`GET /runs/{run_id}/stream`**
+**Accept:** `text/event-stream`
+
+Enforces run ownership. Behaves identically to `GET /stream/{session_id}` (see Section 2) but merges persisted and live events, deduplicating by event identity.
+
+#### 1.6.6 Submit Vision Correction (authenticated)
+
+**`POST /runs/{run_id}/sell/correct`**
+**Content-Type:** `application/json`
+
+Enforces run ownership. Equivalent to `POST /sell/correct` but takes `run_id` from the path instead of the body.
+
+**Request Body:**
+```json
+{
+  "corrected_item": {
+    "brand": "Nike",
+    "item_name": "Vintage Hoodie",
+    "model": "Red Tag",
+    "condition": "good",
+    "search_query": "Vintage Nike Hoodie Red Tag"
+  }
+}
+```
+
+**Response (200 OK):** `{ "ok": true }`
+
+#### 1.6.7 Submit Listing Decision (authenticated)
+
+**`POST /runs/{run_id}/sell/listing-decision`**
+**Content-Type:** `application/json`
+
+Enforces run ownership. Equivalent to `POST /sell/listing-decision` but takes `run_id` from the path.
+
+**Request Body:**
+```json
+{
+  "decision": "confirm_submit",
+  "revision_instructions": null
+}
+```
+
+`decision` is one of `confirm_submit`, `revise`, `abort`. `revision_instructions` is required when `decision` is `revise`.
+
+**Response (200 OK):**
+```json
+{
+  "session_id": "ab12cd34-...",
+  "decision": "confirm_submit",
+  "session_status": "paused",
+  "queued_action": "submit_listing",
+  "review_state": { ... },
+  "revision_instructions": null
+}
+```
+
+#### 1.6.8 Fetch Agent Capabilities
+
+**`GET /fetch-agent-capabilities`**
+
+Public (no auth required). Returns registered Fetch agent capabilities.
+
+```json
+{
+  "agents": [
+    {
+      "name": "VisionAgent",
+      "slug": "vision_agent",
+      "capabilities": [ ... ]
+    }
+  ]
+}
+```
 
 ---
 

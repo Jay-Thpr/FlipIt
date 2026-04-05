@@ -101,6 +101,10 @@ CREATE TABLE public.items (
   negotiation_style TEXT NOT NULL DEFAULT 'moderate' CHECK (negotiation_style IN ('aggressive', 'moderate', 'passive')),
   reply_tone TEXT NOT NULL DEFAULT 'professional' CHECK (reply_tone IN ('professional', 'casual', 'firm')),
   best_offer NUMERIC(10,2),
+  -- Backend sell review artifacts (from jay's pipeline)
+  draft_url TEXT,
+  listing_screenshot_url TEXT,
+  listing_preview_payload JSONB,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   last_viewed_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -174,13 +178,20 @@ CREATE TRIGGER set_market_data_updated_at
 -- ============================================================
 CREATE TABLE public.conversations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  item_id UUID NOT NULL REFERENCES public.items(id) ON DELETE CASCADE,
-  username TEXT NOT NULL,
+  item_id UUID REFERENCES public.items(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  username TEXT NOT NULL DEFAULT '',
   platform TEXT NOT NULL CHECK (platform IN ('ebay', 'depop', 'mercari', 'offerup', 'facebook')),
   last_message TEXT NOT NULL DEFAULT '',
   last_message_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   unread BOOLEAN NOT NULL DEFAULT false,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  -- Backend writeback columns (from jay's pipeline)
+  listing_url TEXT,
+  listing_title TEXT,
+  seller TEXT,
+  status TEXT NOT NULL DEFAULT 'active',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX idx_conversations_item_id ON public.conversations(item_id);
@@ -193,6 +204,7 @@ CREATE TABLE public.messages (
   conversation_id UUID NOT NULL REFERENCES public.conversations(id) ON DELETE CASCADE,
   sender TEXT NOT NULL CHECK (sender IN ('agent', 'them')),
   text TEXT NOT NULL,
+  target_price NUMERIC(10,2),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -210,6 +222,11 @@ CREATE TABLE public.completed_trades (
   platform TEXT NOT NULL CHECK (platform IN ('ebay', 'depop', 'mercari', 'offerup', 'facebook')),
   price NUMERIC(10,2) NOT NULL,
   initial_price NUMERIC(10,2),
+  -- Backend writeback columns (from jay's pipeline)
+  listing_url TEXT,
+  seller TEXT,
+  conversation_id UUID REFERENCES public.conversations(id) ON DELETE SET NULL,
+  run_id TEXT,
   listed_at TIMESTAMPTZ,
   completed_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -218,7 +235,59 @@ CREATE INDEX idx_completed_trades_user_id ON public.completed_trades(user_id);
 CREATE INDEX idx_completed_trades_completed_at ON public.completed_trades(completed_at);
 
 -- ============================================================
--- 12. ROW-LEVEL SECURITY
+-- 12. AGENT RUNS (from jay's pipeline)
+-- ============================================================
+CREATE TABLE public.agent_runs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  session_id TEXT NOT NULL UNIQUE,
+  user_id UUID NOT NULL,
+  item_id UUID,
+  pipeline TEXT NOT NULL CHECK (pipeline IN ('sell', 'buy')),
+  status TEXT NOT NULL,
+  phase TEXT NOT NULL,
+  next_action_type TEXT,
+  next_action_payload JSONB NOT NULL DEFAULT '{}'::JSONB,
+  request_payload JSONB NOT NULL DEFAULT '{}'::JSONB,
+  result_payload JSONB NOT NULL DEFAULT '{}'::JSONB,
+  error TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  completed_at TIMESTAMPTZ
+);
+
+CREATE INDEX idx_agent_runs_user_created_at ON public.agent_runs(user_id, created_at DESC);
+CREATE INDEX idx_agent_runs_item_created_at ON public.agent_runs(item_id, created_at DESC);
+CREATE INDEX idx_agent_runs_session_id ON public.agent_runs(session_id);
+CREATE INDEX idx_agent_runs_status_phase ON public.agent_runs(status, phase);
+
+CREATE TRIGGER set_agent_runs_updated_at
+  BEFORE UPDATE ON public.agent_runs
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+-- ============================================================
+-- 13. AGENT RUN EVENTS (from jay's pipeline)
+-- ============================================================
+CREATE TABLE public.agent_run_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  run_id UUID NOT NULL REFERENCES public.agent_runs(id) ON DELETE CASCADE,
+  session_id TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  step TEXT,
+  payload JSONB NOT NULL DEFAULT '{}'::JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_agent_run_events_run_created_at ON public.agent_run_events(run_id, created_at DESC);
+CREATE INDEX idx_agent_run_events_session_id ON public.agent_run_events(session_id);
+CREATE INDEX idx_agent_run_events_event_type ON public.agent_run_events(event_type);
+
+-- Add updated_at trigger to conversations
+CREATE TRIGGER set_conversations_updated_at
+  BEFORE UPDATE ON public.conversations
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+-- ============================================================
+-- 14. ROW-LEVEL SECURITY
 -- ============================================================
 
 -- profiles
@@ -257,26 +326,41 @@ ALTER TABLE public.market_data ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can read market data for own items" ON public.market_data FOR SELECT
   USING (EXISTS (SELECT 1 FROM public.items WHERE items.id = market_data.item_id AND items.user_id = auth.uid()));
 
--- conversations
+-- conversations (accessible via item ownership OR direct user_id)
 ALTER TABLE public.conversations ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users can read conversations for own items" ON public.conversations FOR ALL
-  USING (EXISTS (SELECT 1 FROM public.items WHERE items.id = conversations.item_id AND items.user_id = auth.uid()));
+CREATE POLICY "Users can access own conversations" ON public.conversations FOR ALL
+  USING (
+    conversations.user_id = auth.uid()
+    OR EXISTS (SELECT 1 FROM public.items WHERE items.id = conversations.item_id AND items.user_id = auth.uid())
+  );
 
 -- messages (agents write via service_role key which bypasses RLS)
 ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can read messages in own conversations" ON public.messages FOR SELECT
   USING (EXISTS (
     SELECT 1 FROM public.conversations c
-    JOIN public.items i ON c.item_id = i.id
-    WHERE c.id = messages.conversation_id AND i.user_id = auth.uid()
+    WHERE c.id = messages.conversation_id
+    AND (
+      c.user_id = auth.uid()
+      OR EXISTS (SELECT 1 FROM public.items i WHERE i.id = c.item_id AND i.user_id = auth.uid())
+    )
   ));
 
 -- completed_trades
 ALTER TABLE public.completed_trades ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can manage own trades" ON public.completed_trades FOR ALL USING (auth.uid() = user_id);
 
+-- agent_runs (agents write via service_role key which bypasses RLS)
+ALTER TABLE public.agent_runs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can read own agent runs" ON public.agent_runs FOR SELECT USING (auth.uid() = user_id);
+
+-- agent_run_events (agents write via service_role key which bypasses RLS)
+ALTER TABLE public.agent_run_events ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can read events for own runs" ON public.agent_run_events FOR SELECT
+  USING (EXISTS (SELECT 1 FROM public.agent_runs r WHERE r.id = agent_run_events.run_id AND r.user_id = auth.uid()));
+
 -- ============================================================
--- 13. STORAGE BUCKET
+-- 15. STORAGE BUCKET
 -- ============================================================
 -- Bucket already exists; create only if missing
 INSERT INTO storage.buckets (id, name, public)
@@ -296,6 +380,6 @@ CREATE POLICY "Anyone can read photos" ON storage.objects FOR SELECT
   USING (bucket_id = 'item-photos');
 
 -- ============================================================
--- 14. REALTIME
+-- 16. REALTIME
 -- ============================================================
 ALTER PUBLICATION supabase_realtime ADD TABLE public.conversations, public.messages, public.items;

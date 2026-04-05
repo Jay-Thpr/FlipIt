@@ -13,6 +13,7 @@ from typing import Any
 from backend.config import is_supabase_configured
 from backend.repositories.conversations import ConversationRepository
 from backend.repositories.messages import MessageRepository
+from backend.run_records import utc_now_iso
 from backend.supabase import get_supabase_client
 
 logger = logging.getLogger(__name__)
@@ -45,6 +46,7 @@ async def write_back_buy_result(
     *,
     session_id: str,
     user_id: str | None,
+    item_id: str | None = None,
     outputs: dict[str, Any],
 ) -> None:
     """Project buy pipeline negotiation/ranking results into durable frontend records.
@@ -81,6 +83,7 @@ async def write_back_buy_result(
 
         # --- upsert conversation ---
         conv: dict[str, Any] | None = None
+        message_text = offer.get("message")
         try:
             conv = conv_repo.upsert_conversation({
                 "user_id": user_id,
@@ -89,6 +92,10 @@ async def write_back_buy_result(
                 "listing_title": offer.get("listing_title"),
                 "seller": offer.get("seller"),
                 "status": "offer_sent",
+                "item_id": item_id,
+                "username": offer.get("seller", ""),
+                "last_message": message_text or "",
+                "last_message_at": utc_now_iso(),
             })
         except Exception:
             logger.exception(
@@ -98,13 +105,12 @@ async def write_back_buy_result(
             )
 
         # --- persist negotiation message ---
-        message_text = offer.get("message")
         if conv and message_text:
             try:
                 msg_repo.create_message({
                     "conversation_id": conv["id"],
-                    "role": "user",
-                    "content": message_text,
+                    "sender": "agent",
+                    "text": message_text,
                     "target_price": offer.get("target_price"),
                 })
             except Exception:
