@@ -20,7 +20,7 @@ function ThemedStack() {
         screenOptions={{
           headerStyle: { backgroundColor: colors.surface },
           headerTintColor: colors.textPrimary,
-          headerTitleStyle: { fontWeight: '700', fontSize: 17 },
+          headerTitleStyle: { fontWeight: '700', fontSize: 16 },
           contentStyle: { backgroundColor: colors.background },
           headerShadowVisible: false,
           headerBackTitle: 'Back',
@@ -37,6 +37,7 @@ function ThemedStack() {
         />
         <Stack.Screen name="item/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="chat/[id]" options={{ headerShown: false }} />
+        <Stack.Screen name="new-listing" options={{ headerShown: false }} />
       </Stack>
     </>
   );

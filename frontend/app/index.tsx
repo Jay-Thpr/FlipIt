@@ -5,14 +5,14 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { Settings, User, LogOut } from 'lucide-react-native';
+import { Settings, LogOut } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { mockItems, Item } from '../data/mockData';
 import ItemCard from '../components/ItemCard';
 import AddNewCard from '../components/AddNewCard';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_WIDTH = Math.round(SCREEN_WIDTH * 0.44);
+const CARD_WIDTH = Math.round(SCREEN_WIDTH * 0.58);
 const AGENT_LIMIT = 10;
 
 export default function HomeScreen() {
@@ -20,17 +20,16 @@ export default function HomeScreen() {
   const [profileMenuVisible, setProfileMenuVisible] = useState(false);
   const sellItems = mockItems.filter(i => i.type === 'sell');
   const buyItems = mockItems.filter(i => i.type === 'buy');
-  const activeCount = mockItems.filter(i => i.status === 'active').length;
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.surface }]} edges={['top']}>
       {/* Header */}
-      <View style={[styles.header, { borderBottomColor: colors.border }]}>
+      <View style={[styles.header, { backgroundColor: colors.surface }]}>
         <View style={styles.headerLeft}>
-          <Text style={[styles.appName, { color: colors.primary }]}>AgentMarket</Text>
-          <View style={[styles.agentCounter, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.agentCounterText, { color: colors.textSecondary }]}>
-              {activeCount} / {AGENT_LIMIT} Agents in Use
+          <Text style={[styles.appName, { color: colors.textPrimary }]}>AgentMarket</Text>
+          <View style={[styles.agentCounter, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.agentCounterText, { color: colors.textMuted }]}>
+              {mockItems.length}/{AGENT_LIMIT}
             </Text>
           </View>
         </View>
@@ -44,14 +43,16 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView
-        style={styles.scroll}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        <CarouselSection title="Selling" items={sellItems} />
-        <CarouselSection title="Buying" items={buyItems} />
-      </ScrollView>
+      <View style={[styles.scrollWrap, { backgroundColor: colors.background }]}>
+        <ScrollView
+          style={styles.scroll}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+        >
+          <CarouselSection title="Selling" type="sell" items={sellItems} />
+          <CarouselSection title="Buying" type="buy" items={buyItems} />
+        </ScrollView>
+      </View>
 
       {/* Profile Menu Modal */}
       <Modal
@@ -61,8 +62,8 @@ export default function HomeScreen() {
         onRequestClose={() => setProfileMenuVisible(false)}
       >
         <Pressable style={styles.modalOverlay} onPress={() => setProfileMenuVisible(false)}>
-          <View style={[styles.profileMenu, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <View style={[styles.profileMenuHeader, { borderBottomColor: colors.border }]}>
+          <View style={[styles.profileMenu, { backgroundColor: colors.surface }]}>
+            <View style={[styles.profileMenuHeader, { borderBottomColor: colors.divider }]}>
               <View style={[styles.profileMenuAvatar, { backgroundColor: colors.primary }]}>
                 <Text style={styles.profileMenuAvatarText}>SS</Text>
               </View>
@@ -81,7 +82,7 @@ export default function HomeScreen() {
               <Settings size={16} color={colors.textSecondary} />
               <Text style={[styles.profileMenuItemText, { color: colors.textPrimary }]}>Settings</Text>
             </TouchableOpacity>
-            <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
+            <View style={[styles.menuDivider, { backgroundColor: colors.divider }]} />
             <TouchableOpacity
               style={styles.profileMenuItem}
               onPress={() => setProfileMenuVisible(false)}
@@ -96,24 +97,20 @@ export default function HomeScreen() {
   );
 }
 
-function CarouselSection({ title, items }: { title: string; items: Item[] }) {
+function CarouselSection({ title, type, items }: { title: string; type: 'buy' | 'sell'; items: Item[] }) {
   const { colors } = useTheme();
   const activeCount = items.filter(i => i.status === 'active').length;
 
   return (
     <View style={styles.section}>
-      {/* Section header */}
+      {/* Section header: title + add button on left, count on right */}
       <View style={styles.sectionHeader}>
         <View style={styles.sectionLeft}>
           <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>{title}</Text>
-          <View style={[styles.countPill, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.countText, { color: colors.textSecondary }]}>
-              {activeCount} active
-            </Text>
-          </View>
+          <AddNewCard onPress={() => router.push(`/new-listing?type=${type}`)} />
         </View>
-        <Text style={[styles.itemCount, { color: colors.textMuted }]}>
-          {items.length} {items.length === 1 ? 'agent' : 'agents'}
+        <Text style={[styles.countText, { color: colors.textMuted }]}>
+          {activeCount}/{items.length} active
         </Text>
       </View>
 
@@ -123,7 +120,7 @@ function CarouselSection({ title, items }: { title: string; items: Item[] }) {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.carousel}
         decelerationRate="fast"
-        snapToInterval={CARD_WIDTH + 10}
+        snapToInterval={CARD_WIDTH + 12}
         snapToAlignment="start"
       >
         {items.map(item => (
@@ -135,11 +132,6 @@ function CarouselSection({ title, items }: { title: string; items: Item[] }) {
           />
         ))}
       </ScrollView>
-
-      {/* Add new agent — always visible below carousel */}
-      <View style={styles.addNewRow}>
-        <AddNewCard cardWidth={SCREEN_WIDTH - 40} onPress={() => {}} />
-      </View>
     </View>
   );
 }
@@ -151,43 +143,44 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 14,
-    borderBottomWidth: 1,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 12,
   },
   headerLeft: {
-    gap: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   appName: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '800',
     letterSpacing: -0.5,
   },
   agentCounter: {
-    alignSelf: 'flex-start',
-    borderRadius: 20,
-    borderWidth: 1,
+    borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
   agentCounterText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
+    fontVariant: ['tabular-nums'],
   },
   avatarBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarInitials: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
     color: '#FFFFFF',
   },
 
+  scrollWrap: { flex: 1 },
   scroll: { flex: 1 },
   scrollContent: { paddingBottom: 48 },
 
@@ -199,48 +192,35 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     marginBottom: 12,
   },
   sectionLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
     letterSpacing: -0.3,
   },
-  countPill: {
-    borderRadius: 20,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderWidth: 1,
-  },
   countText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  itemCount: {
     fontSize: 12,
+    fontWeight: '500',
+    fontVariant: ['tabular-nums'],
   },
 
   carousel: {
-    paddingHorizontal: 20,
-    gap: 10,
+    paddingHorizontal: 16,
+    gap: 12,
     paddingBottom: 4,
-  },
-
-  addNewRow: {
-    paddingHorizontal: 20,
-    marginTop: 10,
   },
 
   // Profile menu modal
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-start',
     alignItems: 'flex-end',
     paddingTop: 80,
@@ -248,8 +228,7 @@ const styles = StyleSheet.create({
   },
   profileMenu: {
     width: 220,
-    borderRadius: 14,
-    borderWidth: 1,
+    borderRadius: 12,
     overflow: 'hidden',
   },
   profileMenuHeader: {
@@ -260,14 +239,14 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   profileMenuAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
   profileMenuAvatarText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
     color: '#FFFFFF',
   },

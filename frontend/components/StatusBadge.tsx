@@ -8,17 +8,17 @@ interface Props {
 }
 
 export default function StatusBadge({ status, size = 'sm' }: Props) {
-  const { isDark } = useTheme();
+  const { isDark, colors } = useTheme();
 
   const CONFIG: Record<ItemStatus, { bg: string; text: string; label: string }> = isDark
     ? {
         active:   { bg: '#052E16', text: '#4ADE80', label: 'Active' },
-        paused:   { bg: '#27272A', text: '#A1A1AA', label: 'Paused' },
+        paused:   { bg: colors.surfaceRaised, text: colors.textMuted, label: 'Paused' },
         archived: { bg: '#450A0A', text: '#F87171', label: 'Archived' },
       }
     : {
         active:   { bg: '#DCFCE7', text: '#15803D', label: 'Active' },
-        paused:   { bg: '#F4F4F5', text: '#71717A', label: 'Paused' },
+        paused:   { bg: colors.muted, text: colors.textMuted, label: 'Paused' },
         archived: { bg: '#FEE2E2', text: '#DC2626', label: 'Archived' },
       };
 
@@ -34,13 +34,13 @@ export default function StatusBadge({ status, size = 'sm' }: Props) {
 
 const styles = StyleSheet.create({
   badge: {
-    paddingHorizontal: 7,
+    paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 20,
+    borderRadius: 6,
   },
   badgeMd: {
-    paddingHorizontal: 12,
-    paddingVertical: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
   },
   text: {
     fontSize: 10,

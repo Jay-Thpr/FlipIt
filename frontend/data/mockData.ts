@@ -45,6 +45,7 @@ export interface Item {
   negotiationStyle: NegotiationStyle;
   replyTone: ReplyTone;
   bestOffer?: number;
+  photos: string[];
   marketData: MarketData[];
   conversations: Conversation[];
 }
@@ -75,6 +76,11 @@ export const mockItems: Item[] = [
     negotiationStyle: 'moderate',
     replyTone: 'professional',
     bestOffer: 295,
+    photos: [
+      'https://picsum.photos/seed/jordan1a/400/400',
+      'https://picsum.photos/seed/jordan1b/400/400',
+      'https://picsum.photos/seed/jordan1c/400/400',
+    ],
     marketData: [
       { platform: 'depop', bestBuyPrice: 299, bestSellPrice: 315, volume: 42 },
       { platform: 'ebay', bestBuyPrice: 310, bestSellPrice: 332, volume: 128 },
@@ -126,6 +132,10 @@ export const mockItems: Item[] = [
     quantity: 1,
     negotiationStyle: 'passive',
     replyTone: 'casual',
+    photos: [
+      'https://picsum.photos/seed/sonyxm4a/400/400',
+      'https://picsum.photos/seed/sonyxm4b/400/400',
+    ],
     marketData: [
       { platform: 'depop', bestBuyPrice: 170, bestSellPrice: 185, volume: 23 },
       { platform: 'facebook', bestBuyPrice: 160, bestSellPrice: 172, volume: 15 },
@@ -161,6 +171,9 @@ export const mockItems: Item[] = [
     quantity: 1,
     negotiationStyle: 'moderate',
     replyTone: 'casual',
+    photos: [
+      'https://picsum.photos/seed/nuptse700/400/400',
+    ],
     marketData: [
       { platform: 'depop', bestBuyPrice: 130, bestSellPrice: 142, volume: 19 },
       { platform: 'ebay', bestBuyPrice: 145, bestSellPrice: 158, volume: 34 },
@@ -184,6 +197,7 @@ export const mockItems: Item[] = [
     negotiationStyle: 'aggressive',
     replyTone: 'professional',
     bestOffer: 95,
+    photos: [],
     marketData: [
       { platform: 'ebay', bestBuyPrice: 85, bestSellPrice: 98, volume: 87 },
       { platform: 'depop', bestBuyPrice: 95, bestSellPrice: 110, volume: 31 },
@@ -235,6 +249,10 @@ export const mockItems: Item[] = [
     quantity: 1,
     negotiationStyle: 'moderate',
     replyTone: 'professional',
+    photos: [
+      'https://picsum.photos/seed/supremebogo/400/400',
+      'https://picsum.photos/seed/supremebogo2/400/400',
+    ],
     marketData: [
       { platform: 'depop', bestBuyPrice: 390, bestSellPrice: 410, volume: 8 },
       { platform: 'ebay', bestBuyPrice: 405, bestSellPrice: 425, volume: 22 },
