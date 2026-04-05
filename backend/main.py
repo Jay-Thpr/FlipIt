@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
@@ -36,9 +36,44 @@ from backend.schemas import (
     SellListingDecisionResponse,
     SessionEvent,
 )
+from backend.auth import AuthenticatedUser, get_current_user
+from backend.repositories.items import ItemRepository
 from backend.session import session_manager
 
 logger = logging.getLogger(__name__)
+
+
+async def _require_item_ownership(
+    item_id: str,
+    user: AuthenticatedUser = Depends(get_current_user),
+) -> str:
+    """Verify the authenticated user owns item_id. Returns item_id on success."""
+    from backend.config import is_supabase_configured
+    from backend.supabase import get_supabase_client
+
+    if not is_supabase_configured():
+        raise HTTPException(status_code=503, detail="Supabase not configured")
+    client = get_supabase_client()
+    repo = ItemRepository(client)
+    item = repo.get_item_for_user(item_id, user.user_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Item not found")
+    return item_id
+
+
+async def _require_run_ownership(
+    run_id: str,
+    user: AuthenticatedUser = Depends(get_current_user),
+) -> str:
+    """Verify the authenticated user owns the session identified by run_id."""
+    session = await session_manager.get_session(run_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    session_user_id = session.request.metadata.get("user_id")
+    if session_user_id != user.user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    return run_id
+
 
 SELL_REVIEW_CLEANUP_INTERVAL_SECONDS = int(os.environ.get("SELL_REVIEW_CLEANUP_INTERVAL", "60"))
 
@@ -176,12 +211,24 @@ async def buy_start(request: PipelineStartRequest) -> PipelineStartResponse:
 
 
 @app.post("/items/{item_id}/sell/run")
-async def item_sell_run(item_id: str, request: PipelineStartRequest) -> dict:
+async def item_sell_run(
+    item_id: str,
+    request: PipelineStartRequest,
+    user: AuthenticatedUser = Depends(get_current_user),
+    _owned: str = Depends(_require_item_ownership),
+) -> dict:
+    request = request.model_copy(update={"metadata": {**request.metadata, "user_id": user.user_id}})
     return await start_session("sell", request, item_id=item_id)
 
 
 @app.post("/items/{item_id}/buy/run")
-async def item_buy_run(item_id: str, request: PipelineStartRequest) -> dict:
+async def item_buy_run(
+    item_id: str,
+    request: PipelineStartRequest,
+    user: AuthenticatedUser = Depends(get_current_user),
+    _owned: str = Depends(_require_item_ownership),
+) -> dict:
+    request = request.model_copy(update={"metadata": {**request.metadata, "user_id": user.user_id}})
     return await start_session("buy", request, item_id=item_id)
 
 
@@ -271,12 +318,18 @@ async def get_result(session_id: str) -> dict:
 
 
 @app.get("/runs/{run_id}")
-async def get_run(run_id: str) -> dict:
+async def get_run(
+    run_id: str,
+    _owned: str = Depends(_require_run_ownership),
+) -> dict:
     return await get_result(run_id)
 
 
 @app.get("/items/{item_id}/runs/latest")
-async def get_latest_item_run(item_id: str) -> dict:
+async def get_latest_item_run(
+    item_id: str,
+    _owned: str = Depends(_require_item_ownership),
+) -> dict:
     session = await session_manager.get_latest_session_for_item(item_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Run not found for item")
@@ -318,17 +371,28 @@ async def stream(session_id: str) -> StreamingResponse:
 
 
 @app.get("/runs/{run_id}/stream")
-async def stream_run(run_id: str) -> StreamingResponse:
+async def stream_run(
+    run_id: str,
+    _owned: str = Depends(_require_run_ownership),
+) -> StreamingResponse:
     return await stream(run_id)
 
 
 @app.post("/runs/{run_id}/sell/correct")
-async def run_sell_correct(run_id: str, request: RunCorrectionRequest) -> dict[str, bool]:
+async def run_sell_correct(
+    run_id: str,
+    request: RunCorrectionRequest,
+    _owned: str = Depends(_require_run_ownership),
+) -> dict[str, bool]:
     return await sell_correct(CorrectionRequest(session_id=run_id, corrected_item=request.corrected_item))
 
 
 @app.post("/runs/{run_id}/sell/listing-decision")
-async def run_sell_listing_decision(run_id: str, request: RunSellListingDecisionRequest) -> SellListingDecisionResponse:
+async def run_sell_listing_decision(
+    run_id: str,
+    request: RunSellListingDecisionRequest,
+    _owned: str = Depends(_require_run_ownership),
+) -> SellListingDecisionResponse:
     return await sell_listing_decision(
         SellListingDecisionRequest(
             session_id=run_id,

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import contextmanager
 
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.main import app
+from backend.auth import AuthenticatedUser, get_current_user
+from backend.main import _require_item_ownership, _require_run_ownership, app
 from backend.schemas import (
     PipelineStartRequest,
     RunCorrectionRequest,
@@ -16,6 +18,33 @@ from backend.schemas import (
 from backend.session import session_manager
 
 client = TestClient(app)
+
+_FAKE_USER = AuthenticatedUser(
+    user_id="test-user",
+    email="test@example.com",
+    role="authenticated",
+    raw_claims={},
+)
+
+
+@contextmanager
+def _auth_overrides(*, item_ownership: bool = False, run_ownership: bool = False):
+    """Override auth dependencies for legacy tests that predate auth enforcement."""
+    overrides: dict = {get_current_user: lambda: _FAKE_USER}
+    if item_ownership:
+        async def _skip_item(item_id: str) -> str:
+            return item_id
+        overrides[_require_item_ownership] = _skip_item
+    if run_ownership:
+        async def _skip_run(run_id: str) -> str:
+            return run_id
+        overrides[_require_run_ownership] = _skip_run
+    app.dependency_overrides.update(overrides)
+    try:
+        yield
+    finally:
+        for key in overrides:
+            app.dependency_overrides.pop(key, None)
 
 
 def wait_for_terminal_result(client: TestClient, session_id: str, timeout: float = 3.0) -> dict:
@@ -33,34 +62,35 @@ def wait_for_terminal_result(client: TestClient, session_id: str, timeout: float
 
 
 def test_item_scoped_run_start_and_latest_lookup(client: TestClient) -> None:
-    response = client.post(
-        "/items/item-123/sell/run",
-        json={
-            "user_id": "frontend-user",
-            "input": {"image_urls": ["https://example.com/item.jpg"], "notes": "Nike tee"},
-            "metadata": {"source": "frontend"},
-        },
-    )
+    with _auth_overrides(item_ownership=True):
+        response = client.post(
+            "/items/item-123/sell/run",
+            json={
+                "user_id": "frontend-user",
+                "input": {"image_urls": ["https://example.com/item.jpg"], "notes": "Nike tee"},
+                "metadata": {"source": "frontend"},
+            },
+        )
 
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["item_id"] == "item-123"
-    assert payload["run_id"] == payload["session_id"]
-    assert payload["phase"] == "queued"
-    assert payload["next_action"] == {"type": "wait", "payload": {}}
-    assert payload["run_url"].endswith(f"/runs/{payload['run_id']}")
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["item_id"] == "item-123"
+        assert payload["run_id"] == payload["session_id"]
+        assert payload["phase"] == "queued"
+        assert payload["next_action"] == {"type": "wait", "payload": {}}
+        assert payload["run_url"].endswith(f"/runs/{payload['run_id']}")
 
-    terminal = wait_for_terminal_result(client, payload["run_id"])
-    assert terminal["run_id"] == payload["run_id"]
-    assert terminal["item_id"] == "item-123"
-    assert terminal["phase"] == "completed"
-    assert terminal["next_action"]["type"] == "show_result"
+        terminal = wait_for_terminal_result(client, payload["run_id"])
+        assert terminal["run_id"] == payload["run_id"]
+        assert terminal["item_id"] == "item-123"
+        assert terminal["phase"] == "completed"
+        assert terminal["next_action"]["type"] == "show_result"
 
-    latest = client.get("/items/item-123/runs/latest")
-    assert latest.status_code == 200
-    latest_payload = latest.json()
-    assert latest_payload["run_id"] == payload["run_id"]
-    assert latest_payload["item_id"] == "item-123"
+        latest = client.get("/items/item-123/runs/latest")
+        assert latest.status_code == 200
+        latest_payload = latest.json()
+        assert latest_payload["run_id"] == payload["run_id"]
+        assert latest_payload["item_id"] == "item-123"
 
 
 @pytest.mark.asyncio
@@ -100,7 +130,8 @@ async def test_runs_endpoint_normalizes_paused_sell_correction_state() -> None:
         )
     )
 
-    response = client.get(f"/runs/{session.session_id}")
+    with _auth_overrides(run_ownership=True):
+        response = client.get(f"/runs/{session.session_id}")
 
     assert response.status_code == 200
     payload = response.json()
@@ -238,7 +269,8 @@ async def test_runs_endpoint_normalizes_buy_summary_and_result_source() -> None:
         )
     )
 
-    response = client.get(f"/runs/{session.session_id}")
+    with _auth_overrides(run_ownership=True):
+        response = client.get(f"/runs/{session.session_id}")
 
     assert response.status_code == 200
     payload = response.json()
@@ -275,7 +307,8 @@ async def test_run_stream_alias_reuses_legacy_stream() -> None:
         )
     )
 
-    response = client.get(f"/runs/{session.session_id}/stream")
+    with _auth_overrides(run_ownership=True):
+        response = client.get(f"/runs/{session.session_id}/stream")
 
     assert response.status_code == 200
     assert "event: pipeline_complete" in response.text
@@ -308,10 +341,11 @@ async def test_run_scoped_sell_endpoints_delegate_to_legacy_handlers(monkeypatch
 
     monkeypatch.setattr("backend.orchestrator.handle_sell_listing_decision", fake_handle_sell_listing_decision)
 
-    decision_response = client.post(
-        f"/runs/{session.session_id}/sell/listing-decision",
-        json=RunSellListingDecisionRequest(decision="revise", revision_instructions=" Lower the price ").model_dump(),
-    )
+    with _auth_overrides(run_ownership=True):
+        decision_response = client.post(
+            f"/runs/{session.session_id}/sell/listing-decision",
+            json=RunSellListingDecisionRequest(decision="revise", revision_instructions=" Lower the price ").model_dump(),
+        )
     assert decision_response.status_code == 200
     assert decision_response.json()["session_id"] == session.session_id
     assert decision_response.json()["decision"] == "revise"
@@ -332,10 +366,11 @@ async def test_run_scoped_sell_endpoints_delegate_to_legacy_handlers(monkeypatch
 
     monkeypatch.setattr("backend.orchestrator.resume_sell_pipeline", fake_resume_sell_pipeline)
 
-    correction_response = client.post(
-        f"/runs/{session.session_id}/sell/correct",
-        json=RunCorrectionRequest(corrected_item={"brand": "Nike", "detected_item": "hoodie"}).model_dump(),
-    )
+    with _auth_overrides(run_ownership=True):
+        correction_response = client.post(
+            f"/runs/{session.session_id}/sell/correct",
+            json=RunCorrectionRequest(corrected_item={"brand": "Nike", "detected_item": "hoodie"}).model_dump(),
+        )
     assert correction_response.status_code == 200
     assert correction_response.json() == {"ok": True}
     await asyncio.wait_for(correction_called.wait(), timeout=1.0)
