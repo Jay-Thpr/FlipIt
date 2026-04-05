@@ -61,7 +61,7 @@ def decide_chat_request(agent_slug: str, user_text: str) -> ChatDecision:
     word_count = _word_count(text)
     lower = text.lower()
 
-    if spec.is_public and agent_slug != "resale_copilot_agent" and requested_task_family != spec.task_family:
+    if agent_slug != "resale_copilot_agent" and requested_task_family != spec.task_family:
         return ChatDecision(
             kind="handoff",
             task_family=requested_task_family,

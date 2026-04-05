@@ -68,6 +68,14 @@ class StubAgent(BaseAgent):
         }
 
 
+def _extract_chat_text(request: dict) -> str | None:
+    for key in ("message", "text", "prompt"):
+        value = request.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
 def build_agent_app(agent: StubAgent) -> FastAPI:
     app = FastAPI(title=agent.display_name)
 
@@ -81,11 +89,16 @@ def build_agent_app(agent: StubAgent) -> FastAPI:
 
     @app.post("/chat")
     async def chat(request: dict) -> dict:
+        chat_text = _extract_chat_text(request)
         return {
-            "status": "not_implemented",
+            "status": "ready",
             "agent": agent.slug,
-            "message": "Fetch.ai Chat Protocol scaffold placeholder",
+            "display_name": agent.display_name,
+            "message": f"{agent.display_name} is available locally for chat smoke tests. Use /task for structured execution.",
             "request": request,
+            "echo": chat_text,
+            "supported_endpoints": ["/health", "/task", "/chat"],
+            "protocol": "local_chat_stub",
         }
 
     return app

@@ -28,6 +28,16 @@ def test_runtime_audit_fails_when_live_mode_is_required(monkeypatch) -> None:
     assert any(check["name"] == "google_api_key" and check["status"] == "fail" for check in report["checks"])
 
 
+def test_runtime_audit_uses_pytest_browser_use_import_guard(monkeypatch) -> None:
+    monkeypatch.setenv("GOOGLE_API_KEY", "test-key")
+
+    report = browser_use_runtime_audit.audit_browser_use_runtime(require_live=False)
+
+    dependency_check = next(check for check in report["checks"] if check["name"] == "browser_use_dependencies")
+    assert dependency_check["status"] == "warn"
+    assert "disabled during pytest" in dependency_check["detail"]
+
+
 def test_runtime_audit_cli_outputs_json(capsys, monkeypatch) -> None:
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
 

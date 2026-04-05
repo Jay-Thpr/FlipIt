@@ -54,8 +54,8 @@ async def test_run_structured_browser_task_returns_validated_output(monkeypatch:
     captured: dict[str, object] = {}
 
     class FakeHistory:
-        def final_result(self, output_model: type[BaseModel]) -> BaseModel:
-            return output_model(title="browser ok", count=3)
+        def final_result(self) -> DemoOutput:
+            return DemoOutput(title="browser ok", count=3)
 
     class FakeAgent:
         def __init__(self, **kwargs: object) -> None:
@@ -76,9 +76,10 @@ async def test_run_structured_browser_task_returns_validated_output(monkeypatch:
     def fake_browser_profile(**kwargs: object) -> SimpleNamespace:
         return SimpleNamespace(**kwargs)
 
-    def fake_llm(*, model: str) -> SimpleNamespace:
+    def fake_llm(*, model: str, api_key: str) -> SimpleNamespace:
         captured["model"] = model
-        return SimpleNamespace(model=model)
+        captured["api_key"] = api_key
+        return SimpleNamespace(model=model, api_key=api_key)
 
     monkeypatch.setenv("GOOGLE_API_KEY", "test-key")
     monkeypatch.delenv("BROWSER_USE_FORCE_FALLBACK", raising=False)
@@ -98,7 +99,8 @@ async def test_run_structured_browser_task_returns_validated_output(monkeypatch:
     )
 
     assert result == {"title": "browser ok", "count": 3}
-    assert captured["model"] == "gemini-2.0-flash"
+    assert captured["model"] == "gemini-2.5-flash"
+    assert captured["api_key"] == "test-key"
     assert captured["browser_profile"].allowed_domains == ["example.com"]
     assert captured["browser_profile"].user_data_dir == "/tmp/demo"
     assert captured["browser_profile"].keep_alive is True

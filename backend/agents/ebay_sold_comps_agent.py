@@ -7,6 +7,7 @@ from backend.agents.browser_use_support import (
     BrowserUseRuntimeUnavailable,
     build_browser_use_metadata,
     classify_browser_use_failure,
+    get_browser_profile_path,
     run_structured_browser_task,
 )
 from backend.schemas import AgentTaskRequest, EbaySoldCompsOutput
@@ -188,6 +189,7 @@ Return only JSON matching the schema.
                 task=task,
                 output_model=SoldCompResearch,
                 allowed_domains=["ebay.com", "www.ebay.com"],
+                user_data_dir=get_browser_profile_path("ebay"),
                 max_steps=12,
                 max_failures=3,
                 ),

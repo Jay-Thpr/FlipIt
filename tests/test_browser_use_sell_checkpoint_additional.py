@@ -21,7 +21,7 @@ async def test_run_structured_browser_task_stops_session_when_final_result_is_mi
     captured: dict[str, object] = {}
 
     class FakeHistory:
-        def final_result(self, output_model: type[BaseModel]) -> None:
+        def final_result(self) -> None:
             return None
 
     class FakeAgent:
@@ -41,9 +41,10 @@ async def test_run_structured_browser_task_stops_session_when_final_result_is_mi
     def fake_browser_profile(**kwargs: object) -> SimpleNamespace:
         return SimpleNamespace(**kwargs)
 
-    def fake_llm(*, model: str) -> SimpleNamespace:
+    def fake_llm(*, model: str, api_key: str) -> SimpleNamespace:
         captured["model"] = model
-        return SimpleNamespace(model=model)
+        captured["api_key"] = api_key
+        return SimpleNamespace(model=model, api_key=api_key)
 
     monkeypatch.setenv("GOOGLE_API_KEY", "test-key")
     monkeypatch.delenv("BROWSER_USE_FORCE_FALLBACK", raising=False)
@@ -67,6 +68,7 @@ async def test_run_structured_browser_task_stops_session_when_final_result_is_mi
         )
 
     assert captured["browser_profile"].keep_alive is True
+    assert captured["api_key"] == "test-key"
     assert captured["stopped"] is True
 
 

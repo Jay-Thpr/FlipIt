@@ -47,8 +47,8 @@ def test_sell_pipeline_completes_with_forced_browser_use_fallback(client: TestCl
     assert result["status"] == "completed"
     assert outputs["depop_listing"]["execution_mode"] == "fallback"
     assert outputs["depop_listing"]["ready_for_confirmation"] is False
-    assert outputs["depop_listing"]["browser_use"]["mode"] == "skipped"
-    assert outputs["depop_listing"]["browser_use"]["error_category"] == "profile_missing"
+    assert outputs["depop_listing"]["browser_use"]["mode"] == "fallback"
+    assert outputs["depop_listing"]["browser_use"]["error_category"] == "runtime_unavailable"
     assert [event["event_type"] for event in result["events"]].count("browser_use_fallback") == 2
     assert not any(event["event_type"] == "listing_review_required" for event in result["events"])
 
@@ -75,7 +75,7 @@ def test_buy_pipeline_completes_with_forced_browser_use_fallback(client: TestCli
         assert outputs[step]["browser_use"]["mode"] == "fallback"
         assert outputs[step]["browser_use"]["error_category"] == "runtime_unavailable"
 
-    assert outputs["negotiation"]["browser_use"]["mode"] == "skipped"
+    assert outputs["negotiation"]["browser_use"]["mode"] == "fallback"
     assert all(offer["execution_mode"] == "deterministic" for offer in outputs["negotiation"]["offers"])
     assert [event["event_type"] for event in result["events"]].count("browser_use_fallback") == 7
 

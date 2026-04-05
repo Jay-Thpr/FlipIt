@@ -5,7 +5,7 @@ from urllib.parse import quote_plus
 
 from pydantic import BaseModel, Field
 
-from backend.agents.browser_use_support import run_structured_browser_task
+from backend.agents.browser_use_support import get_browser_profile_path, run_structured_browser_task
 
 Marketplace = Literal["depop", "ebay", "mercari", "offerup"]
 
@@ -70,6 +70,7 @@ Return only JSON matching the schema.
 
 
 async def run_marketplace_search(platform: Marketplace, query: str, max_results: int = 10) -> list[dict[str, object]]:
+    profile_path = get_browser_profile_path(platform)
     result = await run_structured_browser_task(
         task=build_marketplace_search_task(platform, query, max_results=max_results),
         output_model=BrowserUseSearchResult,
@@ -79,6 +80,7 @@ async def run_marketplace_search(platform: Marketplace, query: str, max_results:
             "mercari": ["mercari.com", "www.mercari.com"],
             "offerup": ["offerup.com", "www.offerup.com"],
         }[platform],
+        user_data_dir=profile_path,
         max_steps=12,
         max_failures=3,
     )

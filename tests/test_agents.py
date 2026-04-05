@@ -386,9 +386,12 @@ def test_agent_chat_placeholder_is_exposed(agent_app, slug: str, _display_name: 
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["status"] == "not_implemented"
+    assert payload["status"] == "ready"
     assert payload["agent"] == slug
-    assert "Chat Protocol scaffold placeholder" in payload["message"]
+    assert payload["echo"] == "hello"
+    assert payload["protocol"] == "local_chat_stub"
+    assert payload["supported_endpoints"] == ["/health", "/task", "/chat"]
+    assert "Use /task for structured execution" in payload["message"]
 
 
 @pytest.mark.parametrize("slug", sorted(AGENT_OUTPUT_MODELS))

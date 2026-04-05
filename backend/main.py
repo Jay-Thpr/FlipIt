@@ -115,6 +115,13 @@ async def healthcheck() -> dict[str, str | bool]:
     }
 
 
+@app.get("/config")
+async def get_config() -> dict[str, str]:
+    return {
+        "resale_copilot_agent_address": os.environ.get("RESALE_COPILOT_AGENT_ADDRESS", ""),
+    }
+
+
 @app.get("/agents")
 async def list_agents() -> dict[str, list[dict[str, str | int]]]:
     return {

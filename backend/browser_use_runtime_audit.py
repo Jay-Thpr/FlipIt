@@ -159,6 +159,8 @@ def detect_chromium_installation(search_roots: list[Path] | None = None) -> tupl
     roots = search_roots or [
         Path.home() / ".cache" / "ms-playwright",
         Path.home() / ".cache" / "patchright",
+        Path.home() / "Library" / "Caches" / "ms-playwright",
+        Path.home() / "Library" / "Caches" / "patchright",
     ]
     for root in roots:
         if not root.exists():

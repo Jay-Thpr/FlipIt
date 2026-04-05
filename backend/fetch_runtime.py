@@ -31,6 +31,7 @@ class FetchAgentSpec:
     task_family: str
     readme_path: str | None = None
     is_public: bool = False
+    is_launchable: bool = False
     handoff_targets: tuple[str, ...] = ()
 
     @property
@@ -66,6 +67,7 @@ FETCH_AGENT_SPECS: dict[str, FetchAgentSpec] = {
         task_family="resale_copilot",
         readme_path=_readme_path("resale_copilot_agent.md"),
         is_public=True,
+        is_launchable=True,
         handoff_targets=("vision_agent", "pricing_agent", "depop_listing_agent"),
     ),
     "vision_agent": FetchAgentSpec(
@@ -90,7 +92,7 @@ FETCH_AGENT_SPECS: dict[str, FetchAgentSpec] = {
         tags=("resale", "vision", "identification", "inventory"),
         task_family="sell_identify",
         readme_path=_readme_path("vision_agent.md"),
-        is_public=True,
+        is_public=False,
         handoff_targets=("pricing_agent", "resale_copilot_agent"),
     ),
     "ebay_sold_comps_agent": FetchAgentSpec(
@@ -133,7 +135,7 @@ FETCH_AGENT_SPECS: dict[str, FetchAgentSpec] = {
         tags=("resale", "pricing", "profit", "valuation"),
         task_family="sell_price",
         readme_path=_readme_path("pricing_agent.md"),
-        is_public=True,
+        is_public=False,
         handoff_targets=("depop_listing_agent", "resale_copilot_agent"),
     ),
     "depop_listing_agent": FetchAgentSpec(
@@ -158,7 +160,7 @@ FETCH_AGENT_SPECS: dict[str, FetchAgentSpec] = {
         tags=("resale", "depop", "listing", "drafting"),
         task_family="sell_list",
         readme_path=_readme_path("depop_listing_agent.md"),
-        is_public=True,
+        is_public=False,
         handoff_targets=("pricing_agent", "resale_copilot_agent"),
     ),
     "depop_search_agent": FetchAgentSpec(

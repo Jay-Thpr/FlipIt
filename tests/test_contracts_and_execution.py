@@ -98,7 +98,7 @@ def test_fetch_agents_manifest_lists_all_fetch_agents(
         "tags": ["resale", "vision", "identification", "inventory"],
         "task_family": "sell_identify",
         "readme_path": FETCH_AGENT_SPECS["vision_agent"].readme_path,
-        "is_public": True,
+        "is_public": False,
         "handoff_targets": ["pricing_agent", "resale_copilot_agent"],
     }
     assert payload["agents"][-1] == {

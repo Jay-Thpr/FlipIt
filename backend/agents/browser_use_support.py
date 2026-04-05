@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 from typing import Any, TypeVar
@@ -77,7 +78,7 @@ def should_force_browser_fallback() -> bool:
 
 
 def get_browser_use_model() -> str:
-    return os.getenv("BROWSER_USE_GEMINI_MODEL", "gemini-2.0-flash")
+    return os.getenv("BROWSER_USE_GEMINI_MODEL", "gemini-2.5-flash")
 
 
 def get_browser_profile_root() -> Path:
@@ -114,9 +115,9 @@ def get_browser_use_max_steps(default: int = 15) -> int:
 def import_browser_use_dependencies() -> tuple[Any, Any, Any, Any]:
     from browser_use import Agent, BrowserSession
     from browser_use.browser import BrowserProfile
-    from langchain_google_genai import ChatGoogleGenerativeAI
+    from browser_use.llm.google.chat import ChatGoogle
 
-    return Agent, BrowserSession, BrowserProfile, ChatGoogleGenerativeAI
+    return Agent, BrowserSession, BrowserProfile, ChatGoogle
 
 
 def browser_use_runtime_ready() -> bool:
@@ -157,11 +158,11 @@ async def run_structured_browser_task(
         raise BrowserUseRuntimeUnavailable("GOOGLE_API_KEY is not configured")
 
     try:
-        Agent, BrowserSession, BrowserProfile, ChatGoogleGenerativeAI = import_browser_use_dependencies()
+        Agent, BrowserSession, BrowserProfile, ChatGoogle = import_browser_use_dependencies()
     except Exception as exc:
         raise BrowserUseRuntimeUnavailable("Browser Use dependencies are not installed") from exc
 
-    llm = ChatGoogleGenerativeAI(model=get_browser_use_model())
+    llm = ChatGoogle(model=get_browser_use_model(), api_key=os.getenv("GOOGLE_API_KEY"))
     browser_profile = BrowserProfile(
         **get_browser_profile_kwargs(
             allowed_domains=allowed_domains,
@@ -181,12 +182,14 @@ async def run_structured_browser_task(
             max_failures=max_failures,
         )
         history = await agent.run()
-        result = history.final_result(output_model)
+        result = history.final_result()
         if result is None:
             operation_label = operation_name or "browser task"
             raise BrowserUseTaskExecutionError(f"Browser Use returned no structured result for {operation_label}")
         if isinstance(result, BaseModel):
             return result.model_dump()
+        if isinstance(result, str):
+            result = json.loads(result)
         return output_model.model_validate(result).model_dump()
     finally:
         stop = getattr(session, "stop", None)

@@ -227,12 +227,7 @@ async def test_run_fetch_query_for_ebay_search_agent_uses_empty_previous_outputs
 def test_public_fetch_agents_have_specialization_metadata_and_readmes() -> None:
     public_specs = [spec for spec in fetch_runtime.FETCH_AGENT_SPECS.values() if spec.is_public]
 
-    assert [spec.slug for spec in public_specs] == [
-        "resale_copilot_agent",
-        "vision_agent",
-        "pricing_agent",
-        "depop_listing_agent",
-    ]
+    assert [spec.slug for spec in public_specs] == ["resale_copilot_agent"]
     for spec in public_specs:
         assert spec.persona
         assert spec.capabilities

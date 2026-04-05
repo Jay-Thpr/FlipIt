@@ -91,16 +91,20 @@ def test_list_fetch_agent_specs_includes_optional_agentverse_address(
         "tags": ["resale", "vision", "identification", "inventory"],
         "task_family": "sell_identify",
         "readme_path": get_fetch_agent_spec("vision_agent").readme_path,
-        "is_public": True,
+        "is_public": False,
         "handoff_targets": ["pricing_agent", "resale_copilot_agent"],
     }
     assert get_fetch_agentverse_address("depop_search_agent") is None
-    assert list_public_fetch_agent_slugs() == [
-        "resale_copilot_agent",
-        "vision_agent",
-        "pricing_agent",
-        "depop_listing_agent",
-    ]
+    assert list_public_fetch_agent_slugs() == ["resale_copilot_agent"]
+
+
+def test_only_resale_copilot_agent_is_launchable() -> None:
+    assert FETCH_AGENT_SPECS["resale_copilot_agent"].is_launchable is True
+
+    for slug, spec in FETCH_AGENT_SPECS.items():
+        if slug == "resale_copilot_agent":
+            continue
+        assert spec.is_launchable is False
 
 
 @pytest.mark.asyncio

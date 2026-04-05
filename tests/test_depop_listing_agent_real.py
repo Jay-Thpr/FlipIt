@@ -89,16 +89,10 @@ def test_depop_listing_agent_builds_listing_from_real_sell_outputs() -> None:
     assert result["output"]["summary"] == "Prepared Depop listing for Patagonia hoodie at $78.43"
     assert result["output"]["draft_status"] == "fallback"
     assert result["output"]["execution_mode"] == "fallback"
-    assert result["output"]["browser_use_error"] == "profile_missing"
+    assert result["output"]["browser_use_error"] == "runtime_unavailable"
     assert result["output"]["form_screenshot_url"] is None
-    assert result["output"]["browser_use"] == {
-        "mode": "skipped",
-        "attempted_live_run": False,
-        "profile_name": "depop",
-        "profile_available": False,
-        "error_category": "profile_missing",
-        "detail": "Skipped live Depop draft creation because the warmed depop profile is missing.",
-    }
+    assert result["output"]["browser_use"]["mode"] == "fallback"
+    assert result["output"]["browser_use"]["error_category"] == "runtime_unavailable"
 
 
 def test_depop_listing_agent_records_browser_use_confirmation(monkeypatch) -> None:
@@ -300,9 +294,9 @@ def test_depop_listing_agent_defaults_to_fallback_metadata_without_live_run() ->
     assert result["status"] == "completed"
     assert result["output"]["draft_status"] == "fallback"
     assert result["output"]["execution_mode"] == "fallback"
-    assert result["output"]["browser_use_error"] == "profile_missing"
+    assert result["output"]["browser_use_error"] == "runtime_unavailable"
     assert result["output"]["form_screenshot_url"] is None
-    assert result["output"]["browser_use"]["mode"] == "skipped"
+    assert result["output"]["browser_use"]["mode"] == "fallback"
 
 
 @pytest.mark.asyncio

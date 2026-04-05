@@ -273,17 +273,22 @@ def test_launch_main_handles_usage_and_build_errors(monkeypatch: pytest.MonkeyPa
     assert "Usage: python -m backend.fetch_agents.launch <agent-slug>" in captured.out
 
     monkeypatch.setattr(launch, "build_fetch_agent", lambda slug: (_ for _ in ()).throw(RuntimeError("bad seed")))
-    exit_code = launch.main(["python", "vision_agent"])
+    exit_code = launch.main(["python", "resale_copilot_agent"])
     captured = capsys.readouterr()
     assert exit_code == 1
     assert captured.out.strip() == "bad seed"
 
+    exit_code = launch.main(["python", "vision_agent"])
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert captured.out.strip() == "vision_agent is an internal agent and cannot be launched directly. Use resale_copilot_agent."
+
 
 def test_launch_main_runs_built_agent(monkeypatch: pytest.MonkeyPatch) -> None:
-    fake_agent = FakeAgent(name="VisionAgent", seed="seed", port=9201, mailbox=True, publish_agent_details=True)
+    fake_agent = FakeAgent(name="ResaleCopilotAgent", seed="seed", port=9211, mailbox=True, publish_agent_details=True)
     monkeypatch.setattr(launch, "build_fetch_agent", lambda slug: fake_agent)
 
-    exit_code = launch.main(["python", "vision_agent"])
+    exit_code = launch.main(["python", "resale_copilot_agent"])
 
     assert exit_code == 0
     assert fake_agent.ran is True
