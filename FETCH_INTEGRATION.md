@@ -201,15 +201,15 @@ Observed blocker:
 
 ## Validation Checklist
 
-**Agentverse run + registration:** For the full local runbook (`.venv-fetch`, `source .env`, `make run-fetch-agents`) and capturing each `agent1q...` into `*_AGENTVERSE_ADDRESS`, follow **[AGENTVERSE_IMPLEMENTATION_PLAN.md](AGENTVERSE_IMPLEMENTATION_PLAN.md)** Phases A–B. For Agentverse profile fields, mailbox inspector flow, three interactions per agent, and ASI:One / Devpost URL collection, use **[AGENTVERSE_SETUP.md](AGENTVERSE_SETUP.md)**. For a paste-ready URL matrix, use **[docs/AGENTVERSE_DELIVERABLES_TEMPLATE.md](docs/AGENTVERSE_DELIVERABLES_TEMPLATE.md)**.
+**Agentverse run + registration:** For the full local runbook (`.venv-fetch`, `source .env`, `make run-fetch-agents`) and capturing each `agent1q...` into `*_AGENTVERSE_ADDRESS`, follow **[AGENTVERSE_IMPLEMENTATION_PLAN.md](AGENTVERSE_IMPLEMENTATION_PLAN.md)** Phases A–B. For Agentverse profile fields, mailbox inspector flow, public-agent interactions, and ASI:One / Devpost URL collection, use **[AGENTVERSE_SETUP.md](AGENTVERSE_SETUP.md)**. For a paste-ready URL matrix, use **[docs/AGENTVERSE_DELIVERABLES_TEMPLATE.md](docs/AGENTVERSE_DELIVERABLES_TEMPLATE.md)**.
 
 Use this sequence before demoing Fetch:
 
 1. Run `make run` and confirm the backend is reachable on `8000`.
-2. Export `AGENTVERSE_API_KEY` and all ten Fetch seed variables.
-3. Run `make run-fetch-agents` and confirm the Fetch ports `9201-9210` are occupied by the expected slugs.
-4. Send a smoke request to a search agent and confirm the response includes the mapped marketplace summary.
-5. Send a sell-side request and confirm the Fetch response reuses the same backend logic as the FastAPI path.
+2. Export `AGENTVERSE_API_KEY`, the four public-agent seed variables required by `make run-fetch-agents`, and any extra internal-agent seed variables you want available for one-off debug launches.
+3. Run `make run-fetch-agents` and confirm the public Fetch ports `9201`, `9203`, `9204`, and `9211` are occupied by the expected slugs.
+4. Send a smoke request to `resale_copilot_agent` or one specialist public agent and confirm the response uses the mapped backend workflow.
+5. If you want to validate internal workers directly, launch them one at a time with `backend.fetch_agents.launch` and confirm they still return the expected structured result.
 6. If you are testing mailbox-backed Agentverse behavior, keep `FETCH_USE_LOCAL_ENDPOINT=false`.
 7. If you need the older local inspector mode for debugging, set `FETCH_USE_LOCAL_ENDPOINT=true` and document that the run is not mailbox-backed.
 
@@ -246,7 +246,10 @@ The mobile path does **not** require this. Use it when you want the FastAPI orch
    ```bash
    export FETCH_ENABLED=true
    export AGENTVERSE_API_KEY=...
-   export VISION_FETCH_AGENT_SEED=...   # and the other nine *_FETCH_AGENT_SEED vars
+   export VISION_FETCH_AGENT_SEED=...
+   export PRICING_FETCH_AGENT_SEED=...
+   export DEPOP_LISTING_FETCH_AGENT_SEED=...
+   export RESALE_COPILOT_FETCH_AGENT_SEED=...
    make run
    ```
 
@@ -445,7 +448,7 @@ The Browser Use and fallback outputs must stay contract-compatible so the orches
 
 ### Step 3: Finish one real Fetch agent end to end
 
-Do not try to finish all 10 Fetch agents first.
+Do not try to finish the full internal catalog first.
 
 Start with:
 

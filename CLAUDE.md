@@ -84,11 +84,23 @@ make test          # run pytest -q (default test command)
 make test-verbose  # run pytest -ra
 make compile       # syntax-check backend/ and tests/
 make check         # test + compile
+make ci            # matches local CI flow
 make run           # start full stack via ./start.sh
 make run-agents    # start all agent HTTP servers (python -m backend.run_agents)
 ```
 
 Run a single test file: `. .venv/bin/activate && python -m pytest tests/test_pipelines.py -q`
+
+Browser Use validation commands:
+```bash
+# Smoke-test search agents in fallback/live mode
+./.venv/bin/python scripts/browser_use_validation.py --group buy_search
+./.venv/bin/python -m backend.browser_use_validation --mode fallback --scenario depop_listing
+./.venv/bin/python -m backend.browser_use_validation --require-live --group sell
+
+# Audit Chromium, env vars, profile dirs before live runs
+./.venv/bin/python -m backend.browser_use_runtime_audit
+```
 
 ---
 
@@ -132,6 +144,17 @@ Every agent has a strict Pydantic input model (e.g. `EbaySoldCompsAgentInput`) t
 
 *Note on PricingOutput:* `PricingAgent` synthesizes market comps to include `TrendData` and `VelocityData` objects indicating market direction and demand based on dates and prices.
 
+### Sell Listing Review Flow
+
+After `depop_listing_agent` creates a draft, the pipeline pauses with a `SellListingReviewPause` (not an error). The session enters `listing_review` state and waits up to 15 minutes for the user to call one of:
+- `POST /sell/confirm` — submits the listing
+- `POST /sell/revise` — sends corrections back through `depop_listing_agent` (max 2 revisions)
+- `POST /sell/abort` — cancels the listing
+
+### Fetch.ai Agent Layer
+
+`backend/fetch_agents/` contains uAgents-based wrappers (`builder.py`, `launch.py`) that expose the buy search pipeline over the Fetch.ai agent network. Requires Python 3.12/3.13 — uagents 0.24.0 is incompatible with Python 3.14. Enabled via `FETCH_ENABLED=true`; the orchestrator calls `run_fetch_query()` from `backend/fetch_runtime.py` when active.
+
 ### Adding a New Agent
 
 Extend `BaseAgent` from `backend/agents/base.py`, implement `build_output(request) -> dict`. The base class handles input/output Pydantic validation and error wrapping. `StubAgent` is a convenience class for agents that return static mock data.
@@ -149,3 +172,6 @@ Extend `BaseAgent` from `backend/agents/base.py`, implement `build_output(reques
 | `BROWSER_USE_FORCE_FALLBACK`| `false` | If `true`, skips all Chromium scraping and returns fallback mock data |
 | `BROWSER_USE_PROFILE_ROOT` | `profiles` | Dir for persistent browser profiles |
 | `EBAY_APP_ID`, `EBAY_CERT_ID`| *(none)* | eBay developer credentials for Browse API (Topic 3) |
+| `GOOGLE_API_KEY` | *(none)* | Required for live Gemini Vision and Browser Use flows |
+| `FETCH_ENABLED` | `false` | Enable Fetch.ai uAgents layer for buy search |
+| `RESALE_COPILOT_AGENT_ADDRESS` | `""` | Stable agent1q... address for resale_copilot_agent; used by frontend FAB to link to ASI:One chat |

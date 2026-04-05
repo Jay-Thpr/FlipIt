@@ -1,5 +1,5 @@
 # Agentverse Profile Setup — Exact Steps
-**Do this after all 10 Fetch uAgents are running locally** in this repository.
+**Do this after the 4 public Fetch agents are running locally** in this repository. Internal workers can still be launched one at a time for debugging, but they are not the default public submission surface.
 
 **Canonical mapping:** Slug, port, seed env var, and `*_AGENTVERSE_ADDRESS` names live in [AGENTVERSE_IMPLEMENTATION_PLAN.md](AGENTVERSE_IMPLEMENTATION_PLAN.md) (§2). [FETCH_INTEGRATION.md](FETCH_INTEGRATION.md) covers the full Fetch bridge.
 
@@ -9,7 +9,7 @@
 
 - Fetch **uAgents** are built by [`backend/fetch_agents/builder.py`](backend/fetch_agents/builder.py) from [`FETCH_AGENT_SPECS`](backend/fetch_runtime.py). There are **no** per-agent scripts such as `python run_agents.py` or `agents/vision_agent.py`.
 - **Python:** use **`make venv-fetch`** (defaults to `python3.12`) so Fetch processes use a 3.12 venv with **`requirements.txt`** (includes `uagents` and backend deps for `backend.fetch_runtime`). Main app: `make install` (`.venv`).
-- **Run all ten:** load `.env` into your shell (`set -a && source .env && set +a` in bash/zsh), then **`make run-fetch-agents`**. [`backend/run_fetch_agents.py`](backend/run_fetch_agents.py) does not call `load_dotenv`; the shell must export `AGENTVERSE_API_KEY` and all `*_FETCH_AGENT_SEED` vars.
+- **Run the public Agentverse set:** load `.env` into your shell (`set -a && source .env && set +a` in bash/zsh), then **`make run-fetch-agents`**. [`backend/run_fetch_agents.py`](backend/run_fetch_agents.py) launches only the public agents from [`backend/fetch_runtime.py`](backend/fetch_runtime.py): `resale_copilot_agent`, `vision_agent`, `pricing_agent`, and `depop_listing_agent`.
 - **uAgent listen ports** in this repo are **9201–9210** (one port per slug). Optional HTTP `/task` microservices for the same logical agents use **9101–9110** ([`backend/config.py`](backend/config.py)) — a **separate** process from the Fetch uAgent.
 
 ---
@@ -18,8 +18,8 @@
 
 Before Agentverse profile work:
 
-- All 10 Fetch agents running via **`make run-fetch-agents`** (after `make venv-fetch` and env loaded), or debug one with `PYTHONPATH=$PWD .venv-fetch/bin/python -m backend.fetch_agents.launch <slug>`.
-- **`.env`:** `AGENTVERSE_API_KEY`, ten unique **`_*_FETCH_AGENT_SEED`** values, `FETCH_USE_LOCAL_ENDPOINT=false` for mailbox mode ([`.env.example`](.env.example)).
+- The 4 public Fetch agents running via **`make run-fetch-agents`** (after `make venv-fetch` and env loaded), or one specific agent running via `PYTHONPATH=$PWD .venv-fetch/bin/python -m backend.fetch_agents.launch <slug>`.
+- **`.env`:** `AGENTVERSE_API_KEY`, the 4 public-agent seed vars required by `make run-fetch-agents`, and any additional `*_FETCH_AGENT_SEED` values for internal workers you plan to launch manually. Keep `FETCH_USE_LOCAL_ENDPOINT=false` for mailbox mode ([`.env.example`](.env.example)).
 - Agentverse account at https://agentverse.ai and API key stored only in `.env` (never commit).
 
 **ngrok:** Optional. Use **`ngrok http 8000`** only if you need a **public URL for the FastAPI app** (e.g. mobile). It is **not** required for mailbox-backed uAgents on ports **920x**.
@@ -46,17 +46,18 @@ You **do not** edit per-agent Python entrypoints. Seeds and ports come from **`F
 - `name` / `port` / `seed` from the spec and matching `*_FETCH_AGENT_SEED` env var  
 - `mailbox=True`  
 - `publish_agent_details=True`  
+- optional `readme_path` when the Fetch spec defines one
 - optional local `endpoint` when **`FETCH_USE_LOCAL_ENDPOINT=true`**
 
-There is **no** `readme_path` in the builder today — profile and README text visible on Agentverse come from the **dashboard** (and/or copy-paste from Step 2 templates below). Optional future `readme_path` wiring is described in [AGENTVERSE_IMPLEMENTATION_PLAN.md](AGENTVERSE_IMPLEMENTATION_PLAN.md) Phase D.
+Public agents in this repo already include README-backed metadata through their Fetch specs. You should still treat the Agentverse dashboard as the source of truth for the final sponsor-facing profile text and polish what judges will see there.
 
 ---
 
 ## Step 2 — Profile / README text (copy-paste)
 
-The markdown blocks below are **templates** for Agentverse discoverability (Overview, description, long-form readme). **Paste** them into each agent’s profile on https://agentverse.ai — they are **not** auto-loaded from `agents/README_*.md` in this repo.
+The markdown blocks below are **templates** for Agentverse discoverability (Overview, description, long-form readme). Use them to fill or refine each agent’s profile on https://agentverse.ai.
 
-You may keep optional local notes under `docs/` or similar; **Agentverse is the source of truth** for what judges see unless you add `readme_path` support in code later.
+You may keep optional local notes under `docs/` or similar; **Agentverse is the source of truth** for what judges see in the final submission.
 
 ### Template (fill in per agent):
 
@@ -560,11 +561,24 @@ PYTHONPATH=$PWD .venv-fetch/bin/python -m backend.fetch_agents.launch vision_age
 
 `.env` keys for each address: `VISION_AGENT_AGENTVERSE_ADDRESS`, `EBAY_SOLD_COMPS_AGENT_AGENTVERSE_ADDRESS`, `PRICING_AGENT_AGENTVERSE_ADDRESS`, `DEPOP_LISTING_AGENT_AGENTVERSE_ADDRESS`, `DEPOP_SEARCH_AGENT_AGENTVERSE_ADDRESS`, `EBAY_SEARCH_AGENT_AGENTVERSE_ADDRESS`, `MERCARI_SEARCH_AGENT_AGENTVERSE_ADDRESS`, `OFFERUP_SEARCH_AGENT_AGENTVERSE_ADDRESS`, `RANKING_AGENT_AGENTVERSE_ADDRESS`, `NEGOTIATION_AGENT_AGENTVERSE_ADDRESS` (full table in [AGENTVERSE_IMPLEMENTATION_PLAN.md](AGENTVERSE_IMPLEMENTATION_PLAN.md) §2).
 
-### Start all ten (many inspector URLs at once)
+### Start the public submission set
 
 ```bash
 set -a && source .env && set +a
 make run-fetch-agents
+```
+
+This starts the 4 public Agentverse-facing agents:
+
+- `resale_copilot_agent` on `9211`
+- `vision_agent` on `9201`
+- `pricing_agent` on `9203`
+- `depop_listing_agent` on `9204`
+
+If you want to inspect internal workers such as `ebay_sold_comps_agent` or `depop_search_agent`, launch them one at a time with:
+
+```bash
+PYTHONPATH=$PWD .venv-fetch/bin/python -m backend.fetch_agents.launch ebay_sold_comps_agent
 ```
 
 ### What to expect in the terminal
@@ -671,14 +685,14 @@ This satisfies the "receive at least 3 interactions" ranking criterion.
 
 ## Step 5 — Generate ASI:One Chat Session URL (Fetch.ai Deliverable)
 
-Do this after all 10 agents are registered and Active:
+Do this after the public agents are registered and Active:
 
 ```
 1. Go to https://asi1.ai/chat
 2. Sign in
 3. Type: "I found a Nike Air Jordan 1 at Goodwill. Help me figure out if it's worth buying and list it for resale."
-4. ASI:One should discover your agents and route the request
-5. If agents don't auto-discover, try: "@visionagent identify this thrift store item" or "@negotiationagent help me make an offer"
+4. ASI:One should discover your agents and route the request, typically through `resale_copilot_agent`
+5. If agents don't auto-discover, try: "@resalecopilot help me flip this item" or "@visionagent identify this thrift store item"
 6. Copy the URL of this chat session
 ```
 
@@ -688,23 +702,17 @@ This URL is your Fetch.ai deliverable. Paste into Devpost submission.
 
 ## Step 6 — Collect All Deliverable URLs
 
-After all 10 agents registered, fill this in:
+After the public submission agents are registered, fill this in:
 
 ```
 ASI:One Chat Session:     https://asi1.ai/chat/...
+ResaleCopilotAgent:       https://agentverse.ai/agents/...
 VisionAgent:              https://agentverse.ai/agents/...
-EbaySoldCompsAgent:       https://agentverse.ai/agents/...
 PricingAgent:             https://agentverse.ai/agents/...
 DepopListingAgent:        https://agentverse.ai/agents/...
-DepopSearchAgent:         https://agentverse.ai/agents/...
-EbaySearchAgent:          https://agentverse.ai/agents/...
-MercariSearchAgent:       https://agentverse.ai/agents/...
-OfferUpSearchAgent:       https://agentverse.ai/agents/...
-RankingAgent:             https://agentverse.ai/agents/...
-NegotiationAgent:         https://agentverse.ai/agents/...
 ```
 
-Paste all 11 URLs into Devpost submission under Fetch.ai deliverables.
+Paste the ASI:One URL plus the 4 public Agentverse profile URLs into the Fetch.ai deliverables section. If you also register internal workers for completeness, keep those links in team notes, not as the core sponsor narrative.
 
 A fill-in table lives at [docs/AGENTVERSE_DELIVERABLES_TEMPLATE.md](docs/AGENTVERSE_DELIVERABLES_TEMPLATE.md).
 

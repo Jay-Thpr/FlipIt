@@ -1,7 +1,7 @@
 # DiamondHacks
 
 FastAPI backend scaffold for the DiamondHacks resale-agent demo. The repo now exposes both the product-facing FastAPI backend and a specialized Fetch/Agentverse surface with public customized agents backed by the same local resale workflows.
-Agent inputs and outputs are validated against step-specific schemas so pipeline contracts stay structurally stable as real logic is added. All 10 backend agents still run deterministic non-stub logic, and the Fetch layer now adds a public `resale_copilot_agent`, specialist public agents, README-backed metadata, and deterministic handoff or clarification behavior for Agentverse demos.
+Agent inputs and outputs are validated against step-specific schemas so pipeline contracts stay structurally stable as real logic is added. All 10 backend workflow agents still run deterministic non-stub logic, and the Fetch layer exposes a smaller public Agentverse surface: `resale_copilot_agent`, `vision_agent`, `pricing_agent`, and `depop_listing_agent`, backed by internal worker agents and README-backed metadata.
 
 ## Quick Start
 
