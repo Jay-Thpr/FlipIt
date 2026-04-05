@@ -133,8 +133,17 @@ def test_format_fetch_response_contains_summary_and_json() -> None:
     response = format_fetch_response(
         "vision_agent",
         "Vintage tee",
-        {"summary": "done", "agent": "vision_agent"},
+        {
+            "summary": "done",
+            "agent": "vision_agent",
+            "brand": "Nike",
+            "category": "apparel",
+            "condition": "good",
+            "detected_item": "tee",
+            "confidence": 0.92,
+        },
     )
+    assert "Brand: Nike" in response
     assert "Summary: done" in response
     assert '"agent": "vision_agent"' in response
 

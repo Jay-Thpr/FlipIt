@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
+from backend.fetch_agents.chat_profiles import decide_chat_request
 from backend.fetch_runtime import format_fetch_response, get_fetch_agent_spec, run_fetch_query
 
 
@@ -120,8 +121,12 @@ def build_fetch_agent(agent_slug: str) -> Any:
 
         user_text = _extract_text(msg)
         try:
-            result = await run_fetch_query(agent_slug, user_text)
-            response_text = format_fetch_response(agent_slug, user_text, result)
+            decision = decide_chat_request(agent_slug, user_text)
+            if decision.kind == "execute":
+                result = await run_fetch_query(agent_slug, user_text)
+                response_text = format_fetch_response(agent_slug, user_text, result)
+            else:
+                response_text = decision.message
         except Exception as exc:
             ctx.logger.exception("Fetch agent execution failed")
             response_text = (

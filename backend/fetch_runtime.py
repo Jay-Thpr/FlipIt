@@ -641,8 +641,58 @@ def format_fetch_response(agent_slug: str, user_text: str, result: dict[str, obj
     spec = FETCH_AGENT_SPECS[agent_slug]
     summary = str(result.get("summary") or f"{spec.name} completed the request.")
     body = json.dumps(result, indent=2, sort_keys=True)
+    normalized_user_text = normalize_text(user_text)
+
+    if agent_slug == "resale_copilot_agent":
+        task_family = str(result.get("task_family") or spec.task_family).replace("_", " ")
+        specialist_agent = str(result.get("specialist_agent") or "specialist workflow")
+        return (
+            f"{spec.name} routed: {normalized_user_text}\n\n"
+            f"Route: {task_family}\n"
+            f"Specialist: {specialist_agent}\n"
+            f"Summary: {summary}\n\n"
+            "Structured result:\n"
+            f"{body}"
+        )
+
+    if agent_slug == "vision_agent":
+        return (
+            f"{spec.name} reviewed: {normalized_user_text}\n\n"
+            f"Item: {result.get('detected_item', 'unknown')}\n"
+            f"Brand: {result.get('brand', 'unknown')}\n"
+            f"Category: {result.get('category', 'unknown')}\n"
+            f"Condition: {result.get('condition', 'unknown')}\n"
+            f"Confidence: {result.get('confidence', 'unknown')}\n"
+            f"Summary: {summary}\n\n"
+            "Structured result:\n"
+            f"{body}"
+        )
+
+    if agent_slug == "pricing_agent":
+        return (
+            f"{spec.name} reviewed: {normalized_user_text}\n\n"
+            f"Recommended price: {result.get('recommended_list_price', 'unknown')}\n"
+            f"Expected profit: {result.get('expected_profit', 'unknown')}\n"
+            f"Confidence: {result.get('pricing_confidence', 'unknown')}\n"
+            f"Summary: {summary}\n\n"
+            "Structured result:\n"
+            f"{body}"
+        )
+
+    if agent_slug == "depop_listing_agent":
+        return (
+            f"{spec.name} drafted from: {normalized_user_text}\n\n"
+            f"Title: {result.get('title', 'unknown')}\n"
+            f"Suggested price: {result.get('suggested_price', 'unknown')}\n"
+            f"Category path: {result.get('category_path', 'unknown')}\n"
+            f"Draft status: {result.get('draft_status', result.get('listing_status', 'unknown'))}\n"
+            f"Summary: {summary}\n\n"
+            "Structured result:\n"
+            f"{body}"
+        )
+
     return (
-        f"{spec.name} handled: {normalize_text(user_text)}\n\n"
+        f"{spec.name} handled: {normalized_user_text}\n\n"
         f"Summary: {summary}\n\n"
         "Structured result:\n"
         f"{body}"

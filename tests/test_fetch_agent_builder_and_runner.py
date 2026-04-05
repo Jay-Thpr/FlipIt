@@ -12,6 +12,7 @@ import pytest
 from backend import run_fetch_agents
 from backend.config import assert_fetch_agent_ports_do_not_overlap
 from backend.fetch_agents import builder, launch
+from backend.fetch_agents.chat_profiles import decide_chat_request
 from backend.fetch_runtime import get_fetch_agent_spec
 
 
@@ -176,9 +177,93 @@ async def test_build_fetch_agent_chat_handler_acknowledges_executes_and_ends_ses
     assert isinstance(response, FakeChatMessage)
     assert len(response.content) == 2
     assert isinstance(response.content[0], FakeTextContent)
+    assert "VisionAgent reviewed: Vintage Nike tee" in response.content[0].text
+    assert "Brand: Nike" in response.content[0].text
     assert "Summary: Vision agent completed" in response.content[0].text
     assert isinstance(response.content[1], FakeEndSessionContent)
     assert response.content[1].type == "end-session"
+
+
+@pytest.mark.asyncio
+async def test_build_fetch_agent_chat_handler_returns_handoff_without_running_query(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(builder, "_import_uagents", fake_uagents_tuple)
+    monkeypatch.setenv("VISION_FETCH_AGENT_SEED", "seed-vision")
+
+    async def fail_run_fetch_query(agent_slug: str, user_text: str) -> dict[str, object]:
+        raise AssertionError("run_fetch_query should not be called for out-of-scope requests")
+
+    monkeypatch.setattr(builder, "run_fetch_query", fail_run_fetch_query)
+
+    agent = builder.build_fetch_agent("vision_agent")
+    protocol, _ = agent.included[0]
+    sent_messages: list[tuple[str, object]] = []
+
+    class FakeLogger:
+        def exception(self, *args: object, **kwargs: object) -> None:
+            raise AssertionError("chat handler should not log an exception in the handoff path")
+
+        def debug(self, *args: object, **kwargs: object) -> None:
+            return None
+
+    class FakeContext:
+        logger = FakeLogger()
+
+        async def send(self, sender: str, message: object) -> None:
+            sent_messages.append((sender, message))
+
+    incoming = FakeChatMessage(
+        msg_id="incoming-message-id",
+        content=[FakeTextContent(type="text", text="What should I price this at?")],
+    )
+
+    await protocol.handlers[FakeChatMessage](FakeContext(), "buyer-address", incoming)
+
+    response = sent_messages[1][1]
+    assert isinstance(response, FakeChatMessage)
+    assert "Try `pricing_agent`, `resale_copilot_agent` instead." in response.content[0].text
+
+
+@pytest.mark.asyncio
+async def test_build_fetch_agent_chat_handler_returns_clarification_without_running_query(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(builder, "_import_uagents", fake_uagents_tuple)
+    monkeypatch.setenv("PRICING_FETCH_AGENT_SEED", "seed-pricing")
+
+    async def fail_run_fetch_query(agent_slug: str, user_text: str) -> dict[str, object]:
+        raise AssertionError("run_fetch_query should not be called for incomplete requests")
+
+    monkeypatch.setattr(builder, "run_fetch_query", fail_run_fetch_query)
+
+    agent = builder.build_fetch_agent("pricing_agent")
+    protocol, _ = agent.included[0]
+    sent_messages: list[tuple[str, object]] = []
+
+    class FakeLogger:
+        def exception(self, *args: object, **kwargs: object) -> None:
+            raise AssertionError("chat handler should not log an exception in the clarification path")
+
+        def debug(self, *args: object, **kwargs: object) -> None:
+            return None
+
+    class FakeContext:
+        logger = FakeLogger()
+
+        async def send(self, sender: str, message: object) -> None:
+            sent_messages.append((sender, message))
+
+    incoming = FakeChatMessage(
+        msg_id="incoming-message-id",
+        content=[FakeTextContent(type="text", text="price")],
+    )
+
+    await protocol.handlers[FakeChatMessage](FakeContext(), "buyer-address", incoming)
+
+    response = sent_messages[1][1]
+    assert isinstance(response, FakeChatMessage)
+    assert "PricingAgent needs item details such as brand, item type, condition, and optional photo link." in response.content[0].text
 
 
 def test_launch_main_handles_usage_and_build_errors(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
@@ -276,3 +361,13 @@ def test_build_fetch_agent_includes_readme_for_public_agent(monkeypatch: pytest.
     agent = builder.build_fetch_agent("vision_agent")
 
     assert agent.kwargs["readme_path"] == get_fetch_agent_spec("vision_agent").readme_path
+
+
+def test_chat_profiles_enforce_scope_and_clarification() -> None:
+    handoff = decide_chat_request("vision_agent", "What should I price this at?")
+    assert handoff.kind == "handoff"
+    assert "pricing_agent" in handoff.message
+
+    clarify = decide_chat_request("resale_copilot_agent", "Find me a jacket")
+    assert clarify.kind == "clarify"
+    assert "target budget" in clarify.message
