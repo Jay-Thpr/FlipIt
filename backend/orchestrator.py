@@ -100,6 +100,20 @@ def _build_sell_listing_review_state(
     )
 
 
+def _refresh_sell_listing_review_pause(
+    review: SellListingReviewState,
+    *,
+    state: str,
+) -> SellListingReviewState:
+    refreshed = _build_sell_listing_review_state(
+        state=state,
+        latest_decision=review.latest_decision,
+        revision_instructions=review.revision_instructions,
+        revision_count=review.revision_count,
+    )
+    return refreshed.model_copy(update={"step": review.step, "platform": review.platform})
+
+
 def sell_listing_review_is_expired(review: SellListingReviewState) -> bool:
     if review.deadline_at is None:
         return False
@@ -847,7 +861,8 @@ async def handle_sell_listing_decision(
 
         _merge_sell_listing_output(outputs, browser_use_result)
         review.state = "ready_for_confirmation"
-        review_state = SellListingReviewState.model_validate(review)
+        review_state = _refresh_sell_listing_review_pause(review, state="ready_for_confirmation")
+        review = review_state
         await session_manager.update_sell_listing_review(session_id, review_state)
         await session_manager.update_status(session_id, status="paused", result=partial_result, error=None)
         await publish(

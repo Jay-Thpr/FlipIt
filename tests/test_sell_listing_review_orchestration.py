@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import pytest
@@ -196,6 +197,8 @@ async def test_handle_sell_listing_decision_revise_reopens_review(monkeypatch: p
     assert updated.sell_listing_review.state == "ready_for_confirmation"
     assert updated.sell_listing_review.revision_count == 2
     assert updated.sell_listing_review.revision_instructions == "Change the title and lower the price"
+    assert updated.sell_listing_review.paused_at is not None
+    assert updated.sell_listing_review.deadline_at is not None
     depop_listing = updated.result["outputs"]["depop_listing"]
     assert depop_listing["listing_status"] == "ready_for_confirmation"
     assert depop_listing["ready_for_confirmation"] is True
@@ -206,6 +209,61 @@ async def test_handle_sell_listing_decision_revise_reopens_review(monkeypatch: p
         "listing_revision_applied",
         "listing_review_required",
     ]
+
+
+@pytest.mark.asyncio
+async def test_handle_sell_listing_decision_revise_refreshes_review_window(monkeypatch: pytest.MonkeyPatch) -> None:
+    await session_manager.reset()
+    session = await session_manager.create_session(
+        session_id="sell-review-revise-window-session",
+        pipeline="sell",
+        request=PipelineStartRequest(input={"image_urls": [], "notes": "Test"}),
+    )
+    session.status = "paused"
+    session.result = {"pipeline": "sell", "outputs": {"depop_listing": _listing_output(ready_for_confirmation=True, listing_status="ready_for_confirmation")}}
+    previous_paused_at = datetime.now(timezone.utc) - timedelta(minutes=10)
+    previous_deadline_at = datetime.now(timezone.utc) + timedelta(minutes=1)
+    session.sell_listing_review = SellListingReviewState(
+        state="ready_for_confirmation",
+        revision_count=1,
+        paused_at=previous_paused_at.isoformat(),
+        deadline_at=previous_deadline_at.isoformat(),
+    )
+
+    async def fake_revise_sell_listing_for_review(
+        *,
+        listing_output: dict[str, Any],
+        revision_instructions: str,
+    ) -> tuple[dict[str, Any], None, bool]:
+        return (
+            {
+                "listing_status": "ready_for_confirmation",
+                "ready_for_confirmation": True,
+                "draft_status": "ready",
+                "form_screenshot_url": "artifact://revised-preview",
+            },
+            None,
+            True,
+        )
+
+    monkeypatch.setattr(orchestrator, "revise_sell_listing_for_review", fake_revise_sell_listing_for_review)
+
+    await orchestrator.handle_sell_listing_decision(
+        session.session_id,
+        "revise",
+        revision_instructions="Tighten description",
+    )
+
+    updated = await session_manager.get_session(session.session_id)
+    assert updated is not None
+    assert updated.sell_listing_review is not None
+    assert updated.sell_listing_review.revision_count == 2
+    assert updated.sell_listing_review.paused_at != previous_paused_at.isoformat()
+    assert updated.sell_listing_review.deadline_at != previous_deadline_at.isoformat()
+    paused_at = datetime.fromisoformat(updated.sell_listing_review.paused_at)
+    deadline_at = datetime.fromisoformat(updated.sell_listing_review.deadline_at)
+    assert deadline_at > paused_at
+    assert deadline_at > previous_deadline_at
 
 
 @pytest.mark.asyncio
@@ -298,3 +356,54 @@ async def test_fail_sell_listing_review_expires_and_cleans_up_listing(monkeypatc
         "listing_review_expired",
         "pipeline_failed",
     ][-3:]
+
+
+@pytest.mark.asyncio
+async def test_handle_sell_listing_decision_revise_at_limit_fails_and_cleans_up(monkeypatch: pytest.MonkeyPatch) -> None:
+    await session_manager.reset()
+    session = await session_manager.create_session(
+        session_id="sell-review-limit-handler-session",
+        pipeline="sell",
+        request=PipelineStartRequest(input={"image_urls": [], "notes": "Test"}),
+    )
+    session.status = "paused"
+    session.result = {"pipeline": "sell", "outputs": {"depop_listing": _listing_output(ready_for_confirmation=True, listing_status="ready_for_confirmation")}}
+    session.sell_listing_review = SellListingReviewState(
+        state="ready_for_confirmation",
+        revision_count=orchestrator.SELL_LISTING_MAX_REVISIONS,
+    )
+
+    async def fake_abort_sell_listing() -> tuple[dict[str, Any], None, bool]:
+        return (
+            {
+                "listing_status": "aborted",
+                "ready_for_confirmation": False,
+                "draft_status": "aborted",
+                "form_screenshot_url": None,
+            },
+            None,
+            True,
+        )
+
+    monkeypatch.setattr(orchestrator, "abort_sell_listing", fake_abort_sell_listing)
+
+    await orchestrator.handle_sell_listing_decision(
+        session.session_id,
+        "revise",
+        revision_instructions="Another change",
+    )
+
+    updated = await session_manager.get_session(session.session_id)
+    assert updated is not None
+    assert updated.status == "failed"
+    assert updated.error == "sell_listing_revision_limit_reached"
+    assert updated.sell_listing_review is None
+    depop_listing = updated.result["outputs"]["depop_listing"]
+    assert depop_listing["listing_status"] == "revision_limit_reached"
+    assert depop_listing["ready_for_confirmation"] is False
+    assert [event.event_type for event in updated.events][-4:] == [
+        "listing_decision_received",
+        "listing_review_cleanup_completed",
+        "listing_revision_limit_reached",
+        "pipeline_failed",
+    ]
