@@ -8,7 +8,9 @@ import pytest
 from backend import orchestrator
 from backend.schemas import (
     AgentTaskResponse,
+    NegotiationOutput,
     PipelineStartRequest,
+    RankingOutput,
     SearchResultsOutput,
 )
 from backend.session import session_manager
@@ -215,3 +217,65 @@ async def test_timeout_failure_records_agent_failure_category(monkeypatch: pytes
     failure_event = next(event for event in session.events if event.event_type == "agent_error")
     assert failure_event.data["category"] == "timeout"
     assert failure_event.data["agent_name"] == "vision_agent"
+
+
+@pytest.mark.asyncio
+async def test_buy_pipeline_completes_with_empty_ranking_and_negotiation_when_all_searches_are_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_run_agent_task = orchestrator.run_agent_task
+
+    async def fake_run_agent_task(agent_slug: str, request: Any) -> AgentTaskResponse:
+        if agent_slug in {
+            "depop_search_agent",
+            "ebay_search_agent",
+            "mercari_search_agent",
+            "offerup_search_agent",
+        }:
+            output = SearchResultsOutput(
+                agent=agent_slug,
+                display_name=agent_slug.replace("_", " ").title(),
+                summary="No listings found",
+                results=[],
+                execution_mode="fallback",
+                browser_use_error=None,
+                browser_use=None,
+            ).model_dump()
+            return AgentTaskResponse(
+                session_id=request.session_id,
+                step=request.step,
+                status="completed",
+                output=output,
+            )
+
+        return await original_run_agent_task(agent_slug, request)
+
+    monkeypatch.setattr(orchestrator, "run_agent_task", fake_run_agent_task)
+
+    request = PipelineStartRequest(
+        user_id="buy-user",
+        input={"query": "rare tee", "budget": 45},
+        metadata={"source": "empty-buy-test"},
+    )
+    session_id = "buy-empty-session"
+    await session_manager.create_session(session_id=session_id, pipeline="buy", request=request)
+
+    await orchestrator.run_pipeline(session_id, "buy", request)
+
+    session = await session_manager.get_session(session_id)
+    assert session is not None
+    assert session.status == "completed"
+    ranking = session.result["outputs"]["ranking"]
+    negotiation = session.result["outputs"]["negotiation"]
+    RankingOutput.model_validate(ranking)
+    NegotiationOutput.model_validate(negotiation)
+    assert ranking["summary"] == "No marketplace listings were found to rank"
+    assert ranking["top_choice"] is None
+    assert ranking["candidate_count"] == 0
+    assert ranking["ranked_listings"] == []
+    assert ranking["median_price"] == 0.0
+    assert negotiation["summary"] == "No ranked marketplace listings were available for negotiation"
+    assert negotiation["offers"] == []
+    assert negotiation["browser_use"]["mode"] == "skipped"
+    assert session.events[-1].event_type == "pipeline_complete"
+    assert "pipeline_failed" not in [event.event_type for event in session.events]

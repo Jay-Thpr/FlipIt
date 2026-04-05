@@ -214,7 +214,7 @@ class SearchResultsOutput(AgentOutputBase):
 
 
 class RankingOutput(AgentOutputBase):
-    top_choice: RankedListing
+    top_choice: RankedListing | None = None
     candidate_count: int
     ranked_listings: list[RankedListing] = Field(default_factory=list)
     median_price: float

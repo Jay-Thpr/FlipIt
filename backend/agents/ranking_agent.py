@@ -63,7 +63,15 @@ class RankingAgent(BaseAgent):
         ]
 
         if not candidates:
-            raise ValueError("No marketplace listings were found to rank")
+            return {
+                "agent": self.slug,
+                "display_name": self.display_name,
+                "summary": "No marketplace listings were found to rank",
+                "top_choice": None,
+                "candidate_count": 0,
+                "ranked_listings": [],
+                "median_price": 0.0,
+            }
 
         ranked_candidates = []
         for listing in candidates:

@@ -33,9 +33,23 @@ class NegotiationAgent(BaseAgent):
 
     async def build_output(self, request: AgentTaskRequest) -> dict:
         previous_outputs = request.input["previous_outputs"]
-        top_choice = previous_outputs["ranking"]["top_choice"]
-        median_price = float(previous_outputs["ranking"]["median_price"])
+        ranking_output = previous_outputs["ranking"]
+        top_choice = ranking_output.get("top_choice")
+        median_price = float(ranking_output["median_price"])
         search_outputs = previous_outputs
+
+        if not top_choice or int(ranking_output.get("candidate_count", 0)) == 0:
+            return {
+                "agent": self.slug,
+                "display_name": self.display_name,
+                "summary": "No ranked marketplace listings were available for negotiation",
+                "offers": [],
+                "browser_use": build_browser_use_metadata(
+                    mode="skipped",
+                    attempted_live_run=False,
+                    detail="Skipped negotiation because ranking returned no marketplace candidates.",
+                ),
+            }
 
         all_candidates = [
             listing

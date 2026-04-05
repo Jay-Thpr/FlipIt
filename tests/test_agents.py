@@ -417,7 +417,7 @@ def _empty_search_output(agent_slug: str, step: str, platform: str) -> dict:
     }
 
 
-def test_ranking_agent_empty_candidates_raises_value_error() -> None:
+def test_ranking_agent_empty_candidates_returns_empty_ranking_output() -> None:
     from backend.agents.ranking_agent import agent
     from backend.schemas import AgentTaskRequest
 
@@ -436,5 +436,10 @@ def test_ranking_agent_empty_candidates_raises_value_error() -> None:
         },
     )
 
-    with pytest.raises(ValueError, match="No marketplace listings were found to rank"):
-        asyncio.run(agent.build_output(request))
+    output = asyncio.run(agent.build_output(request))
+
+    assert output["summary"] == "No marketplace listings were found to rank"
+    assert output["top_choice"] is None
+    assert output["candidate_count"] == 0
+    assert output["ranked_listings"] == []
+    assert output["median_price"] == 0.0

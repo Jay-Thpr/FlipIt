@@ -56,23 +56,28 @@ def test_format_fetch_response_contains_summary_and_json() -> None:
 
 
 @pytest.mark.asyncio
-async def test_execute_agent_raises_for_empty_ranking_candidates() -> None:
+async def test_execute_agent_returns_empty_ranking_for_empty_candidates() -> None:
     empty_search_output = {
         "agent": "search_agent",
         "display_name": "Search Agent",
         "summary": "No listings found",
         "results": [],
     }
-    with pytest.raises(RuntimeError, match="No marketplace listings were found to rank"):
-        await execute_agent(
-            agent_slug="ranking_agent",
-            pipeline="buy",
-            step="ranking",
-            original_input={"query": "test", "budget": 40},
-            previous_outputs={
-                "depop_search": empty_search_output,
-                "ebay_search": empty_search_output,
-                "mercari_search": empty_search_output,
-                "offerup_search": empty_search_output,
-            },
-        )
+    result = await execute_agent(
+        agent_slug="ranking_agent",
+        pipeline="buy",
+        step="ranking",
+        original_input={"query": "test", "budget": 40},
+        previous_outputs={
+            "depop_search": empty_search_output,
+            "ebay_search": empty_search_output,
+            "mercari_search": empty_search_output,
+            "offerup_search": empty_search_output,
+        },
+    )
+
+    assert result["summary"] == "No marketplace listings were found to rank"
+    assert result["top_choice"] is None
+    assert result["candidate_count"] == 0
+    assert result["ranked_listings"] == []
+    assert result["median_price"] == 0.0
