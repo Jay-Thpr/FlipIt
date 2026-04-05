@@ -65,6 +65,7 @@ class PricingAgent(BaseAgent):
             "recommended_list_price": recommended_list_price,
             "expected_profit": expected_profit,
             "pricing_confidence": pricing_confidence,
+            "median_sold_price": median_sold_price,
             "trend": trend,
             "velocity": velocity,
         }
@@ -100,4 +101,3 @@ class PricingAgent(BaseAgent):
 
 agent = PricingAgent()
 app = build_agent_app(agent)
-

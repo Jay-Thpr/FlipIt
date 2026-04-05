@@ -110,6 +110,19 @@ def test_sell_pipeline_emits_expected_event_order_and_result(client: TestClient)
     assert draft_events[0]["payload"]["data"]["platform"] == "depop"
     assert draft_events[0]["payload"]["data"]["draft_status"] == "fallback"
     assert draft_events[0]["payload"]["data"]["ready_for_confirmation"] is False
+    vision_events = [event for event in events if event["event_type"] == "vision_result"]
+    pricing_events = [event for event in events if event["event_type"] == "pricing_result"]
+    assert len(vision_events) == 1
+    assert len(pricing_events) == 1
+    assert vision_events[0]["payload"]["data"]["brand"] == "Nike"
+    assert vision_events[0]["payload"]["data"]["item_name"] == "t-shirt"
+    assert vision_events[0]["payload"]["data"]["search_query"] == "Nike t-shirt"
+    assert vision_events[0]["payload"]["data"]["clean_photo_url"] == "https://example.com/item.jpg"
+    pricing_output = result["result"]["outputs"]["pricing"]
+    assert pricing_events[0]["payload"]["data"]["recommended_price"] == pricing_output["recommended_list_price"]
+    assert pricing_events[0]["payload"]["data"]["median_price"] == pricing_output["median_sold_price"]
+    assert pricing_events[0]["payload"]["data"]["trend"] is not None
+    assert pricing_events[0]["payload"]["data"]["velocity"] is not None
     fallback_events = [event for event in events if event["event_type"] == "browser_use_fallback"]
     assert len(fallback_events) == 2
     assert not any(event["event_type"] == "listing_review_required" for event in events)

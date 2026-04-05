@@ -60,6 +60,8 @@ class VisionAgent(BaseAgent):
         )
 
     async def build_output(self, request: AgentTaskRequest) -> dict:
+        original_input = request.input.get("original_input", {})
+        image_urls = original_input.get("image_urls") or []
         normalized_text = self._combined_text(request)
         tokens = normalized_text.split()
 
@@ -67,6 +69,7 @@ class VisionAgent(BaseAgent):
         category, detected_item = self._detect_category(tokens)
         condition = self._detect_condition(tokens)
         summary_subject = detected_item if brand == "Unknown" else f"{brand} {detected_item}"
+        search_query = self._build_search_query(brand=brand, detected_item=detected_item)
         # Heuristic confidence until Gemini: known brand + non-generic item → higher score.
         if brand != "Unknown" and detected_item not in ("item", "unknown"):
             confidence = 0.88
@@ -84,6 +87,9 @@ class VisionAgent(BaseAgent):
             "category": category,
             "condition": condition,
             "confidence": confidence,
+            "model": None,
+            "clean_photo_url": self._select_clean_photo_url(image_urls),
+            "search_query": search_query,
         }
 
     def _combined_text(self, request: AgentTaskRequest) -> str:
@@ -118,6 +124,19 @@ class VisionAgent(BaseAgent):
             if token in self.CONDITION_KEYWORDS:
                 return self.CONDITION_KEYWORDS[token]
         return "good"
+
+    def _build_search_query(self, *, brand: str, detected_item: str) -> str | None:
+        if brand == "Unknown" and detected_item == "item":
+            return None
+        if brand == "Unknown":
+            return detected_item
+        return f"{brand} {detected_item}"
+
+    def _select_clean_photo_url(self, image_urls: list[str]) -> str | None:
+        for image_url in image_urls:
+            if isinstance(image_url, str) and image_url.strip():
+                return image_url.strip()
+        return None
 
 
 agent = VisionAgent()

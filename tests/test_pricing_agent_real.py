@@ -64,6 +64,7 @@ def test_pricing_agent_prices_from_real_comps_and_item_signals() -> None:
     assert result["output"]["recommended_list_price"] == 78.43
     assert result["output"]["expected_profit"] == 41.38
     assert result["output"]["pricing_confidence"] == 0.91
+    assert result["output"]["median_sold_price"] == 70.66
     assert result["output"]["summary"] == "Priced Patagonia hoodie at $78.43 with estimated profit $41.38"
 
 
@@ -108,6 +109,7 @@ def test_pricing_agent_falls_back_for_unknown_item_signals() -> None:
     assert result["output"]["recommended_list_price"] == 32.0
     assert result["output"]["expected_profit"] == 15.68
     assert result["output"]["pricing_confidence"] == 0.82
+    assert result["output"]["median_sold_price"] == 32.0
     assert result["output"]["summary"] == "Priced item at $32.0 with estimated profit $15.68"
 
 
@@ -132,3 +134,4 @@ def test_sell_pipeline_uses_real_pricing_output(client: TestClient) -> None:
     assert pricing["recommended_list_price"] == 78.43
     assert pricing["expected_profit"] == 41.38
     assert pricing["pricing_confidence"] == 0.91
+    assert pricing["median_sold_price"] == 70.66

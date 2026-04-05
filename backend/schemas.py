@@ -147,6 +147,9 @@ class VisionAnalysisOutput(AgentOutputBase):
     category: str
     condition: str
     confidence: float = Field(ge=0.0, le=1.0, description="Model certainty; <0.70 triggers sell pause for user correction.")
+    model: str | None = None
+    clean_photo_url: str | None = None
+    search_query: str | None = None
 
 
 class EbaySoldCompsOutput(AgentOutputBase):
@@ -178,6 +181,7 @@ class PricingOutput(AgentOutputBase):
     recommended_list_price: float
     expected_profit: float
     pricing_confidence: float
+    median_sold_price: float | None = None
     trend: TrendData | None = None
     velocity: VelocityData | None = None
 
