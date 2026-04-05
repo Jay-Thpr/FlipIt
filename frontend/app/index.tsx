@@ -16,6 +16,7 @@ import AddNewCard from '../components/AddNewCard';
 import Logo from '../components/Logo';
 import PnLChart, { PnLDataPoint } from '../components/PnLChart';
 
+
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = Math.round(SCREEN_WIDTH * 0.58);
 

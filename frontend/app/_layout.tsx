@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Stack, router, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import * as Linking from 'expo-linking';
 import '../global.css';
 import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
@@ -73,8 +73,10 @@ function RootNavigator() {
     );
   }
 
+  const inAuthGroup = segments[0] === 'auth';
+
   return (
-    <>
+    <View style={layoutStyles.root}>
       <StatusBar style={colors.statusBarStyle} />
       <Stack
         screenOptions={{
@@ -96,7 +98,22 @@ function RootNavigator() {
         <Stack.Screen name="trades" options={{ headerShown: false }} />
         <Stack.Screen name="trade/[id]" options={{ headerShown: false }} />
       </Stack>
-      {session && <MasterAgentFAB />}
-    </>
+      {!loading && !inAuthGroup && session && (
+        <View style={layoutStyles.fabLayer} pointerEvents="box-none">
+          <MasterAgentFAB />
+        </View>
+      )}
+    </View>
   );
 }
+
+const layoutStyles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
+  fabLayer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 9999,
+    elevation: 9999,
+  },
+});

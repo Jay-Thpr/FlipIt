@@ -1,71 +1,63 @@
-import { useState, useEffect } from 'react';
-import { Pressable, Image, StyleSheet, Linking } from 'react-native';
+import { TouchableOpacity, Image, View, StyleSheet, Linking } from 'react-native';
 
+const FALLBACK_AGENT_ADDRESS = 'agent1q_placeholder'; // TODO: replace with real agent address
 const BACKEND_URL = 'http://localhost:8000'; // TODO: replace with real backend URL
 
 export default function MasterAgentFAB() {
-  const [agentAddress, setAgentAddress] = useState<string | null>(null);
-
-  useEffect(() => {
+  const handlePress = () => {
     fetch(`${BACKEND_URL}/config`)
       .then((res) => res.json())
       .then((data) => {
-        if (data.resale_copilot_agent_address) {
-          setAgentAddress(data.resale_copilot_agent_address);
-        }
+        const address = data.resale_copilot_agent_address || FALLBACK_AGENT_ADDRESS;
+        Linking.openURL(`https://asi1.ai/chat?agent=${address}`);
       })
       .catch(() => {
-        // Backend unavailable — hide button
+        Linking.openURL(`https://asi1.ai/chat?agent=${FALLBACK_AGENT_ADDRESS}`);
       });
-  }, []);
-
-  if (!agentAddress) return null;
-
-  const handlePress = () => {
-    Linking.openURL(`https://asi1.ai/chat?agent=${agentAddress}`);
   };
 
   return (
-    <Pressable
+    <TouchableOpacity
+      style={styles.fab}
+      activeOpacity={0.8}
       onPress={handlePress}
       accessibilityLabel="Chat with AI agent on ASI:One"
-      accessibilityRole="button"
-      style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}
     >
+      <View style={styles.whiteLayer} />
       <Image
         source={require('../assets/asi-one-logo-modified.png')}
         style={styles.icon}
         resizeMode="contain"
       />
-    </Pressable>
+    </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
   fab: {
     position: 'absolute',
-    bottom: 24,
-    right: 16,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#7C3AED',
+    bottom: 36,
+    right: 20,
+    width: 84,
+    height: 84,
+    borderRadius: 42,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 6,
+    elevation: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    zIndex: 999,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
   },
-  fabPressed: {
-    opacity: 0.8,
-    transform: [{ scale: 0.95 }],
+  whiteLayer: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 42,
+    overflow: 'hidden',
   },
   icon: {
-    width: 30,
-    height: 30,
-    tintColor: '#FFFFFF',
+    width: 72,
+    height: 72,
   },
 });
