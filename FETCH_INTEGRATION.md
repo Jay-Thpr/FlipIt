@@ -160,6 +160,12 @@ source .venv-fetch/bin/activate
 pip install -r requirements.txt
 ```
 
+Mailbox is now the default Fetch mode. If you explicitly want the older local-endpoint inspector mode, set:
+
+```bash
+export FETCH_USE_LOCAL_ENDPOINT=true
+```
+
 ## How Fetch And Browser Use Work Together
 
 They serve different roles.

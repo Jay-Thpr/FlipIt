@@ -41,6 +41,13 @@ def _extract_text(msg: Any) -> str:
     return " ".join(parts).strip()
 
 
+def _env_flag(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def build_fetch_agent(agent_slug: str) -> Any:
     try:
         spec = FETCH_AGENT_SPECS[agent_slug]
@@ -64,14 +71,17 @@ def build_fetch_agent(agent_slug: str) -> Any:
             f"Missing {spec.seed_env_var}. Set it in your environment before starting {spec.name}."
         )
 
-    agent = Agent(
-        name=spec.name,
-        seed=seed,
-        port=spec.port,
-        endpoint=[f"http://127.0.0.1:{spec.port}/submit"],
-        mailbox=True,
-        publish_agent_details=True,
-    )
+    agent_kwargs: dict[str, Any] = {
+        "name": spec.name,
+        "seed": seed,
+        "port": spec.port,
+        "mailbox": True,
+        "publish_agent_details": True,
+    }
+    if _env_flag("FETCH_USE_LOCAL_ENDPOINT", default=False):
+        agent_kwargs["endpoint"] = [f"http://127.0.0.1:{spec.port}/submit"]
+
+    agent = Agent(**agent_kwargs)
     protocol = Protocol(spec=chat_protocol_spec)
 
     @protocol.on_message(ChatMessage)
