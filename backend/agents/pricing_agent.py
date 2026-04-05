@@ -33,21 +33,38 @@ class PricingAgent(BaseAgent):
         brand = vision_analysis["brand"]
         detected_item = vision_analysis["detected_item"]
         sample_size = sold_comps["sample_size"]
+        low_sold_price = sold_comps["low_sold_price"]
+        high_sold_price = sold_comps["high_sold_price"]
 
         condition_multiplier = self.CONDITION_LISTING_MULTIPLIERS.get(condition, 1.0)
-        recommended_list_price = round(median_sold_price * condition_multiplier, 2)
+        recommended_list_price = self.compute_recommended_list_price(
+            median_sold_price=median_sold_price,
+            low_sold_price=low_sold_price,
+            high_sold_price=high_sold_price,
+            condition_multiplier=condition_multiplier,
+            sample_size=sample_size,
+        )
 
         sourcing_cost = max(6.0, round(median_sold_price * 0.38, 2))
         marketplace_fees = round(recommended_list_price * 0.13, 2)
         expected_profit = round(recommended_list_price - sourcing_cost - marketplace_fees, 2)
 
+        spread_ratio = self.compute_spread_ratio(
+            median_sold_price=median_sold_price,
+            low_sold_price=low_sold_price,
+            high_sold_price=high_sold_price,
+        )
         base_confidence = 0.58
         sample_bonus = min(sample_size, 16) * 0.015
         known_brand_bonus = 0.08 if brand != "Unknown" else 0.0
         known_item_bonus = 0.05 if detected_item != "item" else 0.0
         strong_condition_bonus = 0.04 if condition in {"new", "excellent", "great"} else 0.0
+        spread_penalty = min(0.03, spread_ratio * 0.008)
         pricing_confidence = round(
-            min(0.96, base_confidence + sample_bonus + known_brand_bonus + known_item_bonus + strong_condition_bonus),
+            min(
+                0.96,
+                base_confidence + sample_bonus + known_brand_bonus + known_item_bonus + strong_condition_bonus - spread_penalty,
+            ),
             2,
         )
 
@@ -69,6 +86,28 @@ class PricingAgent(BaseAgent):
             "trend": trend,
             "velocity": velocity,
         }
+
+    @staticmethod
+    def compute_recommended_list_price(
+        *,
+        median_sold_price: float,
+        low_sold_price: float,
+        high_sold_price: float,
+        condition_multiplier: float,
+        sample_size: int,
+    ) -> float:
+        baseline = median_sold_price * condition_multiplier
+        comp_floor = max(low_sold_price * 1.04, median_sold_price * 0.9)
+        comp_ceiling = high_sold_price * 1.02
+        clamped_price = min(max(baseline, comp_floor), comp_ceiling)
+        if sample_size < 6:
+            clamped_price = (clamped_price * 0.6) + (median_sold_price * 0.4)
+        return round(clamped_price, 2)
+
+    @staticmethod
+    def compute_spread_ratio(*, median_sold_price: float, low_sold_price: float, high_sold_price: float) -> float:
+        anchor = max(median_sold_price, 1.0)
+        return max(0.0, (high_sold_price - low_sold_price) / anchor)
 
     @staticmethod
     def _synthesize_comps(sold_comps: dict) -> list[dict]:

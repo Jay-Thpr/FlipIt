@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from backend.agents.base import BaseAgent, build_agent_app
 from backend.agents.browser_use_events import emit_browser_use_event
@@ -36,6 +37,7 @@ class NegotiationAgent(BaseAgent):
         ranking_output = previous_outputs["ranking"]
         top_choice = ranking_output.get("top_choice")
         median_price = float(ranking_output["median_price"])
+        budget = request.input["original_input"].get("budget")
         search_outputs = previous_outputs
 
         if not top_choice or int(ranking_output.get("candidate_count", 0)) == 0:
@@ -82,8 +84,13 @@ class NegotiationAgent(BaseAgent):
                 break
 
         offers = []
-        for listing in prioritized_candidates:
-            prepared_offer = self.build_prepared_offer(listing=listing, median_price=median_price)
+        for index, listing in enumerate(prioritized_candidates):
+            prepared_offer = self.build_prepared_offer(
+                listing=listing,
+                median_price=median_price,
+                budget=budget,
+                is_top_choice=index == 0,
+            )
             await emit_browser_use_event(
                 session_id=request.session_id,
                 pipeline=request.pipeline,
@@ -156,11 +163,27 @@ class NegotiationAgent(BaseAgent):
             "browser_use": self.build_runtime_metadata(offers),
         }
 
-    def build_prepared_offer(self, *, listing: dict[str, object], median_price: float) -> dict[str, object]:
+    def build_prepared_offer(
+        self,
+        *,
+        listing: dict[str, object],
+        median_price: float,
+        budget: Any,
+        is_top_choice: bool,
+    ) -> dict[str, object]:
         platform = str(listing["platform"])
-        target_price = round(
-            max(median_price, float(listing["price"]) * self.PLATFORM_DISCOUNTS.get(platform, 0.92)),
-            2,
+        asking_price = round(float(listing["price"]), 2)
+        target_price = self.compute_target_price(
+            platform=platform,
+            asking_price=asking_price,
+            median_price=median_price,
+            budget=budget,
+        )
+        message = self.build_offer_message(
+            listing=listing,
+            asking_price=asking_price,
+            target_price=target_price,
+            is_top_choice=is_top_choice,
         )
         return {
             "platform": platform,
@@ -168,10 +191,7 @@ class NegotiationAgent(BaseAgent):
             "listing_url": listing["url"],
             "listing_title": listing["title"],
             "target_price": target_price,
-            "message": (
-                f"Hi! I love this listing. Would you consider ${target_price} "
-                f"for {listing['title']}? I can pay right away."
-            ),
+            "message": message,
             "status": "prepared",
             "failure_reason": None,
             "conversation_url": None,
@@ -180,6 +200,54 @@ class NegotiationAgent(BaseAgent):
             "attempt_source": "prepared",
             "failure_category": None,
         }
+
+    def compute_target_price(
+        self,
+        *,
+        platform: str,
+        asking_price: float,
+        median_price: float,
+        budget: Any,
+    ) -> float:
+        discount_anchor = asking_price * self.PLATFORM_DISCOUNTS.get(platform, 0.92)
+        market_anchor = max(discount_anchor, median_price * 0.97)
+        if isinstance(budget, int | float):
+            market_anchor = min(market_anchor, float(budget))
+        return round(max(8.0, min(asking_price, market_anchor)), 2)
+
+    def build_offer_message(
+        self,
+        *,
+        listing: dict[str, object],
+        asking_price: float,
+        target_price: float,
+        is_top_choice: bool,
+    ) -> str:
+        title = str(listing["title"])
+        condition = str(listing.get("condition") or "good")
+        seller_score = int(listing.get("seller_score", 0))
+
+        if target_price >= asking_price:
+            if is_top_choice and seller_score >= 300:
+                return (
+                    f"Hi! I'm interested in your {title}. It looks like a strong buy, and your seller history gives me "
+                    f"confidence. I'm ready to purchase at your asking price of ${asking_price} if it's still available."
+                )
+            return (
+                f"Hi! I'm interested in your {title}. It looks well priced for the market in {condition} condition, "
+                f"so I'm ready to buy at your asking price of ${asking_price} if it's still available."
+            )
+
+        if seller_score >= 300:
+            return (
+                f"Hi! I'm interested in your {title}. With its {condition} condition and your strong seller history, "
+                f"would you consider ${target_price}? I can pay right away."
+            )
+
+        return (
+            f"Hi! I'm interested in your {title}. Based on similar sold listings in {condition} condition, "
+            f"would you consider ${target_price}? I can pay right away."
+        )
 
     async def try_send_offer(self, prepared_offer: dict[str, object]) -> dict[str, object]:
         platform = str(prepared_offer["platform"])

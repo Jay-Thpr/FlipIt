@@ -5,6 +5,7 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 
+from backend.agents.pricing_agent import agent as pricing_agent_instance
 from backend.agents.pricing_agent import app as pricing_app
 
 
@@ -111,6 +112,18 @@ def test_pricing_agent_falls_back_for_unknown_item_signals() -> None:
     assert result["output"]["pricing_confidence"] == 0.82
     assert result["output"]["median_sold_price"] == 32.0
     assert result["output"]["summary"] == "Priced item at $32.0 with estimated profit $15.68"
+
+
+def test_pricing_agent_clamps_small_sample_prices_toward_market_median() -> None:
+    recommended_price = pricing_agent_instance.compute_recommended_list_price(
+        median_sold_price=60.0,
+        low_sold_price=35.0,
+        high_sold_price=110.0,
+        condition_multiplier=1.18,
+        sample_size=4,
+    )
+
+    assert recommended_price == 66.48
 
 
 def test_sell_pipeline_uses_real_pricing_output(client: TestClient) -> None:

@@ -5,6 +5,7 @@ import time
 from typing import Any
 
 import pytest
+import backend.agents.negotiation_agent as negotiation_module
 from fastapi.testclient import TestClient
 
 from backend import main, orchestrator
@@ -174,7 +175,8 @@ def test_sell_pipeline_generates_real_listing_outputs(client: TestClient) -> Non
     assert "Recent eBay sold range: $55.11-$86.21 across 11 comps." in depop_listing["description"]
 
 
-def test_buy_pipeline_emits_expected_event_order_and_result(client: TestClient) -> None:
+def test_buy_pipeline_emits_expected_event_order_and_result(monkeypatch, client: TestClient) -> None:
+    monkeypatch.setattr(negotiation_module.Path, "exists", lambda self: False)
     session_id, events, result = start_and_collect_events(
         client,
         "/buy/start",
@@ -238,7 +240,7 @@ def test_buy_pipeline_emits_expected_event_order_and_result(client: TestClient) 
     NegotiationOutput.model_validate(result["result"]["outputs"]["negotiation"])
     assert result["result"]["outputs"]["ranking"]["top_choice"]["reason"]
     assert result["result"]["outputs"]["ranking"]["top_choice"]["platform"] == "ebay"
-    assert result["result"]["outputs"]["negotiation"]["offers"][0]["target_price"] == 45.35
+    assert result["result"]["outputs"]["negotiation"]["offers"][0]["target_price"] == 42.53
 
 
 def test_internal_event_requires_valid_token(client: TestClient) -> None:

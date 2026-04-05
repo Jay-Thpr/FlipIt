@@ -6,6 +6,7 @@ from typing import Any
 import backend.agents.negotiation_agent as negotiation_module
 from fastapi.testclient import TestClient
 
+from backend.agents.negotiation_agent import agent as negotiation_agent_instance
 from backend.agents.negotiation_agent import app as negotiation_app
 from backend.agents.ranking_agent import app as ranking_app
 
@@ -167,7 +168,8 @@ def test_ranking_agent_selects_best_budget_and_condition_match() -> None:
     }
 
 
-def test_negotiation_agent_generates_messages_for_top_candidates() -> None:
+def test_negotiation_agent_generates_messages_for_top_candidates(monkeypatch) -> None:
+    monkeypatch.setattr(negotiation_module.Path, "exists", lambda self: False)
     previous_outputs = build_buy_previous_outputs()
     previous_outputs["ranking"] = {
         "agent": "ranking_agent",
@@ -225,8 +227,8 @@ def test_negotiation_agent_generates_messages_for_top_candidates() -> None:
             "seller": "ebay_seller_1",
             "listing_url": "https://ebay.example/nike-tee-1",
             "listing_title": "Nike tee size M #1 on eBay",
-            "target_price": 45.35,
-            "message": "Hi! I love this listing. Would you consider $45.35 for Nike tee size M #1 on eBay? I can pay right away.",
+            "target_price": 42.53,
+            "message": "Hi! I'm interested in your Nike tee size M #1 on eBay. It looks like a strong buy, and your seller history gives me confidence. I'm ready to purchase at your asking price of $42.53 if it's still available.",
             "status": "prepared",
             "failure_reason": None,
             "conversation_url": None,
@@ -240,8 +242,8 @@ def test_negotiation_agent_generates_messages_for_top_candidates() -> None:
             "seller": "offerup_local_1",
             "listing_url": "https://offerup.example/nike-tee-1",
             "listing_title": "Nike tee size M #1 on Offerup",
-            "target_price": 45.35,
-            "message": "Hi! I love this listing. Would you consider $45.35 for Nike tee size M #1 on Offerup? I can pay right away.",
+            "target_price": 39.82,
+            "message": "Hi! I'm interested in your Nike tee size M #1 on Offerup. It looks well priced for the market in good condition, so I'm ready to buy at your asking price of $39.82 if it's still available.",
             "status": "prepared",
             "failure_reason": None,
             "conversation_url": None,
@@ -255,8 +257,8 @@ def test_negotiation_agent_generates_messages_for_top_candidates() -> None:
             "seller": "mercari_shop_1",
             "listing_url": "https://mercari.example/nike-tee-1",
             "listing_title": "Nike tee size M #1 on Mercari",
-            "target_price": 45.35,
-            "message": "Hi! I love this listing. Would you consider $45.35 for Nike tee size M #1 on Mercari? I can pay right away.",
+            "target_price": 43.89,
+            "message": "Hi! I'm interested in your Nike tee size M #1 on Mercari. It looks well priced for the market in excellent condition, so I'm ready to buy at your asking price of $43.89 if it's still available.",
             "status": "prepared",
             "failure_reason": None,
             "conversation_url": None,
@@ -267,6 +269,30 @@ def test_negotiation_agent_generates_messages_for_top_candidates() -> None:
         },
     ]
     assert result["output"]["browser_use"]["mode"] == "skipped"
+
+
+def test_negotiation_agent_builds_below_ask_offer_for_overpriced_listing() -> None:
+    offer = negotiation_agent_instance.build_prepared_offer(
+        listing={
+            "platform": "depop",
+            "title": "Patagonia fleece on Depop",
+            "price": 68.0,
+            "condition": "great",
+            "seller": "depop_closet_9",
+            "url": "https://depop.example/patagonia-fleece",
+            "seller_score": 41,
+            "posted_at": "2026-04-02",
+        },
+        median_price=54.0,
+        budget=56.0,
+        is_top_choice=False,
+    )
+
+    assert offer["target_price"] == 56.0
+    assert offer["message"] == (
+        "Hi! I'm interested in your Patagonia fleece on Depop. Based on similar sold listings in great condition, "
+        "would you consider $56.0? I can pay right away."
+    )
 
 
 def test_negotiation_agent_sends_offers_with_browser_use_when_profiles_exist(monkeypatch) -> None:
@@ -402,7 +428,8 @@ def test_negotiation_agent_records_failed_live_send_without_breaking_batch(monke
     assert result["output"]["browser_use"]["mode"] == "browser_use"
 
 
-def test_buy_pipeline_uses_real_ranking_and_negotiation_outputs(client: TestClient) -> None:
+def test_buy_pipeline_uses_real_ranking_and_negotiation_outputs(monkeypatch, client: TestClient) -> None:
+    monkeypatch.setattr(negotiation_module.Path, "exists", lambda self: False)
     response = client.post(
         "/buy/start",
         json={
@@ -420,7 +447,7 @@ def test_buy_pipeline_uses_real_ranking_and_negotiation_outputs(client: TestClie
 
     assert ranking["top_choice"]["platform"] == "ebay"
     assert ranking["top_choice"]["score"] >= 0.90
-    assert negotiation["offers"][0]["target_price"] == 45.35
+    assert negotiation["offers"][0]["target_price"] == 42.53
     assert negotiation["offers"][0]["execution_mode"] == "deterministic"
     assert negotiation["offers"][0]["browser_use_error"] == "profile_missing"
     assert negotiation["browser_use"]["mode"] == "skipped"

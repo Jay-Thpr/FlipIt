@@ -27,6 +27,18 @@ KNOWN_ITEMS = {
     "sneakers": "sneakers",
 }
 
+STYLE_TERMS = {
+    "vintage": "vintage",
+    "graphic": "graphic",
+    "single": "single stitch",
+    "stitch": "single stitch",
+    "y2k": "Y2K",
+    "distressed": "distressed",
+    "workwear": "workwear",
+    "cargo": "cargo",
+    "fleece": "fleece",
+}
+
 CONDITION_BY_PLATFORM = {
     "depop": "great",
     "ebay": "good",
@@ -53,6 +65,13 @@ POSTED_DAYS_AGO = {
     "ebay": (1, 4),
     "mercari": (1, 3),
     "offerup": (4, 9),
+}
+
+SECOND_RESULT_PRICE_GAP = {
+    "depop": 5.25,
+    "ebay": 4.5,
+    "mercari": 4.95,
+    "offerup": 3.75,
 }
 
 
@@ -86,11 +105,34 @@ def detect_size(query: str | None) -> str | None:
     return None
 
 
-def build_listing_title(*, brand: str, item: str, size: str | None, platform_label: str, ordinal: int) -> str:
+def detect_style_descriptors(query: str | None) -> list[str]:
+    descriptors: list[str] = []
+    seen: set[str] = set()
+    for token in tokenize_query(query):
+        descriptor = STYLE_TERMS.get(token)
+        if descriptor is None or descriptor in seen:
+            continue
+        descriptors.append(descriptor)
+        seen.add(descriptor)
+        if len(descriptors) == 2:
+            break
+    return descriptors
+
+
+def build_listing_title(
+    *,
+    brand: str,
+    item: str,
+    size: str | None,
+    platform_label: str,
+    ordinal: int,
+    descriptors: list[str],
+) -> str:
     size_fragment = f" size {size}" if size else ""
+    descriptor_fragment = f" {' '.join(descriptors)}" if descriptors else ""
     if item == "item":
-        return f"{brand} resale find{size_fragment} #{ordinal} on {platform_label}"
-    return f"{brand} {item}{size_fragment} #{ordinal} on {platform_label}"
+        return f"{brand}{descriptor_fragment} resale find{size_fragment} #{ordinal} on {platform_label}"
+    return f"{brand}{descriptor_fragment} {item}{size_fragment} #{ordinal} on {platform_label}"
 
 
 def build_listing_url(platform: str, brand: str, item: str, ordinal: int) -> str:
@@ -141,17 +183,25 @@ def build_platform_results(
     brand = detect_brand(query)
     item = detect_item(query)
     size = detect_size(query)
+    descriptors = detect_style_descriptors(query)
     platform_label = platform.title() if platform != "ebay" else "eBay"
 
     base_price = derive_base_price(query, budget, previous_prices)
     platform_price = round(base_price * PLATFORM_PRICE_OFFSETS[platform], 2)
-    second_price = round(platform_price + 4.5, 2)
+    second_price = round(platform_price + SECOND_RESULT_PRICE_GAP[platform], 2)
     condition = CONDITION_BY_PLATFORM[platform]
 
     return [
         {
             "platform": platform,
-            "title": build_listing_title(brand=brand, item=item, size=size, platform_label=platform_label, ordinal=1),
+            "title": build_listing_title(
+                brand=brand,
+                item=item,
+                size=size,
+                platform_label=platform_label,
+                ordinal=1,
+                descriptors=descriptors,
+            ),
             "price": platform_price,
             "url": build_listing_url(platform, brand, item, 1),
             "condition": condition,
@@ -161,7 +211,14 @@ def build_platform_results(
         },
         {
             "platform": platform,
-            "title": build_listing_title(brand=brand, item=item, size=size, platform_label=platform_label, ordinal=2),
+            "title": build_listing_title(
+                brand=brand,
+                item=item,
+                size=size,
+                platform_label=platform_label,
+                ordinal=2,
+                descriptors=descriptors,
+            ),
             "price": second_price,
             "url": build_listing_url(platform, brand, item, 2),
             "condition": "good" if condition == "excellent" else condition,

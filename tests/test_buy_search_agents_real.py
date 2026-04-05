@@ -7,7 +7,7 @@ import backend.agents.depop_search_agent as depop_search_module
 import backend.agents.ebay_search_agent as ebay_search_module
 import backend.agents.mercari_search_agent as mercari_search_module
 import backend.agents.offerup_search_agent as offerup_search_module
-from backend.agents.search_support import build_posted_at
+from backend.agents.search_support import build_platform_results, build_posted_at
 from backend.agents.browser_use_marketplaces import build_marketplace_search_url
 from backend.agents.browser_use_support import BrowserUseRuntimeUnavailable
 from fastapi.testclient import TestClient
@@ -146,6 +146,16 @@ def test_marketplace_search_urls_use_direct_platform_filters() -> None:
     assert build_marketplace_search_url("ebay", "Nike vintage tee size M") == "https://www.ebay.com/sch/i.html?_nkw=Nike+vintage+tee+size+M&LH_BIN=1&_ipg=24"
     assert build_marketplace_search_url("mercari", "Nike vintage tee size M") == "https://www.mercari.com/search/?keyword=Nike+vintage+tee+size+M"
     assert build_marketplace_search_url("offerup", "Nike vintage tee size M") == "https://offerup.com/search?q=Nike+vintage+tee+size+M"
+
+
+def test_fallback_search_results_include_query_descriptors() -> None:
+    results = build_platform_results(platform="depop", query="Nike vintage graphic tee size M", budget=45)
+
+    assert len(results) == 2
+    assert results[0]["title"] == "Nike vintage graphic tee size M #1 on Depop"
+    assert results[1]["title"] == "Nike vintage graphic tee size M #2 on Depop"
+    assert results[0]["price"] < results[1]["price"]
+    assert results[0]["seller"] == "nike_closet_1"
 
 
 def test_depop_search_agent_uses_browser_use_results_when_available(monkeypatch) -> None:
