@@ -7,9 +7,11 @@ Covers:
 - Item-scoped endpoints require auth (401 with no token)
 - Run-scoped endpoints require auth (401 with no token)
 - Legacy /sell/start and /buy/start remain unauthenticated
+- Authenticated user_id propagation into session.request.user_id
 """
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -248,3 +250,57 @@ class TestLegacyEndpointsUnaffected:
         with patch("backend.orchestrator.run_pipeline", new=AsyncMock()):
             resp = client.post("/buy/start", json=BUY_PAYLOAD)
         assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Class 7: TestItemRunUserPropagation
+# ---------------------------------------------------------------------------
+
+
+class TestItemRunUserPropagation:
+    """Authenticated user_id must be written into session.request.user_id."""
+
+    from backend.main import _require_item_ownership as _ownership_dep
+
+    @pytest.fixture(autouse=True)
+    def _bypass_ownership(self):
+        """Override ownership dep so tests don't need a real Supabase."""
+        from backend.main import _require_item_ownership
+
+        app.dependency_overrides[_require_item_ownership] = lambda item_id: item_id
+        yield
+        app.dependency_overrides.pop(_require_item_ownership, None)
+
+    def _get_run_id(self, data: dict) -> str:
+        return data.get("run_id") or data.get("session_id")
+
+    def _get_session(self, run_id: str):
+        return asyncio.run(session_manager.get_session(run_id))
+
+    def test_sell_run_sets_request_user_id(self, authed_client: TestClient):
+        with patch("backend.orchestrator.run_pipeline", new=AsyncMock()):
+            resp = authed_client.post("/items/item-1/sell/run", json=SELL_PAYLOAD)
+        assert resp.status_code == 200
+        session = self._get_session(self._get_run_id(resp.json()))
+        assert session is not None
+        assert session.request.user_id == "user-1"
+        assert session.request.metadata["user_id"] == "user-1"
+
+    def test_buy_run_sets_request_user_id(self, authed_client: TestClient):
+        with patch("backend.orchestrator.run_pipeline", new=AsyncMock()):
+            resp = authed_client.post("/items/item-1/buy/run", json=BUY_PAYLOAD)
+        assert resp.status_code == 200
+        session = self._get_session(self._get_run_id(resp.json()))
+        assert session is not None
+        assert session.request.user_id == "user-1"
+        assert session.request.metadata["user_id"] == "user-1"
+
+    def test_sell_run_overwrites_body_user_id(self, authed_client: TestClient):
+        payload_with_different_user = {**SELL_PAYLOAD, "user_id": "attacker-id"}
+        with patch("backend.orchestrator.run_pipeline", new=AsyncMock()):
+            resp = authed_client.post("/items/item-1/sell/run", json=payload_with_different_user)
+        assert resp.status_code == 200
+        session = self._get_session(self._get_run_id(resp.json()))
+        assert session is not None
+        assert session.request.user_id == "user-1"
+        assert session.request.user_id != "attacker-id"

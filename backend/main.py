@@ -16,6 +16,7 @@ from fastapi.responses import StreamingResponse
 
 from backend.config import (
     AGENTS,
+    ALLOWED_ORIGINS,
     APP_BASE_URL,
     INTERNAL_API_TOKEN,
     assert_fetch_agent_ports_do_not_overlap,
@@ -168,8 +169,8 @@ async def _app_lifespan(_app: FastAPI):
 app = FastAPI(title="DiamondHacks Backend", version="0.1.0", lifespan=_app_lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=ALLOWED_ORIGINS != ["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -270,7 +271,10 @@ async def item_sell_run(
     user: AuthenticatedUser = Depends(get_current_user),
     _owned: str = Depends(_require_item_ownership),
 ) -> dict:
-    request = request.model_copy(update={"metadata": {**request.metadata, "user_id": user.user_id}})
+    request = request.model_copy(update={
+        "user_id": user.user_id,
+        "metadata": {**request.metadata, "user_id": user.user_id},
+    })
     return await start_session("sell", request, item_id=item_id)
 
 
@@ -281,7 +285,10 @@ async def item_buy_run(
     user: AuthenticatedUser = Depends(get_current_user),
     _owned: str = Depends(_require_item_ownership),
 ) -> dict:
-    request = request.model_copy(update={"metadata": {**request.metadata, "user_id": user.user_id}})
+    request = request.model_copy(update={
+        "user_id": user.user_id,
+        "metadata": {**request.metadata, "user_id": user.user_id},
+    })
     return await start_session("buy", request, item_id=item_id)
 
 

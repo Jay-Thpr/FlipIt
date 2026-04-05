@@ -85,6 +85,14 @@ def assert_fetch_agent_ports_do_not_overlap(fetch_ports: Iterable[int] | None = 
         raise RuntimeError(f"Fetch agent ports overlap with FastAPI agent ports: {overlap_list}")
 
 
+_ALLOWED_ORIGINS_RAW = os.getenv("ALLOWED_ORIGINS", "")
+ALLOWED_ORIGINS: list[str] = (
+    [o.strip() for o in _ALLOWED_ORIGINS_RAW.split(",") if o.strip()]
+    if _ALLOWED_ORIGINS_RAW.strip()
+    else ["*"]
+)
+
+
 def is_supabase_configured() -> bool:
     """True when both SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are set."""
     return bool(
