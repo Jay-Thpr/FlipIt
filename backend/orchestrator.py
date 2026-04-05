@@ -144,8 +144,10 @@ async def execute_step(
 
         try:
             if is_fetch_enabled():
-                user_text = _build_fetch_user_text(task_request)
-                fetch_result = await asyncio.wait_for(run_fetch_query(agent_slug, user_text), timeout=timeout_seconds)
+                fetch_result = await asyncio.wait_for(
+                    run_fetch_query(agent_slug, task_request=task_request),
+                    timeout=timeout_seconds,
+                )
                 return validate_agent_output(agent_slug, fetch_result)
 
             response = await asyncio.wait_for(run_agent_task(agent_slug, task_request), timeout=timeout_seconds)
@@ -171,26 +173,6 @@ async def execute_step(
                 raise
 
     raise RuntimeError(f"Unreachable retry state for {agent_slug}")
-
-
-def _build_fetch_user_text(task_request: AgentTaskRequest) -> str:
-    original_input = task_request.input.get("original_input", {})
-    if not isinstance(original_input, dict):
-        return ""
-
-    if task_request.pipeline == "buy":
-        parts = [str(original_input.get("query", "")).strip()]
-        budget = original_input.get("budget")
-        if budget not in (None, ""):
-            parts.append(f"budget ${budget}")
-        return " ".join(part for part in parts if part)
-
-    notes = str(original_input.get("notes", "")).strip()
-    image_urls = original_input.get("image_urls")
-    if isinstance(image_urls, list):
-        urls = " ".join(str(url).strip() for url in image_urls if str(url).strip())
-        return " ".join(part for part in (notes, urls) if part)
-    return notes
 
 
 async def pause_sell_listing_for_review(session_id: str, listing_output: dict[str, Any]) -> None:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from dataclasses import dataclass
@@ -93,6 +94,13 @@ FETCH_AGENT_SPECS: dict[str, FetchAgentSpec] = {
 
 URL_PATTERN = re.compile(r"https?://\S+")
 BUDGET_PATTERN = re.compile(r"(?:\$|budget\s+)(\d+(?:\.\d{1,2})?)", re.IGNORECASE)
+BUY_SEARCH_AGENT_CHAIN = (
+    ("depop_search_agent", "depop_search"),
+    ("ebay_search_agent", "ebay_search"),
+    ("mercari_search_agent", "mercari_search"),
+    ("offerup_search_agent", "offerup_search"),
+)
+BUY_SEARCH_STEPS_BY_AGENT = {agent_slug: step_name for agent_slug, step_name in BUY_SEARCH_AGENT_CHAIN}
 
 
 def list_fetch_agent_slugs() -> list[str]:
@@ -160,7 +168,38 @@ async def execute_agent(
     return validate_agent_output(agent_slug, response.output)
 
 
-async def run_fetch_query(agent_slug: str, user_text: str) -> dict[str, object]:
+async def _run_fetch_search_agents(buy_input: dict[str, object]) -> dict[str, dict[str, object]]:
+    async def run_one(agent_slug: str, step_name: str) -> tuple[str, dict[str, object]]:
+        return (
+            step_name,
+            await execute_agent(
+                agent_slug=agent_slug,
+                pipeline="buy",
+                step=step_name,
+                original_input=buy_input,
+                previous_outputs={},
+            ),
+        )
+
+    results = await asyncio.gather(*(run_one(agent_slug, step_name) for agent_slug, step_name in BUY_SEARCH_AGENT_CHAIN))
+    return {step_name: output for step_name, output in results}
+
+
+async def run_fetch_query(
+    agent_slug: str,
+    user_text: str = "",
+    *,
+    task_request: AgentTaskRequest | None = None,
+) -> dict[str, object]:
+    if task_request is not None:
+        return await execute_agent(
+            agent_slug=agent_slug,
+            pipeline=task_request.pipeline,
+            step=task_request.step,
+            original_input=task_request.input["original_input"],
+            previous_outputs=task_request.input["previous_outputs"],
+        )
+
     text = normalize_text(user_text)
     if not text:
         spec = FETCH_AGENT_SPECS[agent_slug]
@@ -218,64 +257,23 @@ async def run_fetch_query(agent_slug: str, user_text: str) -> dict[str, object]:
         )
 
     buy_input = build_buy_input(text)
-    depop = await execute_agent(
-        agent_slug="depop_search_agent",
-        pipeline="buy",
-        step="depop_search",
-        original_input=buy_input,
-        previous_outputs={},
-    )
-    if agent_slug == "depop_search_agent":
-        return depop
+    if agent_slug in BUY_SEARCH_STEPS_BY_AGENT:
+        return await execute_agent(
+            agent_slug=agent_slug,
+            pipeline="buy",
+            step=BUY_SEARCH_STEPS_BY_AGENT[agent_slug],
+            original_input=buy_input,
+            previous_outputs={},
+        )
 
-    ebay = await execute_agent(
-        agent_slug="ebay_search_agent",
-        pipeline="buy",
-        step="ebay_search",
-        original_input=buy_input,
-        previous_outputs={"depop_search": depop},
-    )
-    if agent_slug == "ebay_search_agent":
-        return ebay
-
-    mercari = await execute_agent(
-        agent_slug="mercari_search_agent",
-        pipeline="buy",
-        step="mercari_search",
-        original_input=buy_input,
-        previous_outputs={
-            "depop_search": depop,
-            "ebay_search": ebay,
-        },
-    )
-    if agent_slug == "mercari_search_agent":
-        return mercari
-
-    offerup = await execute_agent(
-        agent_slug="offerup_search_agent",
-        pipeline="buy",
-        step="offerup_search",
-        original_input=buy_input,
-        previous_outputs={
-            "depop_search": depop,
-            "ebay_search": ebay,
-            "mercari_search": mercari,
-        },
-    )
-    if agent_slug == "offerup_search_agent":
-        return offerup
+    search_outputs = await _run_fetch_search_agents(buy_input)
 
     ranking = await execute_agent(
         agent_slug="ranking_agent",
         pipeline="buy",
         step="ranking",
         original_input=buy_input,
-        previous_outputs={
-            "depop_search": depop,
-            "ebay_search": ebay,
-            "mercari_search": mercari,
-            "offerup_search": offerup,
-        },
+        previous_outputs=search_outputs,
     )
     if agent_slug == "ranking_agent":
         return ranking
@@ -285,13 +283,7 @@ async def run_fetch_query(agent_slug: str, user_text: str) -> dict[str, object]:
         pipeline="buy",
         step="negotiation",
         original_input=buy_input,
-        previous_outputs={
-            "depop_search": depop,
-            "ebay_search": ebay,
-            "mercari_search": mercari,
-            "offerup_search": offerup,
-            "ranking": ranking,
-        },
+        previous_outputs={**search_outputs, "ranking": ranking},
     )
 
 

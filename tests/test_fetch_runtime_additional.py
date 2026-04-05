@@ -134,10 +134,58 @@ async def test_execute_agent_uses_fetch_session_and_context(monkeypatch: pytest.
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    strict=True,
-    reason="Known bug: the Fetch BUY bridge passes non-empty previous_outputs to search agents whose contracts still forbid them.",
-)
-async def test_run_fetch_query_for_ebay_search_agent_advances_buy_chain() -> None:
+async def test_run_fetch_query_for_ebay_search_agent_uses_empty_previous_outputs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[dict[str, Any]] = []
+
+    async def fake_execute_agent(
+        *,
+        agent_slug: str,
+        pipeline: str,
+        step: str,
+        original_input: dict[str, object],
+        previous_outputs: dict[str, dict[str, object]],
+    ) -> dict[str, object]:
+        calls.append(
+            {
+                "agent_slug": agent_slug,
+                "pipeline": pipeline,
+                "step": step,
+                "previous_outputs": previous_outputs,
+            }
+        )
+        return {
+            "agent": agent_slug,
+            "display_name": "eBay Search Agent",
+            "summary": "Found 1 eBay listing",
+            "results": [
+                {
+                    "platform": "ebay",
+                    "title": "Nike tee on eBay",
+                    "price": 42.0,
+                    "url": "https://ebay.example/nike",
+                    "condition": "good",
+                    "seller": "ebay_seller",
+                    "seller_score": 200,
+                    "posted_at": "2026-04-04",
+                }
+            ],
+            "execution_mode": "fallback",
+            "browser_use_error": None,
+            "browser_use": None,
+        }
+
+    monkeypatch.setattr(fetch_runtime, "execute_agent", fake_execute_agent)
+
     result = await fetch_runtime.run_fetch_query("ebay_search_agent", "Find me a vintage Nike tee under $45")
+
     assert result["agent"] == "ebay_search_agent"
+    assert calls == [
+        {
+            "agent_slug": "ebay_search_agent",
+            "pipeline": "buy",
+            "step": "ebay_search",
+            "previous_outputs": {},
+        }
+    ]
