@@ -2,12 +2,17 @@ PYTHON ?= python3
 VENV ?= .venv
 ACTIVATE = . $(VENV)/bin/activate
 
-.PHONY: install test test-verbose compile check run run-agents run-fetch-agents ci verify-browser
+.PHONY: install venv-fetch test test-verbose compile check run run-agents run-fetch-agents ci verify-browser
 
 install:
 	$(PYTHON) -m venv $(VENV)
 	$(ACTIVATE) && python -m pip install --upgrade pip
 	$(ACTIVATE) && python -m pip install -r requirements.txt
+
+venv-fetch:
+	python3.12 -m venv .venv-fetch
+	. .venv-fetch/bin/activate && python -m pip install --upgrade pip
+	. .venv-fetch/bin/activate && python -m pip install uagents uagents-core
 
 test:
 	$(ACTIVATE) && python -m pytest -q

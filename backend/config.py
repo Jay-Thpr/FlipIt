@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from typing import Iterable
 
 
 @dataclass(frozen=True)
@@ -54,9 +55,36 @@ def get_buy_agent_max_retries() -> int:
     return int(os.getenv("BUY_AGENT_MAX_RETRIES", str(BUY_AGENT_MAX_RETRIES)))
 
 
+def is_fetch_enabled() -> bool:
+    return os.getenv("FETCH_ENABLED", "true" if FETCH_ENABLED else "false").lower() in ("1", "true", "yes")
+
+
+def get_agentverse_api_key() -> str:
+    return os.getenv("AGENTVERSE_API_KEY", AGENTVERSE_API_KEY)
+
+
+def get_agent_ports() -> set[int]:
+    return {agent.port for agent in AGENTS}
+
+
+def assert_fetch_agent_ports_do_not_overlap(fetch_ports: Iterable[int] | None = None) -> None:
+    if fetch_ports is None:
+        from backend.fetch_runtime import FETCH_AGENT_SPECS
+
+        fetch_ports = [spec.port for spec in FETCH_AGENT_SPECS.values()]
+
+    overlaps = sorted(get_agent_ports().intersection(fetch_ports))
+    if overlaps:
+        overlap_list = ", ".join(str(port) for port in overlaps)
+        raise RuntimeError(f"Fetch agent ports overlap with FastAPI agent ports: {overlap_list}")
+
+
 def fetch_integration_flags() -> dict[str, bool]:
     """Non-secret booleans for /health (Agentverse key presence only, never the value)."""
     return {
-        "fetch_enabled": FETCH_ENABLED,
-        "agentverse_credentials_present": bool(AGENTVERSE_API_KEY.strip()),
+        "fetch_enabled": is_fetch_enabled(),
+        "agentverse_credentials_present": bool(get_agentverse_api_key().strip()),
     }
+
+
+assert_fetch_agent_ports_do_not_overlap()

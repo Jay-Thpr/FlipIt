@@ -52,6 +52,24 @@ def test_agents_manifest_lists_all_agents(client: TestClient) -> None:
     }
 
 
+def test_fetch_agents_manifest_lists_all_fetch_agents(client: TestClient) -> None:
+    response = client.get("/fetch-agents")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload["agents"]) == 10
+    assert payload["agents"][0] == {
+        "name": "VisionAgent",
+        "slug": "vision_agent",
+        "port": 9201,
+    }
+    assert payload["agents"][-1] == {
+        "name": "NegotiationAgent",
+        "slug": "negotiation_agent",
+        "port": 9210,
+    }
+
+
 def test_pipelines_manifest_matches_step_contracts(client: TestClient) -> None:
     response = client.get("/pipelines")
 
@@ -171,6 +189,58 @@ async def test_pipeline_passes_accumulated_outputs_to_each_step(monkeypatch: pyt
     }
     assert captured_requests[2].context["vision_analysis"] == valid_outputs["vision_agent"]
     assert captured_requests[3].context["pricing"] == valid_outputs["pricing_agent"]
+
+
+@pytest.mark.asyncio
+async def test_execute_step_routes_through_fetch_runtime_when_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_run_fetch_query(agent_slug: str, user_text: str) -> dict[str, object]:
+        captured["agent_slug"] = agent_slug
+        captured["user_text"] = user_text
+        return VisionAnalysisOutput(
+            agent="vision_agent",
+            display_name="Vision Agent",
+            summary="Vision Agent completed vision_analysis",
+            detected_item="sample item",
+            brand="Nike",
+            category="apparel",
+            condition="good",
+            confidence=0.95,
+        ).model_dump()
+
+    async def fail_run_agent_task(agent_slug: str, request: AgentTaskRequest) -> AgentTaskResponse:
+        raise AssertionError("local agent task runner should not be used when fetch is enabled")
+
+    monkeypatch.setattr(orchestrator, "run_fetch_query", fake_run_fetch_query)
+    monkeypatch.setattr(orchestrator, "run_agent_task", fail_run_agent_task)
+    monkeypatch.setattr(orchestrator, "is_fetch_enabled", lambda: True)
+
+    result = await orchestrator.execute_step(
+        session_id="fetch-step-session",
+        pipeline="sell",
+        agent_slug="vision_agent",
+        step_name="vision_analysis",
+        task_request=AgentTaskRequest(
+            session_id="fetch-step-session",
+            pipeline="sell",
+            step="vision_analysis",
+            input={
+                "original_input": {
+                    "notes": "Vintage Nike tee",
+                    "image_urls": ["https://example.com/item.jpg"],
+                },
+                "previous_outputs": {},
+            },
+            context={},
+        ),
+    )
+
+    assert captured == {
+        "agent_slug": "vision_agent",
+        "user_text": "Vintage Nike tee https://example.com/item.jpg",
+    }
+    assert result["agent"] == "vision_agent"
 
 
 @pytest.mark.asyncio

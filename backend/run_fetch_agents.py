@@ -6,10 +6,12 @@ import subprocess
 import sys
 import time
 
+from backend.config import assert_fetch_agent_ports_do_not_overlap
 from backend.fetch_runtime import list_fetch_agent_slugs
 
 
 def main() -> int:
+    assert_fetch_agent_ports_do_not_overlap()
     processes: list[subprocess.Popen] = []
     try:
         for agent_slug in list_fetch_agent_slugs():

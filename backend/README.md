@@ -6,6 +6,7 @@ This scaffold gives the team a stable local contract before Gemini work lands an
 
 - `GET /health`
 - `GET /agents`
+- `GET /fetch-agents`
 - `GET /pipelines`
 - `POST /sell/start`
 - `POST /buy/start`
@@ -25,6 +26,7 @@ This scaffold gives the team a stable local contract before Gemini work lands an
 - `AGENT_EXECUTION_MODE=local_functions` keeps the app runnable without launching separate agent processes.
 - `python -m backend.run_agents` starts one FastAPI process per agent scaffold when you want to validate the per-agent `/task` apps.
 - `python -m backend.run_fetch_agents` starts 10 Fetch `uAgents` that wrap the same local agent logic for Agentverse/ASI:One.
+- When `FETCH_ENABLED=true`, orchestrator step execution routes through the Fetch adapter layer instead of the direct local registry.
 - `make check` is the current local verification path and mirrors CI.
 
 ## Browser Use Validation Harness
@@ -52,26 +54,38 @@ The mobile app still talks to FastAPI directly. Fetch.ai is implemented as a par
 
 ### Setup
 
-1. Install dependencies:
+1. Install the standard backend dependencies:
 
 ```bash
 make install
 ```
 
-2. Run the Fetch agents on Python 3.12 or 3.13. `uagents==0.24.0` does not currently import cleanly on Python 3.14 in this environment.
+2. Create the dedicated Fetch virtualenv on Python 3.12:
 
-3. Set unique Fetch seeds in your environment or `.env`.
+```bash
+make venv-fetch
+```
 
-4. Start one Fetch agent:
+3. Run the Fetch agents on Python 3.12 or 3.13. `uagents==0.24.0` does not currently import cleanly on Python 3.14 in this environment.
+
+4. Set unique Fetch seeds and `AGENTVERSE_API_KEY` in your environment or `.env`.
+
+5. Start one Fetch agent:
 
 ```bash
 PYTHONPATH=$PWD python -m backend.fetch_agents.launch depop_search_agent
 ```
 
-5. Start all Fetch agents:
+6. Start all Fetch agents:
 
 ```bash
 make run-fetch-agents
+```
+
+7. Send a local smoke-test chat payload to a running Fetch agent:
+
+```bash
+. .venv/bin/activate && python scripts/fetch_demo.py 9205 "Vintage Nike tee under $45"
 ```
 
 ### Chat-to-Agent Mapping

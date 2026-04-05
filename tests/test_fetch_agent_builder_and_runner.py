@@ -10,6 +10,7 @@ from typing import Any
 import pytest
 
 from backend import run_fetch_agents
+from backend.config import assert_fetch_agent_ports_do_not_overlap
 from backend.fetch_agents import builder, launch
 
 
@@ -237,3 +238,18 @@ def test_run_fetch_agents_spawns_every_slug_and_terminates_children(monkeypatch:
     assert all(sig == signal.SIGTERM for _, sig in signals_sent)
     assert waits == run_fetch_agents.list_fetch_agent_slugs()
 
+
+def test_run_fetch_agents_checks_for_port_conflicts_before_starting(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        run_fetch_agents,
+        "assert_fetch_agent_ports_do_not_overlap",
+        lambda: (_ for _ in ()).throw(RuntimeError("port overlap")),
+    )
+
+    with pytest.raises(RuntimeError, match="port overlap"):
+        run_fetch_agents.main()
+
+
+def test_config_rejects_overlapping_fetch_ports() -> None:
+    with pytest.raises(RuntimeError, match="9101"):
+        assert_fetch_agent_ports_do_not_overlap({9101, 9201})
