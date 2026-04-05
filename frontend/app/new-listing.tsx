@@ -323,7 +323,7 @@ export default function NewListingScreen() {
 
       // 4. Emit event and navigate
       emit('item:created');
-      router.push(`/item/${itemId}`);
+      router.replace('/');
     } catch (e: any) {
       Alert.alert('Error', e.message || 'Failed to save listing.');
     } finally {
