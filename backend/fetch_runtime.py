@@ -149,18 +149,18 @@ async def execute_agent(
     step: str,
     original_input: dict[str, object],
     previous_outputs: dict[str, dict[str, object]],
+    session_id: str | None = None,
+    context: dict[str, object] | None = None,
 ) -> dict[str, object]:
     request = AgentTaskRequest(
-        session_id=f"fetch-{agent_slug}-{uuid4()}",
+        session_id=session_id or f"fetch-{agent_slug}-{uuid4()}",
         pipeline=pipeline,
         step=step,
         input={
             "original_input": original_input,
             "previous_outputs": previous_outputs,
         },
-        context={
-            "source": "fetch_chat",
-        },
+        context=context or {"source": "fetch_chat"},
     )
     response = await run_local_agent_task(agent_slug, request)
     if response.status != "completed":
@@ -198,6 +198,8 @@ async def run_fetch_query(
             step=task_request.step,
             original_input=task_request.input["original_input"],
             previous_outputs=task_request.input["previous_outputs"],
+            session_id=task_request.session_id,
+            context=task_request.context,
         )
 
     text = normalize_text(user_text)

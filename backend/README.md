@@ -76,11 +76,15 @@ make venv-fetch
 PYTHONPATH=$PWD python -m backend.fetch_agents.launch depop_search_agent
 ```
 
-6. Start all Fetch agents:
+6. Start all Fetch agents from the dedicated Fetch virtualenv:
 
 ```bash
 make run-fetch-agents
 ```
+
+- `make run` keeps using `.venv` for the FastAPI app on port `8000`.
+- `make run-fetch-agents` uses `.venv-fetch` for the Fetch `uAgents` on ports `9201-9210`.
+- The per-agent FastAPI apps from `make run-agents` stay on ports `9101-9110`, so all three launch paths can coexist without port overlap.
 
 7. Send a local smoke-test chat payload to a running Fetch agent:
 

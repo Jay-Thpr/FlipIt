@@ -134,6 +134,38 @@ async def test_execute_agent_uses_fetch_session_and_context(monkeypatch: pytest.
 
 
 @pytest.mark.asyncio
+async def test_run_fetch_query_preserves_task_request_session_and_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    async def fake_execute_agent(**kwargs: Any) -> dict[str, object]:
+        captured.update(kwargs)
+        return {"agent": kwargs["agent_slug"], "summary": "done"}
+
+    monkeypatch.setattr(fetch_runtime, "execute_agent", fake_execute_agent)
+
+    request = fetch_runtime.AgentTaskRequest(
+        session_id="real-session-id",
+        pipeline="buy",
+        step="depop_search",
+        input={
+            "original_input": {"query": "Nike tee", "budget": 45},
+            "previous_outputs": {},
+        },
+        context={"source": "pipeline", "user_id": "buyer-1"},
+    )
+
+    result = await fetch_runtime.run_fetch_query("depop_search_agent", task_request=request)
+
+    assert result == {"agent": "depop_search_agent", "summary": "done"}
+    assert captured["session_id"] == "real-session-id"
+    assert captured["context"] == {"source": "pipeline", "user_id": "buyer-1"}
+    assert captured["pipeline"] == "buy"
+    assert captured["step"] == "depop_search"
+
+
+@pytest.mark.asyncio
 async def test_run_fetch_query_for_ebay_search_agent_uses_empty_previous_outputs(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

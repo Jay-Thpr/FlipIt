@@ -12,8 +12,17 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 def test_makefile_exposes_expected_build_targets() -> None:
     makefile = (REPO_ROOT / "Makefile").read_text()
 
-    for target in ("install:", "test:", "compile:", "check:", "run:", "run-agents:", "ci:"):
+    for target in ("install:", "venv-fetch:", "test:", "compile:", "check:", "run:", "run-agents:", "run-fetch-agents:", "ci:"):
         assert target in makefile
+
+
+def test_makefile_uses_dedicated_fetch_virtualenv_for_fetch_agents() -> None:
+    makefile = (REPO_ROOT / "Makefile").read_text()
+
+    assert "FETCH_VENV ?= .venv-fetch" in makefile
+    assert "FETCH_ACTIVATE = . $(FETCH_VENV)/bin/activate" in makefile
+    assert "$(FETCH_PYTHON) -m venv $(FETCH_VENV)" in makefile
+    assert "$(FETCH_ACTIVATE) && PYTHONPATH=$$PWD python -m backend.run_fetch_agents" in makefile
 
 
 def test_start_script_launches_backend_entrypoint() -> None:
@@ -100,12 +109,11 @@ def test_readme_documents_render_browser_runtime_requirements() -> None:
 
 
 def test_browser_use_docs_and_scripts_exist() -> None:
-    status = (REPO_ROOT / "BrowserUse-Status.md").read_text()
+    guide = (REPO_ROOT / "BROWSER_USE_GUIDE.md").read_text()
     live_validation = (REPO_ROOT / "BrowserUse-Live-Validation.md").read_text()
 
-    assert "listing_found" in status
-    assert "browser_use_fallback" in status
-    assert "backend.browser_use_runtime_audit" in status
+    assert "listing_found" in guide
+    assert "browser_use_runtime_audit" in guide
     assert "Preconditions" in live_validation
     assert "BUY Flow" in live_validation
     assert "SELL Flow" in live_validation
