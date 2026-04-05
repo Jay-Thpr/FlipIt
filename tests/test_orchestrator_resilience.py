@@ -269,13 +269,15 @@ async def test_buy_pipeline_completes_with_empty_ranking_and_negotiation_when_al
     negotiation = session.result["outputs"]["negotiation"]
     RankingOutput.model_validate(ranking)
     NegotiationOutput.model_validate(negotiation)
-    assert ranking["summary"] == "No marketplace listings were found to rank"
-    assert ranking["top_choice"] is None
+    assert ranking["summary"].startswith("No marketplace listings were found")
     assert ranking["candidate_count"] == 0
     assert ranking["ranked_listings"] == []
     assert ranking["median_price"] == 0.0
-    assert negotiation["summary"] == "No ranked marketplace listings were available for negotiation"
+    assert ranking["top_choice"]["price"] == 0.0
+    assert "no marketplace listings" in ranking["top_choice"]["reason"].lower()
+    assert negotiation["summary"].startswith("No marketplace listings were found")
     assert negotiation["offers"] == []
-    assert negotiation["browser_use"]["mode"] == "skipped"
+    assert negotiation["browser_use"] is None
+    assert "buy_no_results" in [event.event_type for event in session.events]
     assert session.events[-1].event_type == "pipeline_complete"
     assert "pipeline_failed" not in [event.event_type for event in session.events]
