@@ -79,11 +79,11 @@ User opens Item Detail → sees ranked listings, market overview, active convers
 
 ### 5.1 The Orchestration Layer
 
-**Mobile app runtime:** **FastAPI** is the primary orchestrator for the product. The in-process `backend/orchestrator.py` runs the SELL and BUY pipelines, validates agent I/O, emits SSE to the client, and owns session state (`POST /sell/start`, `POST /buy/start`, `GET /stream/{session_id}`).
+**ASI:One is the orchestrator.** This is Fetch.ai’s own LLM — not a custom agent you build. ASI:One discovers your registered agents on Agentverse and routes natural-language tasks to them. Your job is building the specialist agents, registering them, and implementing the Chat Protocol. **ASI:One handles coordination** across the multi-agent graph for the sponsor story and judging.
 
-**Fetch.ai / ASI:One (parallel track):** Ten **uAgents** register on Agentverse and expose the same capabilities via Chat Protocol. ASI:One discovers those agents for sponsor demos and natural-language routing. It does **not** replace FastAPI for the Expo client’s live pipeline unless the product explicitly switches to that path.
+**Mobile app (Expo) path:** The app connects to **FastAPI**, which runs an in-process pipeline (`backend/orchestrator.py`) that executes the **same ten agents, contracts, and sequencing** as the uAgent layer: SELL/BUY pipelines, SSE progress, and session state (`POST /sell/start`, `POST /buy/start`, `GET /stream/{session_id}`). Think of it as **one agent system, two front doors** — ASI:One for discovery and natural-language orchestration on Agentverse; FastAPI for low-latency, demo-stable HTTP/SSE on the phone.
 
-**Summary:** FastAPI + orchestrator = product truth; Fetch + ASI:One = discoverability, judging, and optional parallel access to the same agent logic.
+**Summary:** ASI:One orchestrates the agent network; FastAPI mirrors that execution for the mobile product surface without changing the roster or the Fetch.ai narrative.
 
 ### 5.2 Full Agent Roster — 10 Agents
 
@@ -132,7 +132,7 @@ DepopSearchAgent → EbaySearchAgent → MercariSearchAgent → OfferUpSearchAge
 - README.md per agent with name, address, capability description
 - `![tag:innovationlab]` badge in each README
 
-**Fetch.ai judging story:** 10 distinct registered agents, genuine multi-agent coordination, Browser Use inside agent logic, ASI:One as **discovery + chat routing** while FastAPI remains the reference orchestration implementation for the app. Directly hits "Quantity of Agents Created" and "multi-agent collaboration" judging criteria.
+**Fetch.ai judging story:** 10 distinct registered agents, genuine multi-agent coordination, Browser Use inside agent logic, **ASI:One as the orchestration layer** (discovery + task routing across agents). FastAPI implements the parallel mobile path with the same agents. Directly hits "Quantity of Agents Created" and "multi-agent collaboration" judging criteria.
 
 ---
 

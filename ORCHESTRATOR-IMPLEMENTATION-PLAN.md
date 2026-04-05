@@ -10,7 +10,7 @@
 
 | Fact | Detail |
 |------|--------|
-| **Product API** | FastAPI in `backend/main.py` — **not** ASI:One as the runtime orchestrator for the mobile app. |
+| **Product API** | FastAPI in `backend/main.py` — mobile SSE/HTTP path. **PRD / judging:** ASI:One is the orchestrator for the Agentverse story; FastAPI runs the **same** agent graph in-process for Expo. |
 | **Pipelines** | `POST /sell/start`, `POST /buy/start`; progress via `GET /stream/{session_id}` (underscore SSE event names). |
 | **Sell review** | Pauses at `listing_review_required`; user drives `POST /sell/listing-decision` (`confirm_submit` \| `revise` \| `abort`). Max **2** revisions; **15**-minute review window per pause (refreshed after each successful revise). |
 | **Expiry** | Lazy checks on `/result`, `/stream`, `/sell/listing-decision` **plus** background sweep: `SELL_REVIEW_CLEANUP_INTERVAL` (default 60s). |
@@ -84,7 +84,7 @@ See `IMPLEMENTATION-PLAN.md` Phase 2 for detailed subtasks.
 
 | ID | Task | File | Status |
 |----|------|------|--------|
-| F1 | PRD §5: **FastAPI + in-process orchestrator** is primary for the app; ASI:One/Fetch as parallel discovery — not “ASI:One is the orchestrator” for mobile. | `PRD.md` | Done |
+| F1 | PRD §5: **ASI:One as orchestrator** for Fetch/judging; FastAPI as mobile execution path for the same agents. | `PRD.md` | Done |
 | F2 | PRD BUY search: match **code** (sequential in main pipeline vs parallel in Fetch path — state both accurately). | `PRD.md` | Done |
 | F3 | Replace legacy **listing_ready** language with `listing_review_required` + `/sell/listing-decision`. | `PRD.md`, any stray docs | Done (PRD §7.3, §7.6) |
 | F4 | Note **draft_created** as compatibility-only vs `listing_review_required`. | `PRD.md`, `API_CONTRACT.md` | Done |
@@ -114,7 +114,7 @@ See `IMPLEMENTATION-PLAN.md` Phase 2 for detailed subtasks.
 - [ ] BUY: four searches → rank → negotiation path demonstrable.
 - [ ] Browser Use sponsor story: at least one **live** flow documented in `BrowserUse-Live-Validation.md` with sign-off notes.
 - [ ] Fetch: 10 agents registered; at least one **live** ASI:One or Agentverse proof captured (screenshot/log) per team process.
-- [ ] `PRD.md` architecture section matches implementation (no ASI:One-as-primary-orchestrator confusion).
+- [ ] `PRD.md` architecture section matches implementation (ASI:One as orchestrator for Agentverse + FastAPI as same-agent mobile path — no contradiction).
 
 ---
 

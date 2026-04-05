@@ -86,7 +86,7 @@ These have **automated tests** and run in CI; they still need **real marketplace
 
 ## P3 — Documentation Drift
 
-- [x] Update `PRD.md` where it still describes ASI:One as the orchestrator instead of FastAPI plus the in-process orchestrator.
+- [x] `PRD.md` §5.1: **ASI:One is the orchestrator** (Fetch/judging narrative); FastAPI documented as the Expo path that runs the same agent pipelines in-process.
 
 - [x] Update `PRD.md` where it still describes BUY search as sequential instead of parallel (where applicable).
 
