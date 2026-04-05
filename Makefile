@@ -2,7 +2,7 @@ PYTHON ?= python3
 VENV ?= .venv
 ACTIVATE = . $(VENV)/bin/activate
 
-.PHONY: install test test-verbose compile check run run-agents ci verify-browser
+.PHONY: install test test-verbose compile check run run-agents run-fetch-agents ci verify-browser
 
 install:
 	$(PYTHON) -m venv $(VENV)
@@ -25,6 +25,9 @@ run:
 
 run-agents:
 	$(ACTIVATE) && python -m backend.run_agents
+
+run-fetch-agents:
+	$(ACTIVATE) && PYTHONPATH=$$PWD python -m backend.run_fetch_agents
 
 ci: check
 
