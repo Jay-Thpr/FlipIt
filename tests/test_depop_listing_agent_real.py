@@ -4,21 +4,28 @@ import time
 from typing import Any
 
 import backend.agents.depop_listing_agent as depop_listing_module
+import pytest
 from fastapi.testclient import TestClient
 
 from backend.agents.depop_listing_agent import app as depop_listing_app
 
 
-def wait_for_terminal_result(client: TestClient, session_id: str, timeout: float = 3.0) -> dict[str, Any]:
+def wait_for_result_status(
+    client: TestClient,
+    session_id: str,
+    *,
+    statuses: set[str],
+    timeout: float = 3.0,
+) -> dict[str, Any]:
     deadline = time.time() + timeout
     while time.time() < deadline:
         response = client.get(f"/result/{session_id}")
         assert response.status_code == 200
         payload = response.json()
-        if payload["status"] in {"completed", "failed"}:
+        if payload["status"] in statuses:
             return payload
         time.sleep(0.02)
-    raise AssertionError(f"Session {session_id} did not reach a terminal state")
+    raise AssertionError(f"Session {session_id} did not reach any of the expected states: {sorted(statuses)}")
 
 
 def build_sell_previous_outputs() -> dict[str, Any]:
@@ -100,6 +107,8 @@ def test_depop_listing_agent_records_browser_use_confirmation(monkeypatch) -> No
     async def fake_run_structured_browser_task(**kwargs: Any) -> dict[str, Any]:
         captured.update(kwargs)
         return {
+            "listing_status": "ready_for_confirmation",
+            "ready_for_confirmation": True,
             "draft_status": "ready",
             "form_screenshot_url": "artifact://depop-form-preview",
         }
@@ -125,6 +134,8 @@ def test_depop_listing_agent_records_browser_use_confirmation(monkeypatch) -> No
     assert result["status"] == "completed"
     assert str(captured["user_data_dir"]).endswith("/profiles/depop")
     assert "Patagonia hoodie - Excellent Condition" in str(captured["task"])
+    assert result["output"]["listing_status"] == "ready_for_confirmation"
+    assert result["output"]["ready_for_confirmation"] is True
     assert result["output"]["draft_status"] == "ready"
     assert result["output"]["execution_mode"] == "browser_use"
     assert result["output"]["browser_use_error"] is None
@@ -135,7 +146,7 @@ def test_depop_listing_agent_records_browser_use_confirmation(monkeypatch) -> No
         "profile_name": "depop",
         "profile_available": True,
         "error_category": None,
-        "detail": "Live Depop draft creation completed through Browser Use.",
+        "detail": "Live Depop listing was prepared through Browser Use and paused for user confirmation.",
     }
 
 
@@ -213,6 +224,8 @@ def test_depop_listing_agent_uses_fallback_copy_for_sparse_input(monkeypatch) ->
 def test_sell_pipeline_uses_real_depop_listing_output(client: TestClient, monkeypatch) -> None:
     async def fake_run_structured_browser_task(**kwargs: Any) -> dict[str, Any]:
         return {
+            "listing_status": "ready_for_confirmation",
+            "ready_for_confirmation": True,
             "draft_status": "ready",
             "form_screenshot_url": "artifact://sell-pipeline-preview",
         }
@@ -234,11 +247,14 @@ def test_sell_pipeline_uses_real_depop_listing_output(client: TestClient, monkey
     assert response.status_code == 200
     session_id = response.json()["session_id"]
 
-    result = wait_for_terminal_result(client, session_id)
+    result = wait_for_result_status(client, session_id, statuses={"paused"})
+    assert result["status"] == "paused"
     listing = result["result"]["outputs"]["depop_listing"]
     assert listing["title"] == "Patagonia hoodie - Excellent Condition"
     assert listing["suggested_price"] == 78.43
     assert listing["category_path"] == "Men/Tops/Hoodies"
+    assert listing["listing_status"] == "ready_for_confirmation"
+    assert listing["ready_for_confirmation"] is True
     assert listing["draft_status"] == "ready"
     assert listing["execution_mode"] == "browser_use"
     assert listing["browser_use_error"] is None
@@ -272,3 +288,63 @@ def test_depop_listing_agent_defaults_to_fallback_metadata_without_live_run() ->
     assert result["output"]["browser_use_error"] == "profile_missing"
     assert result["output"]["form_screenshot_url"] is None
     assert result["output"]["browser_use"]["mode"] == "skipped"
+
+
+@pytest.mark.asyncio
+async def test_depop_listing_agent_can_prepare_revision_submit_and_abort_checkpoints(monkeypatch) -> None:
+    captured_tasks: list[str] = []
+    queued_results = [
+        {
+            "listing_status": "ready_for_confirmation",
+            "ready_for_confirmation": True,
+            "draft_status": "ready",
+            "form_screenshot_url": "artifact://revision-preview",
+        },
+        {
+            "listing_status": "submitted",
+            "ready_for_confirmation": False,
+            "draft_status": None,
+            "form_screenshot_url": "artifact://submit-confirmation",
+        },
+        {
+            "listing_status": "aborted",
+            "ready_for_confirmation": False,
+            "draft_status": None,
+            "form_screenshot_url": None,
+        },
+    ]
+
+    async def fake_run_structured_browser_task(**kwargs: Any) -> dict[str, Any]:
+        captured_tasks.append(str(kwargs["task"]))
+        return queued_results.pop(0)
+
+    monkeypatch.setattr(depop_listing_module, "run_structured_browser_task", fake_run_structured_browser_task)
+    monkeypatch.setattr(depop_listing_module.Path, "exists", lambda self: True)
+
+    revision_result, revision_error, revision_profile = await depop_listing_module.agent.apply_browser_use_listing_revision(
+        listing_output={
+            "title": "Patagonia hoodie - Excellent Condition",
+            "description": "Patagonia hoodie in excellent condition.",
+            "suggested_price": 78.43,
+            "category_path": "Men/Tops/Hoodies",
+        },
+        revision_instructions="Change the title to include size medium and lower the price by $5.",
+    )
+    submit_result, submit_error, submit_profile = await depop_listing_module.agent.submit_browser_use_listing()
+    abort_result, abort_error, abort_profile = await depop_listing_module.agent.abort_browser_use_listing()
+
+    assert revision_error is None
+    assert revision_profile is True
+    assert revision_result["listing_status"] == "ready_for_confirmation"
+    assert revision_result["ready_for_confirmation"] is True
+    assert "Change the title to include size medium" in captured_tasks[0]
+
+    assert submit_error is None
+    assert submit_profile is True
+    assert submit_result["listing_status"] == "submitted"
+    assert "perform the final publish or submit action" in captured_tasks[1]
+
+    assert abort_error is None
+    assert abort_profile is True
+    assert abort_result["listing_status"] == "aborted"
+    assert "discard, or otherwise abandon the draft" in captured_tasks[2]

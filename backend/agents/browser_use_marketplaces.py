@@ -24,8 +24,10 @@ class BrowserUseSearchResult(BaseModel):
     results: list[BrowserUseSearchListing] = Field(default_factory=list)
 
 
-class BrowserUseListingDraftResult(BaseModel):
-    draft_status: str
+class BrowserUseListingCheckpointResult(BaseModel):
+    listing_status: str
+    ready_for_confirmation: bool = False
+    draft_status: str | None = None
     form_screenshot_url: str | None = None
 
 
@@ -88,7 +90,7 @@ async def run_marketplace_search(platform: Marketplace, query: str, max_results:
     ]
 
 
-def build_depop_listing_task(
+def build_depop_listing_prepare_task(
     *,
     title: str,
     description: str,
@@ -104,16 +106,103 @@ def build_depop_listing_task(
     return f"""
 Navigate directly to https://www.depop.com/sell or the Depop listing creation flow.
 Use the existing logged-in browser profile session.
+Use a desktop or non-mobile listing layout if the site offers multiple device experiences.
 {image_instruction}
-Populate the listing form without submitting it.
+Populate the entire listing form without submitting it.
 Set the category using this path if possible: {category_path}
 Fill the title exactly as: {title}
 Fill the description exactly as: {description}
 Set the price to: {suggested_price}
-Stop before the final publish or submit action.
+Stop at the final publish or submit action and do not click it.
 Return only JSON matching the schema with:
+- listing_status set to "ready_for_confirmation" if the form is populated and ready for final review
+- ready_for_confirmation set to true when the form is populated and waiting on user approval
 - draft_status set to "ready" if the form is populated
 - form_screenshot_url as a descriptive artifact string if a screenshot URL/path is available, otherwise null
+"""
+
+
+def build_depop_listing_task(
+    *,
+    title: str,
+    description: str,
+    suggested_price: float,
+    category_path: str,
+    image_path: str | None,
+) -> str:
+    return build_depop_listing_prepare_task(
+        title=title,
+        description=description,
+        suggested_price=suggested_price,
+        category_path=category_path,
+        image_path=image_path,
+    )
+
+
+def build_depop_listing_revision_task(
+    *,
+    revision_instructions: str,
+    title: str | None = None,
+    description: str | None = None,
+    suggested_price: float | None = None,
+    category_path: str | None = None,
+) -> str:
+    baseline_instructions = ""
+    if all(value is not None for value in (title, description, suggested_price, category_path)):
+        baseline_instructions = f"""
+Preserve any fields the user did not ask to change.
+Keep the draft aligned to these baseline values unless the revision request overrides them:
+- title: {title}
+- description: {description}
+- price: {suggested_price}
+- category path: {category_path}
+"""
+
+    return f"""
+Navigate directly to https://www.depop.com/sell or the active Depop listing creation flow.
+Use the existing logged-in browser profile session.
+Use a desktop or non-mobile listing layout if the site offers multiple device experiences.
+Find the existing in-progress listing form or draft.
+Apply these revision instructions to the current form:
+{revision_instructions}
+{baseline_instructions}
+Do not submit or publish the listing.
+Stop once the form reflects the requested changes and is ready for review.
+Return only JSON matching the schema with:
+- listing_status set to "ready_for_confirmation" if the revised form is ready for final review
+- ready_for_confirmation set to true when the revised form is populated and waiting on user approval
+- draft_status set to "ready" if the form remains populated
+- form_screenshot_url as a descriptive artifact string if a screenshot URL/path is available, otherwise null
+"""
+
+
+def build_depop_listing_submit_task() -> str:
+    return """
+Navigate directly to https://www.depop.com/sell or the active Depop listing creation flow.
+Use the existing logged-in browser profile session.
+Use a desktop or non-mobile listing layout if the site offers multiple device experiences.
+Find the prepared in-progress listing form or draft.
+Verify the listing is fully populated, then perform the final publish or submit action.
+Return only JSON matching the schema with:
+- listing_status set to "submitted" if the listing was published successfully
+- ready_for_confirmation set to false
+- draft_status set to "submitted"
+- form_screenshot_url as a descriptive artifact string if a confirmation artifact URL/path is available, otherwise null
+"""
+
+
+def build_depop_listing_abort_task() -> str:
+    return """
+Navigate directly to https://www.depop.com/sell or the active Depop listing creation flow.
+Use the existing logged-in browser profile session.
+Use a desktop or non-mobile listing layout if the site offers multiple device experiences.
+Find the prepared in-progress listing form or draft.
+Close, discard, or otherwise abandon the draft without publishing it.
+Return only JSON matching the schema with:
+- listing_status set to "aborted" if the draft was abandoned or the browser was left without publishing
+- ready_for_confirmation set to false
+- draft_status set to "aborted"
+- form_screenshot_url as a descriptive artifact string if a confirmation artifact URL/path is available, otherwise null
 """
 
 

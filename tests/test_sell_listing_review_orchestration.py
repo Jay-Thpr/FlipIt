@@ -107,7 +107,7 @@ async def test_sell_pipeline_pauses_when_listing_requires_confirmation(monkeypat
 
 
 @pytest.mark.asyncio
-async def test_handle_sell_listing_decision_confirm_marks_session_running(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_handle_sell_listing_decision_confirm_submits_listing(monkeypatch: pytest.MonkeyPatch) -> None:
     await session_manager.reset()
     session = await session_manager.create_session(
         session_id="sell-review-confirm-session",
@@ -118,25 +118,41 @@ async def test_handle_sell_listing_decision_confirm_marks_session_running(monkey
     session.result = {"pipeline": "sell", "outputs": {"depop_listing": _listing_output(ready_for_confirmation=True, listing_status="ready_for_confirmation")}}
     session.sell_listing_review = SellListingReviewState(state="ready_for_confirmation")
 
+    async def fake_submit_sell_listing() -> tuple[dict[str, Any], None, bool]:
+        return (
+            {
+                "listing_status": "submitted",
+                "ready_for_confirmation": False,
+                "draft_status": "submitted",
+                "form_screenshot_url": "artifact://submitted",
+            },
+            None,
+            True,
+        )
+
+    monkeypatch.setattr(orchestrator, "submit_sell_listing", fake_submit_sell_listing)
+
     await orchestrator.handle_sell_listing_decision(session.session_id, "confirm_submit")
 
     updated = await session_manager.get_session(session.session_id)
     assert updated is not None
-    assert updated.status == "running"
+    assert updated.status == "completed"
     assert updated.sell_listing_review is not None
-    assert updated.sell_listing_review.state == "submitting"
+    assert updated.sell_listing_review.state == "submitted"
     depop_listing = updated.result["outputs"]["depop_listing"]
-    assert depop_listing["listing_status"] == "submit_requested"
+    assert depop_listing["listing_status"] == "submitted"
     assert depop_listing["ready_for_confirmation"] is False
-    assert [event.event_type for event in updated.events][-3:] == [
+    assert [event.event_type for event in updated.events][-5:] == [
         "listing_decision_received",
         "pipeline_resumed",
         "listing_submit_requested",
+        "listing_submitted",
+        "pipeline_complete",
     ]
 
 
 @pytest.mark.asyncio
-async def test_handle_sell_listing_decision_revise_marks_session_running(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_handle_sell_listing_decision_revise_reopens_review(monkeypatch: pytest.MonkeyPatch) -> None:
     await session_manager.reset()
     session = await session_manager.create_session(
         session_id="sell-review-revise-session",
@@ -147,6 +163,26 @@ async def test_handle_sell_listing_decision_revise_marks_session_running(monkeyp
     session.result = {"pipeline": "sell", "outputs": {"depop_listing": _listing_output(ready_for_confirmation=True, listing_status="ready_for_confirmation")}}
     session.sell_listing_review = SellListingReviewState(state="ready_for_confirmation", revision_count=1)
 
+    async def fake_revise_sell_listing_for_review(
+        *,
+        listing_output: dict[str, Any],
+        revision_instructions: str,
+    ) -> tuple[dict[str, Any], None, bool]:
+        assert listing_output["title"] == "Nike hoodie - Good Condition"
+        assert revision_instructions == "Change the title and lower the price"
+        return (
+            {
+                "listing_status": "ready_for_confirmation",
+                "ready_for_confirmation": True,
+                "draft_status": "ready",
+                "form_screenshot_url": "artifact://revised-preview",
+            },
+            None,
+            True,
+        )
+
+    monkeypatch.setattr(orchestrator, "revise_sell_listing_for_review", fake_revise_sell_listing_for_review)
+
     await orchestrator.handle_sell_listing_decision(
         session.session_id,
         "revise",
@@ -155,23 +191,25 @@ async def test_handle_sell_listing_decision_revise_marks_session_running(monkeyp
 
     updated = await session_manager.get_session(session.session_id)
     assert updated is not None
-    assert updated.status == "running"
+    assert updated.status == "paused"
     assert updated.sell_listing_review is not None
-    assert updated.sell_listing_review.state == "applying_revision"
+    assert updated.sell_listing_review.state == "ready_for_confirmation"
     assert updated.sell_listing_review.revision_count == 2
     assert updated.sell_listing_review.revision_instructions == "Change the title and lower the price"
     depop_listing = updated.result["outputs"]["depop_listing"]
-    assert depop_listing["listing_status"] == "revision_requested"
-    assert depop_listing["ready_for_confirmation"] is False
-    assert [event.event_type for event in updated.events][-3:] == [
+    assert depop_listing["listing_status"] == "ready_for_confirmation"
+    assert depop_listing["ready_for_confirmation"] is True
+    assert [event.event_type for event in updated.events][-5:] == [
         "listing_decision_received",
         "pipeline_resumed",
         "listing_revision_requested",
+        "listing_revision_applied",
+        "listing_review_required",
     ]
 
 
 @pytest.mark.asyncio
-async def test_handle_sell_listing_decision_abort_completes_session() -> None:
+async def test_handle_sell_listing_decision_abort_completes_session(monkeypatch: pytest.MonkeyPatch) -> None:
     await session_manager.reset()
     session = await session_manager.create_session(
         session_id="sell-review-abort-session",
@@ -181,6 +219,20 @@ async def test_handle_sell_listing_decision_abort_completes_session() -> None:
     session.status = "paused"
     session.result = {"pipeline": "sell", "outputs": {"depop_listing": _listing_output(ready_for_confirmation=True, listing_status="ready_for_confirmation")}}
     session.sell_listing_review = SellListingReviewState(state="ready_for_confirmation")
+
+    async def fake_abort_sell_listing() -> tuple[dict[str, Any], None, bool]:
+        return (
+            {
+                "listing_status": "aborted",
+                "ready_for_confirmation": False,
+                "draft_status": "aborted",
+                "form_screenshot_url": None,
+            },
+            None,
+            True,
+        )
+
+    monkeypatch.setattr(orchestrator, "abort_sell_listing", fake_abort_sell_listing)
 
     await orchestrator.handle_sell_listing_decision(session.session_id, "abort")
 

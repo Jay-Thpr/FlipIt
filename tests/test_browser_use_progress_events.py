@@ -12,23 +12,29 @@ import backend.agents.offerup_search_agent as offerup_search_module
 from fastapi.testclient import TestClient
 
 
-def wait_for_terminal_result(client: TestClient, session_id: str, timeout: float = 3.0) -> dict[str, Any]:
+def wait_for_result_status(
+    client: TestClient,
+    session_id: str,
+    *,
+    statuses: set[str],
+    timeout: float = 3.0,
+) -> dict[str, Any]:
     deadline = time.time() + timeout
     while time.time() < deadline:
         response = client.get(f"/result/{session_id}")
         assert response.status_code == 200
         payload = response.json()
-        if payload["status"] in {"completed", "failed"}:
+        if payload["status"] in statuses:
             return payload
         time.sleep(0.02)
-    raise AssertionError(f"Session {session_id} did not reach a terminal state")
+    raise AssertionError(f"Session {session_id} did not reach any of the expected states: {sorted(statuses)}")
 
 
 def start_pipeline(client: TestClient, endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
     response = client.post(endpoint, json=payload)
     assert response.status_code == 200
     session_id = response.json()["session_id"]
-    return wait_for_terminal_result(client, session_id)
+    return wait_for_result_status(client, session_id, statuses={"completed", "failed"})
 
 
 def build_browser_results(platform: str) -> list[dict[str, object]]:
@@ -111,6 +117,8 @@ def test_buy_pipeline_emits_browser_use_listing_events_when_live_search_succeeds
 def test_sell_pipeline_emits_draft_created_event_with_live_metadata(client: TestClient, monkeypatch) -> None:
     async def fake_run_structured_browser_task(**kwargs: Any) -> dict[str, Any]:
         return {
+            "listing_status": "ready_for_confirmation",
+            "ready_for_confirmation": True,
             "draft_status": "ready",
             "form_screenshot_url": "artifact://depop-form-preview",
         }
@@ -118,10 +126,9 @@ def test_sell_pipeline_emits_draft_created_event_with_live_metadata(client: Test
     monkeypatch.setattr(depop_listing_module, "run_structured_browser_task", fake_run_structured_browser_task)
     monkeypatch.setattr(depop_listing_module.Path, "exists", lambda self: True)
 
-    result = start_pipeline(
-        client,
+    response = client.post(
         "/sell/start",
-        {
+        json={
             "user_id": "sell-user",
             "input": {
                 "image_urls": ["https://images.example.com/patagonia-hoodie-excellent.jpg"],
@@ -130,6 +137,8 @@ def test_sell_pipeline_emits_draft_created_event_with_live_metadata(client: Test
             "metadata": {"source": "draft-created-event-test"},
         },
     )
+    assert response.status_code == 200
+    result = wait_for_result_status(client, response.json()["session_id"], statuses={"paused"})
 
     draft_events = [event for event in result["events"] if event["event_type"] == "draft_created"]
     assert draft_events == [
@@ -144,6 +153,8 @@ def test_sell_pipeline_emits_draft_created_event_with_live_metadata(client: Test
                 "title": "Patagonia hoodie - Excellent Condition",
                 "suggested_price": 78.43,
                 "category_path": "Men/Tops/Hoodies",
+                "listing_status": "ready_for_confirmation",
+                "ready_for_confirmation": True,
                 "draft_status": "ready",
                 "form_screenshot_url": "artifact://depop-form-preview",
                 "source": "browser_use",
@@ -151,6 +162,9 @@ def test_sell_pipeline_emits_draft_created_event_with_live_metadata(client: Test
             "timestamp": draft_events[0]["timestamp"],
         }
     ]
+    review_events = [event for event in result["events"] if event["event_type"] == "listing_review_required"]
+    assert len(review_events) == 1
+    assert review_events[0]["data"]["listing_status"] == "ready_for_confirmation"
 
 
 def test_sell_pipeline_emits_browser_use_fallback_event_when_listing_draft_fails(client: TestClient, monkeypatch) -> None:

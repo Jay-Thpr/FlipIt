@@ -4,7 +4,13 @@ from pathlib import Path
 
 from backend.agents.base import BaseAgent, build_agent_app
 from backend.agents.browser_use_events import emit_browser_use_event
-from backend.agents.browser_use_marketplaces import BrowserUseListingDraftResult, build_depop_listing_task
+from backend.agents.browser_use_marketplaces import (
+    BrowserUseListingCheckpointResult,
+    build_depop_listing_abort_task,
+    build_depop_listing_prepare_task,
+    build_depop_listing_revision_task,
+    build_depop_listing_submit_task,
+)
 from backend.agents.browser_use_support import (
     BrowserUseRuntimeUnavailable,
     build_browser_use_metadata,
@@ -16,6 +22,7 @@ from backend.schemas import AgentTaskRequest, DepopListingOutput
 
 
 class DepopListingAgent(BaseAgent):
+    ALLOWED_DOMAINS = ["depop.com", "www.depop.com"]
     CATEGORY_PATHS = {
         "hoodie": "Men/Tops/Hoodies",
         "jacket": "Men/Outerwear/Jackets",
@@ -84,6 +91,8 @@ class DepopListingAgent(BaseAgent):
             "description": description,
             "suggested_price": suggested_price,
             "category_path": category_path,
+            "listing_status": "fallback",
+            "ready_for_confirmation": False,
             "draft_status": "fallback",
             "listing_preview": {
                 "title": title,
@@ -99,7 +108,9 @@ class DepopListingAgent(BaseAgent):
             ),
         }
         if browser_use_result is not None:
-            output["draft_status"] = browser_use_result["draft_status"]
+            output["listing_status"] = browser_use_result.get("listing_status") or "ready_for_confirmation"
+            output["ready_for_confirmation"] = bool(browser_use_result.get("ready_for_confirmation", True))
+            output["draft_status"] = browser_use_result.get("draft_status") or "ready"
             output["form_screenshot_url"] = browser_use_result.get("form_screenshot_url")
             output["execution_mode"] = "browser_use"
         elif browser_use_error is not None:
@@ -125,6 +136,8 @@ class DepopListingAgent(BaseAgent):
                 "title": title,
                 "suggested_price": suggested_price,
                 "category_path": category_path,
+                "listing_status": output["listing_status"],
+                "ready_for_confirmation": output["ready_for_confirmation"],
                 "draft_status": output["draft_status"],
                 "form_screenshot_url": output.get("form_screenshot_url"),
                 "source": output["execution_mode"],
@@ -140,24 +153,52 @@ class DepopListingAgent(BaseAgent):
         suggested_price: float,
         category_path: str,
         image_urls: list[str],
-    ) -> tuple[dict[str, str | None] | None, str | None, bool]:
-        profile_path = Path(get_browser_profile_path("depop"))
-        if not profile_path.exists():
-            return None, "profile_missing", False
+    ) -> tuple[dict[str, str | bool | None] | None, str | None, bool]:
         image_path = self.get_local_image_path(image_urls)
-        task = build_depop_listing_task(
+        task = build_depop_listing_prepare_task(
             title=title,
             description=description,
             suggested_price=suggested_price,
             category_path=category_path,
             image_path=image_path,
         )
+        return await self.run_browser_use_listing_checkpoint(task=task)
+
+    async def apply_browser_use_listing_revision(
+        self,
+        *,
+        listing_output: dict[str, object],
+        revision_instructions: str,
+    ) -> tuple[dict[str, str | bool | None] | None, str | None, bool]:
+        task = build_depop_listing_revision_task(
+            title=str(listing_output.get("title", "")),
+            description=str(listing_output.get("description", "")),
+            suggested_price=float(listing_output.get("suggested_price", 0.0)),
+            category_path=str(listing_output.get("category_path", "")),
+            revision_instructions=revision_instructions,
+        )
+        return await self.run_browser_use_listing_checkpoint(task=task)
+
+    async def submit_browser_use_listing(self) -> tuple[dict[str, str | bool | None] | None, str | None, bool]:
+        return await self.run_browser_use_listing_checkpoint(task=build_depop_listing_submit_task())
+
+    async def abort_browser_use_listing(self) -> tuple[dict[str, str | bool | None] | None, str | None, bool]:
+        return await self.run_browser_use_listing_checkpoint(task=build_depop_listing_abort_task())
+
+    async def run_browser_use_listing_checkpoint(
+        self,
+        *,
+        task: str,
+    ) -> tuple[dict[str, str | bool | None] | None, str | None, bool]:
+        profile_path = Path(get_browser_profile_path("depop"))
+        if not profile_path.exists():
+            return None, "profile_missing", False
         try:
             return (
                 await run_structured_browser_task(
                     task=task,
-                    output_model=BrowserUseListingDraftResult,
-                    allowed_domains=["depop.com", "www.depop.com"],
+                    output_model=BrowserUseListingCheckpointResult,
+                    allowed_domains=self.ALLOWED_DOMAINS,
                     user_data_dir=str(profile_path),
                     keep_alive=True,
                     max_steps=18,
@@ -181,7 +222,7 @@ class DepopListingAgent(BaseAgent):
     def build_runtime_metadata(
         self,
         *,
-        browser_use_result: dict[str, str | None] | None,
+        browser_use_result: dict[str, str | bool | None] | None,
         browser_use_error: str | None,
         profile_available: bool,
     ) -> dict[str, object]:
@@ -191,7 +232,7 @@ class DepopListingAgent(BaseAgent):
                 attempted_live_run=True,
                 profile_name="depop",
                 profile_available=True,
-                detail="Live Depop draft creation completed through Browser Use.",
+                detail="Live Depop listing was prepared through Browser Use and paused for user confirmation.",
             )
         if browser_use_error == "profile_missing" and not profile_available:
             return build_browser_use_metadata(
@@ -214,3 +255,22 @@ class DepopListingAgent(BaseAgent):
 
 agent = DepopListingAgent()
 app = build_agent_app(agent)
+
+
+async def revise_sell_listing_for_review(
+    *,
+    listing_output: dict[str, object],
+    revision_instructions: str,
+) -> tuple[dict[str, str | bool | None] | None, str | None, bool]:
+    return await agent.apply_browser_use_listing_revision(
+        listing_output=listing_output,
+        revision_instructions=revision_instructions,
+    )
+
+
+async def submit_sell_listing() -> tuple[dict[str, str | bool | None] | None, str | None, bool]:
+    return await agent.submit_browser_use_listing()
+
+
+async def abort_sell_listing() -> tuple[dict[str, str | bool | None] | None, str | None, bool]:
+    return await agent.abort_browser_use_listing()
