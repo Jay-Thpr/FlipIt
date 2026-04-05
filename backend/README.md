@@ -6,13 +6,21 @@ This scaffold gives the team a stable local contract before Gemini work lands an
 
 Use the Makefile targets. They activate the correct virtualenvs for you.
 
+| What | Command | Venv | Ports |
+|------|---------|------|-------|
+| Main API + SSE | `make run` | `.venv` | `8000` |
+| Per-agent HTTP apps (optional) | `make run-agents` | `.venv` | `9101-9110` |
+| Fetch uAgents (optional) | `make run-fetch-agents` | `.venv-fetch` | `9201-9210` |
+
+`make run` and `make run-fetch-agents` use different venvs and ports; run them in separate shells if you need both.
+
 1. Install the main backend environment:
 
 ```bash
 make install
 ```
 
-2. Create the Fetch virtualenv once if you plan to run the Fetch agents:
+2. Create the Fetch virtualenv once if you plan to run the Fetch agents (`make venv-fetch` installs `uagents` and `uagents-core` into `.venv-fetch` with Python 3.12 by default):
 
 ```bash
 make venv-fetch
@@ -35,7 +43,10 @@ export FETCH_ENABLED=false
 make run
 ```
 
-5. If you are validating Fetch agents, set the Fetch-specific variables in a second shell:
+5. If you are validating Fetch agents, set the Fetch-specific variables. **Two modes:**
+
+   - **Normal:** keep `FETCH_ENABLED=false` in the backend shell; start Fetch uAgents in another shell with seeds + `AGENTVERSE_API_KEY`. The backend and uAgents can both run; the app does not need Fetch routing for local smoke.
+   - **Orchestrator uses Fetch adapter:** set `FETCH_ENABLED=true` in the **backend** shell together with seeds and (if required) `AGENTVERSE_API_KEY`.
 
 ```bash
 export AGENTVERSE_API_KEY=your_agentverse_key
@@ -81,6 +92,7 @@ make run-fetch-agents
 ## Current Behavior
 
 - Sessions are stored in memory only.
+- Paused sell-listing reviews expire after `deadline_at` (15 minutes per pause window). Expiry runs on `GET /result`, `GET /stream`, `POST /sell/listing-decision`, and a background sweep every `SELL_REVIEW_CLEANUP_INTERVAL` seconds (default `60`).
 - Pipelines run in the background; Browser Use-capable agents attempt live browser execution first and fall back to deterministic local logic when the Browser Use runtime or warmed profiles are unavailable.
 - Each agent input is validated against a step-specific schema before the orchestrator calls that step.
 - Each agent output is validated against a step-specific schema before it is emitted to SSE or saved in `/result`.

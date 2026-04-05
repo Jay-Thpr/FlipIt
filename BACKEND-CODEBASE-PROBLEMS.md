@@ -2,127 +2,103 @@
 
 This is an operator-ready backlog of the remaining backend problems after the Fetch merge and Browser Use sell-review work.
 
-## P0 - Blockers
+## Implemented, not live-validated
 
-- [ ] Fix the Fetch BUY bridge so the search chain runs cleanly through all agents.
-  - Current issue: `run_fetch_query()` passes non-empty `previous_outputs` into search agents whose contracts still require empty `previous_outputs`.
-  - References:
-    - [backend/fetch_runtime.py](/Users/jt/Desktop/diamondhacks/backend/fetch_runtime.py#L220)
-    - [backend/schemas.py](/Users/jt/Desktop/diamondhacks/backend/schemas.py#L263)
-  - Impact:
-    - `ebay_search_agent`, `mercari_search_agent`, `offerup_search_agent`, `ranking_agent`, and `negotiation_agent` do not run cleanly through the Fetch adapter path.
+These have **automated tests** and run in CI; they still need **real marketplace / Agentverse** validation where noted.
 
-- [ ] Replace the heuristic vision parser with the planned image pipeline.
-  - Current issue: vision still infers from text and URLs instead of using real image understanding.
-  - References:
-    - [backend/agents/vision_agent.py](/Users/jt/Desktop/diamondhacks/backend/agents/vision_agent.py#L62)
-    - [PRD.md](/Users/jt/Desktop/diamondhacks/PRD.md#L137)
-  - Impact:
-    - No Gemini image understanding
-    - No clean-photo generation
-    - No real model or variant extraction
+- [x] **Sell listing review lifecycle** — pause at `ready_for_confirmation`, `confirm_submit`, `revise` (max 2 revisions), `abort`, expiry after `deadline_at`, revision window refresh after each successful revise. **Code:** `backend/orchestrator.py`. **Tests:** `tests/test_sell_listing_review_orchestration.py`, `tests/test_sell_listing_decision_endpoint.py`, `tests/test_sell_listing_review_result_contract.py`. **Live gap:** real Depop Browser Use submit / revise / abort.
+- [x] **Background expiry for abandoned paused reviews** — timer-driven sweep calls `expire_sell_listing_review_if_needed` (default interval `SELL_REVIEW_CLEANUP_INTERVAL` seconds). **Code:** `backend/main.py`, `backend/session.py`. **Tests:** `tests/test_sell_review_background_cleanup.py`.
+- [x] **Fetch runtime bridge** — SELL chain and BUY path with parallel search + no-results short-circuit (`backend/fetch_runtime.py`). **Tests:** `tests/test_fetch_runtime.py`, `tests/test_browser_use_fetch_compatibility.py`. **Live gap:** mailbox, ASI:One, discoverability.
+- [x] **Fetch agent manifest** — `GET /fetch-agents`. **Tests:** `tests/test_contracts_and_execution.py`.
 
-- [ ] Align the vision output schema with the fields downstream code already expects.
-  - Current issue: the orchestrator emits `model`, `clean_photo_url`, and `search_query`, but the vision schema does not define them.
-  - References:
-    - [backend/orchestrator.py](/Users/jt/Desktop/diamondhacks/backend/orchestrator.py#L348)
-    - [backend/schemas.py](/Users/jt/Desktop/diamondhacks/backend/schemas.py#L144)
+## P0 — Blockers (prioritized)
 
-- [ ] Make SELL Browser Use stop deterministically at the ready-to-submit checkpoint.
-  - Current issue: the review loop exists, but the browser task still depends on prompt wording instead of a deterministic stop action.
-  - References:
-    - [backend/agents/browser_use_marketplaces.py](/Users/jt/Desktop/diamondhacks/backend/agents/browser_use_marketplaces.py#L94)
-    - [backend/agents/browser_use_support.py](/Users/jt/Desktop/diamondhacks/backend/agents/browser_use_support.py#L143)
-    - [BROWSER-USE-GAPS.md](/Users/jt/Desktop/diamondhacks/BROWSER-USE-GAPS.md#L44)
+1. [ ] **Make SELL Browser Use stop deterministically at the ready-to-submit checkpoint.**
+   - Current issue: the review loop exists, but the browser task still depends on prompt wording instead of a deterministic stop action.
+   - References:
+     - [backend/agents/browser_use_marketplaces.py](backend/agents/browser_use_marketplaces.py)
+     - [backend/agents/browser_use_support.py](backend/agents/browser_use_support.py)
+     - [BROWSER-USE-GAPS.md](BROWSER-USE-GAPS.md)
 
-- [ ] Replace the placeholder screenshot artifact with real screenshot capture.
-  - Current issue: the code still uses `form_screenshot_url` rather than a real `form_screenshot_b64` artifact.
-  - References:
-    - [backend/schemas.py](/Users/jt/Desktop/diamondhacks/backend/schemas.py#L193)
-    - [backend/agents/browser_use_marketplaces.py](/Users/jt/Desktop/diamondhacks/backend/agents/browser_use_marketplaces.py#L27)
-    - [BROWSER-USE-GAPS.md](/Users/jt/Desktop/diamondhacks/BROWSER-USE-GAPS.md#L51)
+2. [ ] **Replace the placeholder screenshot artifact with real screenshot capture.**
+   - Current issue: the code still uses `form_screenshot_url` rather than a real captured artifact where needed.
+   - References:
+     - [backend/schemas.py](backend/schemas.py)
+     - [backend/agents/browser_use_marketplaces.py](backend/agents/browser_use_marketplaces.py)
+     - [BROWSER-USE-GAPS.md](BROWSER-USE-GAPS.md)
 
-## P1 - Product Gaps
+3. [ ] **Replace the heuristic vision parser with the planned image pipeline.**
+   - Current issue: vision still infers from text and URLs instead of using real image understanding.
+   - References:
+     - [backend/agents/vision_agent.py](backend/agents/vision_agent.py)
+     - [PRD.md](PRD.md)
+
+4. [ ] **Align the vision output schema with the fields downstream code already expects.**
+   - Current issue: the orchestrator may emit fields not defined on `VisionAnalysisOutput`.
+   - References:
+     - [backend/orchestrator.py](backend/orchestrator.py)
+     - [backend/schemas.py](backend/schemas.py)
+
+## P1 — Product Gaps
+
+- [x] **Background cleanup for abandoned paused SELL review sessions** — **Done:** lazy expiry on `/result`, `/stream`, `/sell/listing-decision`, plus periodic sweep in `backend/main.py`.
 
 - [ ] Reduce the amount of synthetic fallback data on the default success path.
   - Current issue: the happy path still relies heavily on fabricated or estimator-based results.
   - References:
-    - [backend/agents/search_support.py](/Users/jt/Desktop/diamondhacks/backend/agents/search_support.py#L125)
-    - [backend/agents/ebay_sold_comps_agent.py](/Users/jt/Desktop/diamondhacks/backend/agents/ebay_sold_comps_agent.py#L100)
-    - [backend/agents/pricing_agent.py](/Users/jt/Desktop/diamondhacks/backend/agents/pricing_agent.py#L72)
-    - [tests/test_pipelines.py](/Users/jt/Desktop/diamondhacks/tests/test_pipelines.py#L85)
-    - [tests/test_pipelines.py](/Users/jt/Desktop/diamondhacks/tests/test_pipelines.py#L164)
+    - [backend/agents/search_support.py](backend/agents/search_support.py)
+    - [backend/agents/ebay_sold_comps_agent.py](backend/agents/ebay_sold_comps_agent.py)
+    - [backend/agents/pricing_agent.py](backend/agents/pricing_agent.py)
+    - [tests/test_pipelines.py](tests/test_pipelines.py)
 
 - [ ] Make the search docs match the actual execution order.
   - Current issue: the code runs HTTP/API first, then Browser Use, then fallback, but some older docs still imply Browser Use-first behavior.
   - References:
-    - [backend/agents/depop_search_agent.py](/Users/jt/Desktop/diamondhacks/backend/agents/depop_search_agent.py#L28)
-    - [backend/agents/ebay_search_agent.py](/Users/jt/Desktop/diamondhacks/backend/agents/ebay_search_agent.py#L29)
-    - [backend/agents/mercari_search_agent.py](/Users/jt/Desktop/diamondhacks/backend/agents/mercari_search_agent.py#L29)
-    - [backend/README.md](/Users/jt/Desktop/diamondhacks/backend/README.md#L20)
+    - [backend/agents/depop_search_agent.py](backend/agents/depop_search_agent.py)
+    - [backend/README.md](backend/README.md)
 
 - [ ] Strengthen negotiation so it is not just a fixed template.
-  - Current issue: negotiation only targets a small set of listings and uses one message template.
   - References:
-    - [backend/agents/negotiation_agent.py](/Users/jt/Desktop/diamondhacks/backend/agents/negotiation_agent.py#L47)
-    - [backend/agents/negotiation_agent.py](/Users/jt/Desktop/diamondhacks/backend/agents/negotiation_agent.py#L145)
-    - [PRD.md](/Users/jt/Desktop/diamondhacks/PRD.md#L68)
+    - [backend/agents/negotiation_agent.py](backend/agents/negotiation_agent.py)
+    - [PRD.md](PRD.md)
 
 - [ ] Unify pricing/event contracts.
-  - Current issue: the orchestrator emits `median_price` from `validated_output.get("median_sold_price")`, but `PricingOutput` does not define `median_sold_price`.
+  - Current issue: the orchestrator emits `median_price` from `validated_output.get("median_sold_price")`, but `PricingOutput` may not define `median_sold_price`.
   - References:
-    - [backend/orchestrator.py](/Users/jt/Desktop/diamondhacks/backend/orchestrator.py#L365)
-    - [backend/schemas.py](/Users/jt/Desktop/diamondhacks/backend/schemas.py#L177)
+    - [backend/orchestrator.py](backend/orchestrator.py)
+    - [backend/schemas.py](backend/schemas.py)
 
-- [ ] Add background cleanup for abandoned paused SELL review sessions.
-  - Current issue: expired or over-limit review decisions now fail deterministically when a user responds, but there is still no timer-driven cleanup job for sessions that remain paused indefinitely with no follow-up request.
-  - References:
-    - [backend/orchestrator.py](/Users/jt/Desktop/diamondhacks/backend/orchestrator.py#L95)
-    - [backend/orchestrator.py](/Users/jt/Desktop/diamondhacks/backend/orchestrator.py#L685)
-    - [backend/main.py](/Users/jt/Desktop/diamondhacks/backend/main.py#L142)
-
-## P2 - Reliability Gaps
+## P2 — Reliability Gaps
 
 - [ ] Replace the placeholder local `/chat` surface with something Chat Protocol-capable.
-  - Current issue: the separate `uAgents` layer exists, but the local per-agent FastAPI surface is still placeholder-only.
-  - References:
-    - [backend/agents/base.py](/Users/jt/Desktop/diamondhacks/backend/agents/base.py#L82)
+  - Reference: [backend/agents/base.py](backend/agents/base.py)
 
 - [ ] Make the default SELL fallback path honor the review loop instead of bypassing it.
   - References:
-    - [backend/agents/depop_listing_agent.py](/Users/jt/Desktop/diamondhacks/backend/agents/depop_listing_agent.py#L89)
-    - [tests/test_pipelines.py](/Users/jt/Desktop/diamondhacks/tests/test_pipelines.py#L108)
+    - [backend/agents/depop_listing_agent.py](backend/agents/depop_listing_agent.py)
+    - [tests/test_pipelines.py](tests/test_pipelines.py)
 
 - [ ] Improve abort cleanup so failure state is explicit and not best-effort.
-  - References:
-    - [backend/orchestrator.py](/Users/jt/Desktop/diamondhacks/backend/orchestrator.py#L725)
+  - Reference: [backend/orchestrator.py](backend/orchestrator.py)
 
 - [ ] Make temporary-file cleanup for remote-image uploads deterministic.
-  - References:
-    - [backend/agents/depop_listing_agent.py](/Users/jt/Desktop/diamondhacks/backend/agents/depop_listing_agent.py#L234)
+  - Reference: [backend/agents/depop_listing_agent.py](backend/agents/depop_listing_agent.py)
 
-## P3 - Documentation Drift
+## P3 — Documentation Drift
 
 - [ ] Update `PRD.md` where it still describes ASI:One as the orchestrator instead of FastAPI plus the in-process orchestrator.
-  - Reference:
-    - [PRD.md](/Users/jt/Desktop/diamondhacks/PRD.md#L82)
 
-- [ ] Update `PRD.md` where it still describes BUY search as sequential instead of parallel.
-  - Reference:
-    - [PRD.md](/Users/jt/Desktop/diamondhacks/PRD.md#L109)
-    - [backend/orchestrator.py](/Users/jt/Desktop/diamondhacks/backend/orchestrator.py#L214)
+- [ ] Update `PRD.md` where it still describes BUY search as sequential instead of parallel (where applicable).
 
-- [ ] Replace old `listing_ready` language with the actual sell review terms.
-  - Current terms: `listing_review_required` and `POST /sell/listing-decision`.
+- [ ] Replace old `listing_ready` language with the actual sell review terms (`listing_review_required`, `POST /sell/listing-decision`).
 
 - [ ] Keep the legacy `draft_created` event noted as compatibility-only.
-  - Reference:
-    - [backend/agents/depop_listing_agent.py](/Users/jt/Desktop/diamondhacks/backend/agents/depop_listing_agent.py#L135)
 
 ## Verification Notes
 
-- The new test suites already cover Fetch builder/launcher/supervisor behavior and additional Browser Use sell-checkpoint behavior.
-- The remaining hard-to-automate gaps are still mostly:
-  - live Agentverse mailbox/discoverability validation
-  - live Browser Use marketplace execution on warmed real accounts
-  - deterministic browser-level checkpoint behavior that has not yet been implemented
+- **Automated:** `make check` — includes `tests/test_sell_listing_review_orchestration.py`, `tests/test_sell_listing_decision_endpoint.py`, `tests/test_sell_review_background_cleanup.py`, `tests/test_browser_use_fetch_compatibility.py`, `tests/test_contracts_and_execution.py` (fetch manifest), and expanded pipeline tests.
+- **Still manual / ops:** live Agentverse mailbox and discoverability; live Browser Use on warmed accounts; deterministic browser-level checkpoint (not yet implemented).
+
+## Note on Fetch BUY `previous_outputs`
+
+The earlier concern about non-empty `previous_outputs` for search agents is **addressed in the Fetch chat path**: `backend/fetch_runtime.py` runs the four search agents with `previous_outputs={}` and builds the dict for ranking/negotiation. Remaining Fetch work is mostly **live registration**, **chat parsing**, and **surfacing execution_mode** in responses — see [FETCH_INTEGRATION.md](FETCH_INTEGRATION.md).

@@ -10,19 +10,31 @@ The project is mobile-first. The mobile app remains the main product surface. Fe
 
 Use the Makefile targets for the supported runtime paths.
 
+### Process and port model
+
+| Process | Command | Python env | Ports |
+|---------|---------|------------|-------|
+| FastAPI backend | `make run` | `.venv` (from `make install`) | `8000` |
+| Per-agent `/task` apps (optional) | `make run-agents` | `.venv` | `9101-9110` |
+| Fetch `uAgents` | `make run-fetch-agents` | `.venv-fetch` (from `make venv-fetch`) | `9201-9210` |
+
+All three can run at once; port ranges do not overlap.
+
+### Two terminals: backend + Fetch
+
 1. Start the product backend:
 
 ```bash
 make run
 ```
 
-2. Start the Fetch agents when you want the Agentverse path active:
+2. In a **second** shell, start the Fetch agents when you want the Agentverse path active:
 
 ```bash
 make run-fetch-agents
 ```
 
-3. Keep the port map in mind:
+3. Ports (summary):
 
 - FastAPI backend: `8000`
 - Per-agent FastAPI apps: `9101-9110`
@@ -203,19 +215,50 @@ The Fetch `uAgents` runtime used here is not compatible with the local Python `3
 
 Use a Python `3.12` or `3.13` virtual environment for the Fetch agents.
 
-Current working Fetch env pattern:
+**Supported setup (matches the Makefile):**
 
 ```bash
-python3.12 -m venv .venv-fetch
-source .venv-fetch/bin/activate
-pip install -r requirements.txt
+make venv-fetch
 ```
+
+This creates `.venv-fetch` with `python3.12` (override with `FETCH_PYTHON=...`) and installs **`uagents`** and **`uagents-core`** only. `make run-fetch-agents` sets `PYTHONPATH` to the repo root so processes can import `backend.*`; the same machine should also have `make install` (`.venv`) for the main app and shared agent code paths.
+
+If a Fetch subprocess fails with `ImportError` for a transitive dependency, install that package into `.venv-fetch` (or align versions with `requirements.txt`) and document the one-off fix.
 
 Mailbox is now the default Fetch mode. If you explicitly want the older local-endpoint inspector mode, set:
 
 ```bash
 export FETCH_USE_LOCAL_ENDPOINT=true
 ```
+
+## Live validation with `FETCH_ENABLED=true`
+
+The mobile path does **not** require this. Use it when you want the FastAPI orchestrator to route steps through the Fetch adapter instead of the direct local registry.
+
+1. **Terminal A — backend:** `make install` once, then:
+
+   ```bash
+   export FETCH_ENABLED=true
+   export AGENTVERSE_API_KEY=...
+   export VISION_FETCH_AGENT_SEED=...   # and the other nine *_FETCH_AGENT_SEED vars
+   make run
+   ```
+
+2. **Terminal B — Fetch uAgents:**
+
+   ```bash
+   make run-fetch-agents
+   ```
+
+3. `curl -s "$APP_BASE_URL/health" | jq .` — expect `fetch_enabled: true` (if env is picked up by the process).
+
+4. `GET /fetch-agents` — expect ten agents, ports `9201`–`9210`.
+
+5. Smoke a search agent from the host (requires a running uAgent on that port), e.g. `python scripts/fetch_demo.py 9205 "Vintage Nike tee under $45"` using `.venv` for script dependencies.
+
+6. **Mailbox-backed Agentverse:** keep `FETCH_USE_LOCAL_ENDPOINT=false` (default).
+
+7. **Local inspector / debug:** `FETCH_USE_LOCAL_ENDPOINT=true` — not mailbox-backed; document when demoing.
 
 ## How Fetch And Browser Use Work Together
 
