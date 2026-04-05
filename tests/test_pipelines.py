@@ -109,8 +109,10 @@ def test_sell_pipeline_emits_expected_event_order_and_result(client: TestClient)
     assert [event["event_type"] for event in draft_events] == ["draft_created"]
     assert draft_events[0]["payload"]["data"]["platform"] == "depop"
     assert draft_events[0]["payload"]["data"]["draft_status"] == "fallback"
+    assert draft_events[0]["payload"]["data"]["ready_for_confirmation"] is False
     fallback_events = [event for event in events if event["event_type"] == "browser_use_fallback"]
     assert len(fallback_events) == 2
+    assert not any(event["event_type"] == "listing_review_required" for event in events)
     assert step_event_types(events) == [
         ("agent_started", "vision_analysis"),
         ("agent_completed", "vision_analysis"),
