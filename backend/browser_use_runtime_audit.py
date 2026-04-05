@@ -11,7 +11,7 @@ from backend.agents.browser_use_support import (
     get_browser_use_max_steps,
     import_browser_use_dependencies,
 )
-from backend.config import get_agent_execution_mode, get_agent_timeout_seconds
+from backend.config import get_agent_execution_mode, get_agent_timeout_seconds, get_gemini_api_key
 
 PROFILE_NAMES = ("depop", "ebay", "mercari", "offerup")
 REQUIRED_PLATFORM_PROFILES = PROFILE_NAMES
@@ -63,12 +63,16 @@ def audit_browser_use_runtime(*, require_live: bool = False) -> dict[str, Any]:
         )
     )
 
-    google_api_key = os.getenv("GOOGLE_API_KEY")
+    gemini_api_key = get_gemini_api_key()
     checks.append(
         _check(
             "google_api_key",
-            bool(google_api_key),
-            "GOOGLE_API_KEY is configured" if google_api_key else "GOOGLE_API_KEY is missing",
+            bool(gemini_api_key),
+            (
+                "GEMINI_API_KEY or GOOGLE_API_KEY is configured"
+                if gemini_api_key
+                else "GEMINI_API_KEY or GOOGLE_API_KEY is missing"
+            ),
             severity="error" if require_live else "warning",
         )
     )
@@ -186,8 +190,12 @@ def run_browser_use_runtime_audit(*, require_live: bool = False) -> dict[str, An
     checks.append(
         {
             "name": "google_api_key_configured",
-            "passed": bool(os.getenv("GOOGLE_API_KEY")),
-            "detail": "GOOGLE_API_KEY is configured" if os.getenv("GOOGLE_API_KEY") else "GOOGLE_API_KEY is missing",
+            "passed": bool(get_gemini_api_key()),
+            "detail": (
+                "GEMINI_API_KEY or GOOGLE_API_KEY is configured"
+                if get_gemini_api_key()
+                else "GEMINI_API_KEY or GOOGLE_API_KEY is missing"
+            ),
         }
     )
     checks.append(

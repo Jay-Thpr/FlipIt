@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, timedelta
 from typing import Iterable
 
 
@@ -54,6 +54,8 @@ POSTED_DAYS_AGO = {
     "mercari": (1, 3),
     "offerup": (4, 9),
 }
+
+SYNTHETIC_MARKET_REFERENCE_DATE = date(2026, 4, 4)
 
 
 def tokenize_query(query: str | None) -> list[str]:
@@ -115,8 +117,8 @@ def build_seller_score(platform: str, ordinal: int) -> int:
 
 def build_posted_at(platform: str, ordinal: int) -> str:
     day_offsets = POSTED_DAYS_AGO[platform]
-    posted_at = datetime.now(timezone.utc) - timedelta(days=day_offsets[ordinal - 1])
-    return posted_at.date().isoformat()
+    posted_at = SYNTHETIC_MARKET_REFERENCE_DATE - timedelta(days=day_offsets[ordinal - 1])
+    return posted_at.isoformat()
 
 
 def derive_base_price(query: str | None, budget: float | None, previous_prices: Iterable[float] = ()) -> float:

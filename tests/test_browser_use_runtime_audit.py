@@ -44,6 +44,7 @@ def test_runtime_audit_flags_missing_profiles_and_low_timeout(tmp_path: Path, mo
 
     monkeypatch.setenv("BROWSER_USE_PROFILE_ROOT", str(tmp_path))
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.setenv("INTERNAL_API_TOKEN", "secret")
     monkeypatch.setenv("AGENT_TIMEOUT_SECONDS", "12")
     monkeypatch.setenv("AGENT_EXECUTION_MODE", "local_http")
@@ -60,6 +61,26 @@ def test_runtime_audit_flags_missing_profiles_and_low_timeout(tmp_path: Path, mo
     assert checks["agent_timeout_sane"]["passed"] is False
     assert checks["execution_mode_sane"]["passed"] is False
     assert checks["forced_fallback_disabled_for_live_runs"]["passed"] is False
+
+
+def test_runtime_audit_accepts_gemini_api_key(tmp_path: Path, monkeypatch) -> None:
+    for platform in runtime_audit.REQUIRED_PLATFORM_PROFILES:
+        (tmp_path / platform).mkdir()
+
+    monkeypatch.setenv("BROWSER_USE_PROFILE_ROOT", str(tmp_path))
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    monkeypatch.setenv("INTERNAL_API_TOKEN", "secret")
+    monkeypatch.setenv("AGENT_TIMEOUT_SECONDS", "60")
+    monkeypatch.setenv("AGENT_EXECUTION_MODE", "local_functions")
+    monkeypatch.setenv("BROWSER_USE_FORCE_FALLBACK", "false")
+    monkeypatch.setattr(runtime_audit, "detect_chromium_installation", lambda search_roots=None: (True, "/tmp/chromium-1234"))
+
+    report = runtime_audit.run_browser_use_runtime_audit()
+
+    assert report["all_passed"] is True
+    checks = {check["name"]: check for check in report["checks"]}
+    assert checks["google_api_key_configured"]["passed"] is True
 
 
 def test_runtime_audit_main_returns_failure_code_when_checks_fail(monkeypatch) -> None:

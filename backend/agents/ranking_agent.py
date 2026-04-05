@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 from backend.agents.base import BaseAgent, build_agent_app
 from backend.schemas import AgentTaskRequest, RankingOutput
@@ -28,7 +28,7 @@ class RankingAgent(BaseAgent):
             output_model=RankingOutput,
         )
 
-    def score_listing(self, listing: dict[str, object], budget: float | None) -> float:
+    def score_listing(self, listing: dict[str, object], budget: float | None, *, reference_date: date) -> float:
         price = float(listing["price"])
         condition = str(listing["condition"])
         platform = str(listing["platform"])
@@ -41,7 +41,7 @@ class RankingAgent(BaseAgent):
             price_fit = max(0.0, 1 - abs(budget - price) / max(budget, 1.0))
 
         credibility = min(1.0, seller_score / 250.0)
-        days_old = max(0, (date.today() - date.fromisoformat(posted_at)).days)
+        days_old = max(0, (reference_date - date.fromisoformat(posted_at)).days)
         recency = max(0.0, 1 - (days_old / 14.0))
 
         score = (
@@ -53,6 +53,18 @@ class RankingAgent(BaseAgent):
         )
         return round(min(0.99, score), 2)
 
+    @staticmethod
+    def build_reference_date(candidates: list[dict[str, object]]) -> date:
+        posted_dates: list[date] = []
+        for listing in candidates:
+            try:
+                posted_dates.append(date.fromisoformat(str(listing.get("posted_at", ""))))
+            except ValueError:
+                continue
+        if not posted_dates:
+            return date(1970, 1, 2)
+        return max(posted_dates) + timedelta(days=1)
+
     async def build_output(self, request: AgentTaskRequest) -> dict:
         budget = request.input["original_input"].get("budget")
         previous_outputs = request.input["previous_outputs"]
@@ -61,10 +73,11 @@ class RankingAgent(BaseAgent):
             for step in ("depop_search", "ebay_search", "mercari_search", "offerup_search")
             for listing in previous_outputs[step]["results"]
         ]
+        reference_date = self.build_reference_date(candidates)
 
         ranked_candidates = []
         for listing in candidates:
-            score = self.score_listing(listing, budget)
+            score = self.score_listing(listing, budget, reference_date=reference_date)
             ranked_candidates.append(
                 {
                     "platform": listing["platform"],

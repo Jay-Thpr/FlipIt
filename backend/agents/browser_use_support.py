@@ -7,7 +7,7 @@ from typing import Any, TypeVar
 from pydantic import BaseModel
 from pydantic import ValidationError
 
-from backend.config import get_agent_timeout_seconds
+from backend.config import get_agent_timeout_seconds, get_gemini_api_key
 
 OutputModelT = TypeVar("OutputModelT", bound=BaseModel)
 
@@ -108,7 +108,7 @@ def import_browser_use_dependencies() -> tuple[Any, Any, Any, Any]:
 def browser_use_runtime_ready() -> bool:
     if should_force_browser_fallback():
         return False
-    if not os.getenv("GOOGLE_API_KEY"):
+    if not get_gemini_api_key():
         return False
     try:
         import_browser_use_dependencies()
@@ -138,8 +138,8 @@ async def run_structured_browser_task(
 ) -> dict[str, Any]:
     if should_force_browser_fallback():
         raise BrowserUseRuntimeUnavailable("Browser Use fallback forced by environment")
-    if not os.getenv("GOOGLE_API_KEY"):
-        raise BrowserUseRuntimeUnavailable("GOOGLE_API_KEY is not configured")
+    if not get_gemini_api_key():
+        raise BrowserUseRuntimeUnavailable("GEMINI_API_KEY or GOOGLE_API_KEY is not configured")
 
     try:
         Agent, BrowserSession, BrowserProfile, ChatGoogleGenerativeAI = import_browser_use_dependencies()

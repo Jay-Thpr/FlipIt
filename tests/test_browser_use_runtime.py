@@ -10,11 +10,20 @@ from backend.agents import browser_use_support
 
 def test_browser_use_runtime_ready_requires_key_and_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.setattr(browser_use_support, "import_browser_use_dependencies", lambda: (_ for _ in ()).throw(AssertionError))
     assert browser_use_support.browser_use_runtime_ready() is False
 
     monkeypatch.setenv("GOOGLE_API_KEY", "test-key")
     monkeypatch.setattr(browser_use_support, "import_browser_use_dependencies", lambda: (object(), object(), object(), object()))
+    assert browser_use_support.browser_use_runtime_ready() is True
+
+
+def test_browser_use_runtime_ready_accepts_gemini_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    monkeypatch.setattr(browser_use_support, "import_browser_use_dependencies", lambda: (object(), object(), object(), object()))
+
     assert browser_use_support.browser_use_runtime_ready() is True
 
 
@@ -112,8 +121,12 @@ async def test_run_structured_browser_task_fails_cleanly_without_key(monkeypatch
         title: str
 
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
 
-    with pytest.raises(browser_use_support.BrowserUseRuntimeUnavailable):
+    with pytest.raises(
+        browser_use_support.BrowserUseRuntimeUnavailable,
+        match="GEMINI_API_KEY or GOOGLE_API_KEY is not configured",
+    ):
         await browser_use_support.run_structured_browser_task(
             task="Navigate somewhere",
             output_model=DemoOutput,

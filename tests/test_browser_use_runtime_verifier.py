@@ -7,6 +7,7 @@ from backend import browser_use_runtime_audit
 
 def test_runtime_audit_warns_without_live_prerequisites(monkeypatch) -> None:
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.setenv("INTERNAL_API_TOKEN", "dev-internal-token")
     monkeypatch.setenv("BROWSER_USE_PROFILE_ROOT", "missing-profiles")
 
@@ -19,6 +20,7 @@ def test_runtime_audit_warns_without_live_prerequisites(monkeypatch) -> None:
 
 def test_runtime_audit_fails_when_live_mode_is_required(monkeypatch) -> None:
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.setenv("BROWSER_USE_PROFILE_ROOT", "missing-profiles")
 
     report = browser_use_runtime_audit.audit_browser_use_runtime(require_live=True)
@@ -30,6 +32,7 @@ def test_runtime_audit_fails_when_live_mode_is_required(monkeypatch) -> None:
 
 def test_runtime_audit_cli_outputs_json(capsys, monkeypatch) -> None:
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
 
     exit_code = browser_use_runtime_audit.main(["--json"])
     captured = capsys.readouterr()
@@ -41,6 +44,7 @@ def test_runtime_audit_cli_outputs_json(capsys, monkeypatch) -> None:
 
 def test_runtime_audit_cli_returns_failure_when_live_required(capsys, monkeypatch) -> None:
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.setenv("BROWSER_USE_PROFILE_ROOT", "missing-profiles")
 
     exit_code = browser_use_runtime_audit.main(["--require-live"])
