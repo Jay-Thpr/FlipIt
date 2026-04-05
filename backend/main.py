@@ -25,6 +25,14 @@ from backend.config import (
 from backend.fetch_runtime import list_fetch_agent_capabilities, list_fetch_agent_specs
 from backend.frontend_runs import build_run_payload, build_run_start_response
 from backend.orchestrator import get_pipeline_steps, run_pipeline
+from backend.run_queries import (
+    event_identity,
+    get_latest_persisted_run_for_item,
+    get_persisted_run_record,
+    iso_sort_key,
+    list_persisted_run_events,
+    normalize_persisted_run_payload,
+)
 from backend.schemas import (
     CorrectionRequest,
     InternalEventRequest,
@@ -65,14 +73,59 @@ async def _require_run_ownership(
     run_id: str,
     user: AuthenticatedUser = Depends(get_current_user),
 ) -> str:
-    """Verify the authenticated user owns the session identified by run_id."""
+    """Verify the authenticated user owns the run identified by run_id."""
     session = await session_manager.get_session(run_id)
-    if session is None:
+    if session is not None:
+        session_user_id = session.request.user_id or session.request.metadata.get("user_id")
+        if session_user_id != user.user_id:
+            raise HTTPException(status_code=403, detail="Forbidden")
+        return run_id
+
+    persisted_run = await get_persisted_run_record(run_id)
+    if persisted_run is None:
         raise HTTPException(status_code=404, detail="Run not found")
-    session_user_id = session.request.metadata.get("user_id")
-    if session_user_id != user.user_id:
+    if str(persisted_run.get("user_id")) != user.user_id:
         raise HTTPException(status_code=403, detail="Forbidden")
     return run_id
+
+
+async def _get_live_or_persisted_session_id(run_id: str) -> str | None:
+    session = await session_manager.get_session(run_id)
+    if session is not None:
+        return session.session_id
+    persisted_run = await get_persisted_run_record(run_id)
+    if persisted_run is None:
+        return None
+    return str(persisted_run.get("session_id") or "")
+
+
+async def _get_run_payload(run_id: str) -> dict | None:
+    persisted_run = await get_persisted_run_record(run_id)
+    session_id = run_id
+    if persisted_run is not None and persisted_run.get("session_id"):
+        session_id = str(persisted_run["session_id"])
+    session = await session_manager.get_session(session_id)
+    if session is None:
+        return normalize_persisted_run_payload(persisted_run) if persisted_run is not None else None
+    return build_run_payload(session)
+
+
+async def _get_latest_item_run_payload(item_id: str, *, user_id: str) -> dict | None:
+    persisted_run = await get_latest_persisted_run_for_item(item_id, user_id=user_id)
+    live_session = await session_manager.get_latest_session_for_item(item_id)
+
+    if persisted_run is None and live_session is None:
+        return None
+    if persisted_run is None:
+        return build_run_payload(live_session)
+    if live_session is None:
+        return normalize_persisted_run_payload(persisted_run)
+
+    persisted_updated_at = iso_sort_key(persisted_run.get("updated_at") or persisted_run.get("created_at"))
+    live_updated_at = iso_sort_key(live_session.updated_at or live_session.created_at)
+    if live_updated_at >= persisted_updated_at:
+        return build_run_payload(live_session)
+    return normalize_persisted_run_payload(persisted_run)
 
 
 SELL_REVIEW_CLEANUP_INTERVAL_SECONDS = int(os.environ.get("SELL_REVIEW_CLEANUP_INTERVAL", "60"))
@@ -322,18 +375,27 @@ async def get_run(
     run_id: str,
     _owned: str = Depends(_require_run_ownership),
 ) -> dict:
-    return await get_result(run_id)
+    from backend.orchestrator import expire_sell_listing_review_if_needed
+
+    live_or_persisted_session_id = await _get_live_or_persisted_session_id(run_id)
+    if live_or_persisted_session_id is not None:
+        await expire_sell_listing_review_if_needed(live_or_persisted_session_id)
+    payload = await _get_run_payload(run_id)
+    if payload is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return payload
 
 
 @app.get("/items/{item_id}/runs/latest")
 async def get_latest_item_run(
     item_id: str,
+    user: AuthenticatedUser = Depends(get_current_user),
     _owned: str = Depends(_require_item_ownership),
 ) -> dict:
-    session = await session_manager.get_latest_session_for_item(item_id)
-    if session is None:
+    payload = await _get_latest_item_run_payload(item_id, user_id=user.user_id)
+    if payload is None:
         raise HTTPException(status_code=404, detail="Run not found for item")
-    return build_run_payload(session)
+    return payload
 
 
 @app.post("/internal/event/{session_id}")
@@ -375,7 +437,10 @@ async def stream_run(
     run_id: str,
     _owned: str = Depends(_require_run_ownership),
 ) -> StreamingResponse:
-    return await stream(run_id)
+    live_or_persisted_session_id = await _get_live_or_persisted_session_id(run_id)
+    if live_or_persisted_session_id is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return StreamingResponse(iter_run_events(run_id), media_type="text/event-stream")
 
 
 @app.post("/runs/{run_id}/sell/correct")
@@ -426,6 +491,60 @@ async def iter_session_events(session_id: str):
                 yield ": ping\n\n"
     finally:
         await session_manager.unsubscribe(session_id, queue)
+
+
+async def iter_run_events(run_id: str):
+    from backend.orchestrator import expire_sell_listing_review_if_needed
+
+    persisted_run = await get_persisted_run_record(run_id)
+    session_id = str(persisted_run.get("session_id")) if persisted_run is not None and persisted_run.get("session_id") else run_id
+    live_session = await session_manager.get_session(session_id)
+    queue = None
+    emitted: set[tuple[str, str, str | None, str, str]] = set()
+
+    if live_session is not None:
+        queue = await session_manager.subscribe(session_id)
+
+    try:
+        pipeline = (
+            str(persisted_run.get("pipeline"))
+            if persisted_run is not None and persisted_run.get("pipeline") is not None
+            else (live_session.pipeline if live_session is not None else None)
+        )
+        for event in await list_persisted_run_events(run_id, session_id=session_id, pipeline=pipeline):
+            emitted.add(event_identity(event))
+            yield format_sse(event)
+            if event.event_type in {"pipeline_complete", "pipeline_failed"}:
+                return
+
+        if live_session is None:
+            return
+
+        for event in live_session.events:
+            identity = event_identity(event)
+            if identity in emitted:
+                continue
+            emitted.add(identity)
+            yield format_sse(event)
+            if event.event_type in {"pipeline_complete", "pipeline_failed"}:
+                return
+
+        while True:
+            try:
+                await expire_sell_listing_review_if_needed(session_id)
+                event = await asyncio.wait_for(queue.get(), timeout=KEEPALIVE_INTERVAL)
+                identity = event_identity(event)
+                if identity in emitted:
+                    continue
+                emitted.add(identity)
+                yield format_sse(event)
+                if event.event_type in {"pipeline_complete", "pipeline_failed"}:
+                    break
+            except asyncio.TimeoutError:
+                yield ": ping\n\n"
+    finally:
+        if queue is not None:
+            await session_manager.unsubscribe(session_id, queue)
 
 
 def format_sse(event: SessionEvent) -> str:
