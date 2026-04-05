@@ -42,6 +42,12 @@ EBAY_CERT_ID = os.getenv("EBAY_CERT_ID", "")
 FETCH_ENABLED = os.getenv("FETCH_ENABLED", "").lower() in ("1", "true", "yes")
 AGENTVERSE_API_KEY = os.getenv("AGENTVERSE_API_KEY", "")
 
+# Supabase
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
+SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET", "")
+SUPABASE_JWT_AUDIENCE = os.getenv("SUPABASE_JWT_AUDIENCE", "authenticated")
+
 
 def get_agent_execution_mode() -> str:
     return os.getenv("AGENT_EXECUTION_MODE", AGENT_EXECUTION_MODE)
@@ -77,6 +83,14 @@ def assert_fetch_agent_ports_do_not_overlap(fetch_ports: Iterable[int] | None = 
     if overlaps:
         overlap_list = ", ".join(str(port) for port in overlaps)
         raise RuntimeError(f"Fetch agent ports overlap with FastAPI agent ports: {overlap_list}")
+
+
+def is_supabase_configured() -> bool:
+    """True when both SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are set."""
+    return bool(
+        os.getenv("SUPABASE_URL", SUPABASE_URL).strip()
+        and os.getenv("SUPABASE_SERVICE_ROLE_KEY", SUPABASE_SERVICE_ROLE_KEY).strip()
+    )
 
 
 def fetch_integration_flags() -> dict[str, bool]:
