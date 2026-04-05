@@ -61,3 +61,23 @@ async def test_sell_listing_result_endpoint_preserves_paused_review_state() -> N
     }
     assert payload["result"]["outputs"]["depop_listing"]["ready_for_confirmation"] is True
     assert payload["result"]["outputs"]["depop_listing"]["listing_status"] == "ready_for_confirmation"
+
+
+@pytest.mark.asyncio
+async def test_session_manager_can_clear_sell_listing_review_state() -> None:
+    await session_manager.reset()
+    session = await session_manager.create_session(
+        session_id="sell-review-clear-session",
+        pipeline="sell",
+        request=PipelineStartRequest(input={"image_urls": [], "notes": "Test"}),
+    )
+
+    await session_manager.update_sell_listing_review(
+        session.session_id,
+        SellListingReviewState(state="ready_for_confirmation", revision_count=1),
+    )
+    await session_manager.clear_sell_listing_review(session.session_id)
+
+    updated = await session_manager.get_session(session.session_id)
+    assert updated is not None
+    assert updated.sell_listing_review is None

@@ -145,6 +145,34 @@ def test_classify_browser_use_failure_returns_stable_categories() -> None:
     assert browser_use_support.classify_browser_use_failure(RuntimeError("profile login expired")) == "profile_missing"
     assert browser_use_support.classify_browser_use_failure(RuntimeError("page navigation timeout")) == "browser_error"
     assert browser_use_support.classify_browser_use_failure(RuntimeError("sold page changed")) == "browser_error"
+    assert (
+        browser_use_support.classify_browser_use_failure(
+            RuntimeError("dom changed"),
+            operation="prepare_listing_for_review",
+        )
+        == "review_checkpoint_failed"
+    )
+    assert (
+        browser_use_support.classify_browser_use_failure(
+            RuntimeError("dom changed"),
+            operation="apply_listing_revision",
+        )
+        == "revision_failed"
+    )
+    assert (
+        browser_use_support.classify_browser_use_failure(
+            RuntimeError("dom changed"),
+            operation="submit_prepared_listing",
+        )
+        == "submit_failed"
+    )
+    assert (
+        browser_use_support.classify_browser_use_failure(
+            RuntimeError("dom changed"),
+            operation="abort_prepared_listing",
+        )
+        == "abort_failed"
+    )
 
 
 def test_build_browser_use_metadata_returns_expected_shape() -> None:

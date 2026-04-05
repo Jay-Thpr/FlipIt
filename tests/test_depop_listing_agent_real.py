@@ -140,13 +140,20 @@ def test_depop_listing_agent_records_browser_use_confirmation(monkeypatch) -> No
     assert result["output"]["execution_mode"] == "browser_use"
     assert result["output"]["browser_use_error"] is None
     assert result["output"]["form_screenshot_url"] == "artifact://depop-form-preview"
+    assert result["output"]["listing_preview"] == {
+        "title": "Patagonia hoodie - Excellent Condition",
+        "description": result["output"]["description"],
+        "price": 78.43,
+        "condition": "excellent",
+        "clean_photo_url": None,
+    }
     assert result["output"]["browser_use"] == {
         "mode": "browser_use",
         "attempted_live_run": True,
         "profile_name": "depop",
         "profile_available": True,
         "error_category": None,
-        "detail": "Live Depop listing was prepared through Browser Use and paused for user confirmation.",
+        "detail": "Live Depop listing reached the review checkpoint through Browser Use and is waiting for user confirmation.",
     }
 
 
@@ -209,14 +216,21 @@ def test_depop_listing_agent_uses_fallback_copy_for_sparse_input(monkeypatch) ->
     assert result["output"]["summary"] == "Prepared Depop listing for Item at $32.0"
     assert result["output"]["draft_status"] == "fallback"
     assert result["output"]["execution_mode"] == "fallback"
-    assert result["output"]["browser_use_error"] == "browser_error"
+    assert result["output"]["browser_use_error"] == "review_checkpoint_failed"
     assert result["output"]["form_screenshot_url"] is None
+    assert result["output"]["listing_preview"] == {
+        "title": "Item - Good Condition",
+        "description": result["output"]["description"],
+        "price": 32.0,
+        "condition": "good",
+        "clean_photo_url": None,
+    }
     assert result["output"]["browser_use"] == {
         "mode": "fallback",
         "attempted_live_run": True,
         "profile_name": "depop",
         "profile_available": True,
-        "error_category": "browser_error",
+        "error_category": "review_checkpoint_failed",
         "detail": "Used deterministic fallback listing metadata.",
     }
 
@@ -259,6 +273,7 @@ def test_sell_pipeline_uses_real_depop_listing_output(client: TestClient, monkey
     assert listing["execution_mode"] == "browser_use"
     assert listing["browser_use_error"] is None
     assert listing["form_screenshot_url"] == "artifact://sell-pipeline-preview"
+    assert listing["listing_preview"]["condition"] == "excellent"
     assert listing["browser_use"]["mode"] == "browser_use"
 
 

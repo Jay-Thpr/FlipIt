@@ -186,6 +186,8 @@ class DepopListingPreview(BaseModel):
     title: str
     price: float
     description: str
+    condition: str
+    clean_photo_url: str | None = None
 
 
 class DepopListingOutput(AgentOutputBase):
@@ -196,6 +198,7 @@ class DepopListingOutput(AgentOutputBase):
     listing_status: str | None = None
     ready_for_confirmation: bool = False
     draft_status: str | None = None
+    draft_url: str | None = None
     form_screenshot_url: str | None = None
     listing_preview: DepopListingPreview | None = None
     execution_mode: Literal["browser_use", "httpx", "fallback"] = "fallback"

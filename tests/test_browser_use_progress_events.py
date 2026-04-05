@@ -175,6 +175,7 @@ def test_sell_pipeline_emits_draft_created_event_with_live_metadata(client: Test
                 "listing_status": "ready_for_confirmation",
                 "ready_for_confirmation": True,
                 "draft_status": "ready",
+                "draft_url": None,
                 "form_screenshot_url": "artifact://depop-form-preview",
                 "source": "browser_use",
             },
@@ -183,6 +184,9 @@ def test_sell_pipeline_emits_draft_created_event_with_live_metadata(client: Test
     ]
     review_events = [event for event in result["events"] if event["event_type"] == "listing_review_required"]
     assert len(review_events) == 1
+    assert review_events[0]["data"]["allowed_decisions"] == ["confirm_submit", "revise", "abort"]
+    assert review_events[0]["data"]["review_state"]["state"] == "ready_for_confirmation"
+    assert review_events[0]["data"]["title"] == "Patagonia hoodie - Excellent Condition"
     assert review_events[0]["data"]["listing_status"] == "ready_for_confirmation"
     assert review_events[0]["data"]["ready_for_confirmation"] is True
     assert review_events[0]["data"]["output"]["listing_status"] == "ready_for_confirmation"
@@ -243,12 +247,15 @@ def test_sell_pipeline_emits_review_confirmation_events(client: TestClient, monk
 
     assert first_index("listing_review_required") < first_index("listing_decision_received")
     assert first_index("listing_decision_received") < first_index("pipeline_resumed")
-    assert first_index("pipeline_resumed") < first_index("listing_submit_requested")
+    assert first_index("pipeline_resumed") < first_index("listing_submission_approved")
+    assert first_index("listing_submission_approved") < first_index("listing_submit_requested")
     assert first_index("listing_submit_requested") < first_index("listing_submitted")
     assert event_types[-1] == "pipeline_complete"
 
     review_requested = next(event for event in completed["events"] if event["event_type"] == "listing_review_required")
+    approved = next(event for event in completed["events"] if event["event_type"] == "listing_submission_approved")
     submitted = next(event for event in completed["events"] if event["event_type"] == "listing_submitted")
+    assert approved["data"]["review_state"]["state"] == "submitting"
     assert review_requested["data"]["listing_status"] == "ready_for_confirmation"
     assert review_requested["data"]["ready_for_confirmation"] is True
     assert review_requested["data"]["output"]["listing_status"] == "ready_for_confirmation"
@@ -328,6 +335,8 @@ def test_sell_pipeline_emits_revision_events_and_repauses(client: TestClient, mo
     assert revision_applied["data"]["revision_count"] == 1
     assert revision_applied["data"]["output"]["listing_status"] == "ready_for_confirmation"
     assert revision_applied["data"]["output"]["ready_for_confirmation"] is True
+    assert review_requested["data"]["review_state"]["state"] == "ready_for_confirmation"
+    assert review_requested["data"]["allowed_decisions"] == ["confirm_submit", "revise", "abort"]
     assert review_requested["data"]["output"]["form_screenshot_url"] == "artifact://depop-form-revised"
     assert review_requested["data"]["ready_for_confirmation"] is True
 

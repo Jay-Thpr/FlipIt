@@ -4,7 +4,7 @@ import asyncio
 from collections import defaultdict
 from datetime import datetime, timezone
 
-from backend.schemas import PipelineStartRequest, SessionEvent, SessionState
+from backend.schemas import PipelineStartRequest, SellListingReviewState, SessionEvent, SessionState
 
 
 def utc_now_iso() -> str:
@@ -51,6 +51,22 @@ class SessionManager:
             if error is not None:
                 session.error = error
             return session
+
+    async def update_sell_listing_review(
+        self,
+        session_id: str,
+        review_state: SellListingReviewState | None,
+    ) -> SessionState | None:
+        async with self._lock:
+            session = self._sessions.get(session_id)
+            if session is None:
+                return None
+            session.sell_listing_review = review_state
+            session.updated_at = utc_now_iso()
+            return session
+
+    async def clear_sell_listing_review(self, session_id: str) -> SessionState | None:
+        return await self.update_sell_listing_review(session_id, None)
 
     async def append_event(self, event: SessionEvent) -> None:
         async with self._lock:

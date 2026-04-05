@@ -137,14 +137,14 @@ async def test_handle_sell_listing_decision_confirm_submits_listing(monkeypatch:
     updated = await session_manager.get_session(session.session_id)
     assert updated is not None
     assert updated.status == "completed"
-    assert updated.sell_listing_review is not None
-    assert updated.sell_listing_review.state == "submitted"
+    assert updated.sell_listing_review is None
     depop_listing = updated.result["outputs"]["depop_listing"]
     assert depop_listing["listing_status"] == "submitted"
     assert depop_listing["ready_for_confirmation"] is False
-    assert [event.event_type for event in updated.events][-5:] == [
+    assert [event.event_type for event in updated.events][-6:] == [
         "listing_decision_received",
         "pipeline_resumed",
+        "listing_submission_approved",
         "listing_submit_requested",
         "listing_submitted",
         "pipeline_complete",
@@ -240,13 +240,13 @@ async def test_handle_sell_listing_decision_abort_completes_session(monkeypatch:
     assert updated is not None
     assert updated.status == "completed"
     assert updated.error is None
-    assert updated.sell_listing_review is not None
-    assert updated.sell_listing_review.state == "aborted"
+    assert updated.sell_listing_review is None
     depop_listing = updated.result["outputs"]["depop_listing"]
     assert depop_listing["listing_status"] == "aborted"
     assert depop_listing["ready_for_confirmation"] is False
-    assert [event.event_type for event in updated.events][-4:] == [
+    assert [event.event_type for event in updated.events][-5:] == [
         "listing_decision_received",
+        "listing_submission_aborted",
         "listing_abort_requested",
         "listing_aborted",
         "pipeline_complete",

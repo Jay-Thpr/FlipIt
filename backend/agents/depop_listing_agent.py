@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import tempfile
 from pathlib import Path
+from urllib.parse import urlparse
 
+import httpx
 from backend.agents.base import BaseAgent, build_agent_app
 from backend.agents.browser_use_events import emit_browser_use_event
 from backend.agents.browser_use_marketplaces import (
@@ -94,10 +97,13 @@ class DepopListingAgent(BaseAgent):
             "listing_status": "fallback",
             "ready_for_confirmation": False,
             "draft_status": "fallback",
+            "draft_url": None,
             "listing_preview": {
                 "title": title,
                 "description": description,
                 "price": suggested_price,
+                "condition": condition,
+                "clean_photo_url": vision_analysis.get("clean_photo_url"),
             },
             "execution_mode": "fallback",
             "browser_use_error": browser_use_error,
@@ -111,6 +117,7 @@ class DepopListingAgent(BaseAgent):
             output["listing_status"] = browser_use_result.get("listing_status") or "ready_for_confirmation"
             output["ready_for_confirmation"] = bool(browser_use_result.get("ready_for_confirmation", True))
             output["draft_status"] = browser_use_result.get("draft_status") or "ready"
+            output["draft_url"] = browser_use_result.get("draft_url")
             output["form_screenshot_url"] = browser_use_result.get("form_screenshot_url")
             output["execution_mode"] = "browser_use"
         elif browser_use_error is not None:
@@ -139,6 +146,7 @@ class DepopListingAgent(BaseAgent):
                 "listing_status": output["listing_status"],
                 "ready_for_confirmation": output["ready_for_confirmation"],
                 "draft_status": output["draft_status"],
+                "draft_url": output.get("draft_url"),
                 "form_screenshot_url": output.get("form_screenshot_url"),
                 "source": output["execution_mode"],
             },
@@ -154,7 +162,7 @@ class DepopListingAgent(BaseAgent):
         category_path: str,
         image_urls: list[str],
     ) -> tuple[dict[str, str | bool | None] | None, str | None, bool]:
-        image_path = self.get_local_image_path(image_urls)
+        image_path = await self.resolve_image_to_local_path(image_urls)
         task = build_depop_listing_prepare_task(
             title=title,
             description=description,
@@ -198,6 +206,7 @@ class DepopListingAgent(BaseAgent):
                 await run_structured_browser_task(
                     task=task,
                     output_model=BrowserUseListingCheckpointResult,
+                    operation_name=self._infer_listing_operation(task),
                     allowed_domains=self.ALLOWED_DOMAINS,
                     user_data_dir=str(profile_path),
                     keep_alive=True,
@@ -208,16 +217,42 @@ class DepopListingAgent(BaseAgent):
                 True,
             )
         except (BrowserUseRuntimeUnavailable, Exception) as exc:
-            return None, classify_browser_use_failure(exc), True
+            return None, classify_browser_use_failure(exc, operation=self._infer_listing_operation(task)), True
 
-    def get_local_image_path(self, image_urls: list[str]) -> str | None:
+    async def resolve_image_to_local_path(self, image_urls: list[str]) -> str | None:
         for candidate in image_urls:
             if candidate.startswith(("http://", "https://")):
+                downloaded = await self.download_remote_image(candidate)
+                if downloaded is not None:
+                    return downloaded
                 continue
             path = Path(candidate)
             if path.exists():
                 return str(path.resolve())
         return None
+
+    async def download_remote_image(self, image_url: str) -> str | None:
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(image_url, timeout=10.0)
+                response.raise_for_status()
+        except Exception:
+            return None
+
+        suffix = Path(urlparse(image_url).path).suffix or ".jpg"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+            temp_file.write(response.content)
+            return temp_file.name
+
+    def _infer_listing_operation(self, task: str) -> str:
+        lowered = task.lower()
+        if "apply these revision instructions" in lowered:
+            return "apply_listing_revision"
+        if "verify the listing is fully populated, then perform the final publish or submit action" in lowered:
+            return "submit_prepared_listing"
+        if "discard, or otherwise abandon the draft" in lowered:
+            return "abort_prepared_listing"
+        return "prepare_listing_for_review"
 
     def build_runtime_metadata(
         self,
@@ -232,7 +267,7 @@ class DepopListingAgent(BaseAgent):
                 attempted_live_run=True,
                 profile_name="depop",
                 profile_available=True,
-                detail="Live Depop listing was prepared through Browser Use and paused for user confirmation.",
+                detail="Live Depop listing reached the review checkpoint through Browser Use and is waiting for user confirmation.",
             )
         if browser_use_error == "profile_missing" and not profile_available:
             return build_browser_use_metadata(

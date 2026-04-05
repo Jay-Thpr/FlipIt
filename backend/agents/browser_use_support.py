@@ -20,7 +20,7 @@ class BrowserUseTaskExecutionError(RuntimeError):
     pass
 
 
-def classify_browser_use_failure(exc: Exception) -> str:
+def classify_browser_use_failure(exc: Exception, *, operation: str | None = None) -> str:
     if isinstance(exc, BrowserUseRuntimeUnavailable):
         return "runtime_unavailable"
     if isinstance(exc, (BrowserUseTaskExecutionError, ValidationError, ValueError)):
@@ -29,6 +29,20 @@ def classify_browser_use_failure(exc: Exception) -> str:
     message = str(exc).lower()
     if "profile" in message:
         return "profile_missing"
+    if "revision" in message:
+        return "revision_failed"
+    if "submit" in message or "publish" in message:
+        return "submit_failed"
+    if "abort" in message or "discard" in message or "close" in message:
+        return "abort_failed"
+    if operation == "prepare_listing_for_review":
+        return "review_checkpoint_failed"
+    if operation == "apply_listing_revision":
+        return "revision_failed"
+    if operation == "submit_prepared_listing":
+        return "submit_failed"
+    if operation == "abort_prepared_listing":
+        return "abort_failed"
     return "browser_error"
 
 
@@ -130,6 +144,7 @@ async def run_structured_browser_task(
     *,
     task: str,
     output_model: type[OutputModelT],
+    operation_name: str | None = None,
     allowed_domains: list[str] | None = None,
     user_data_dir: str | None = None,
     keep_alive: bool = False,
@@ -168,7 +183,8 @@ async def run_structured_browser_task(
         history = await agent.run()
         result = history.final_result(output_model)
         if result is None:
-            raise BrowserUseTaskExecutionError("Browser Use returned no structured result")
+            operation_label = operation_name or "browser task"
+            raise BrowserUseTaskExecutionError(f"Browser Use returned no structured result for {operation_label}")
         if isinstance(result, BaseModel):
             return result.model_dump()
         return output_model.model_validate(result).model_dump()

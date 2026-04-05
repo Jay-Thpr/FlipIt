@@ -28,6 +28,7 @@ class BrowserUseListingCheckpointResult(BaseModel):
     listing_status: str
     ready_for_confirmation: bool = False
     draft_status: str | None = None
+    draft_url: str | None = None
     form_screenshot_url: str | None = None
 
 
@@ -118,7 +119,10 @@ Return only JSON matching the schema with:
 - listing_status set to "ready_for_confirmation" if the form is populated and ready for final review
 - ready_for_confirmation set to true when the form is populated and waiting on user approval
 - draft_status set to "ready" if the form is populated
+- draft_url set to the in-progress draft URL if the page exposes one, otherwise null
 - form_screenshot_url as a descriptive artifact string if a screenshot URL/path is available, otherwise null
+Treat the "ready_for_confirmation" state as a deterministic review checkpoint.
+Never click the final publish or submit button during this prepare phase.
 """
 
 
@@ -172,7 +176,9 @@ Return only JSON matching the schema with:
 - listing_status set to "ready_for_confirmation" if the revised form is ready for final review
 - ready_for_confirmation set to true when the revised form is populated and waiting on user approval
 - draft_status set to "ready" if the form remains populated
+- draft_url set to the in-progress draft URL if the page exposes one, otherwise null
 - form_screenshot_url as a descriptive artifact string if a screenshot URL/path is available, otherwise null
+Treat the end state as the same deterministic review checkpoint and do not publish the listing.
 """
 
 
@@ -187,6 +193,7 @@ Return only JSON matching the schema with:
 - listing_status set to "submitted" if the listing was published successfully
 - ready_for_confirmation set to false
 - draft_status set to "submitted"
+- draft_url set to null unless the marketplace exposes a stable submitted listing URL in the same flow
 - form_screenshot_url as a descriptive artifact string if a confirmation artifact URL/path is available, otherwise null
 """
 
@@ -202,6 +209,7 @@ Return only JSON matching the schema with:
 - listing_status set to "aborted" if the draft was abandoned or the browser was left without publishing
 - ready_for_confirmation set to false
 - draft_status set to "aborted"
+- draft_url set to null after the draft is abandoned
 - form_screenshot_url as a descriptive artifact string if a confirmation artifact URL/path is available, otherwise null
 """
 

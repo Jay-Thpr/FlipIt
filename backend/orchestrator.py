@@ -175,10 +175,11 @@ async def pause_sell_listing_for_review(session_id: str, listing_output: dict[st
 
     outputs = deepcopy(session.result.get("outputs", {})) if session.result else {}
     outputs["depop_listing"] = listing_output
-    session.sell_listing_review = SellListingReviewState(
+    review_state = SellListingReviewState(
         state="ready_for_confirmation",
         paused_at=utc_now_iso(),
     )
+    await session_manager.update_sell_listing_review(session_id, review_state)
     await session_manager.update_status(
         session_id,
         status="paused",
@@ -192,7 +193,20 @@ async def pause_sell_listing_for_review(session_id: str, listing_output: dict[st
         step="depop_listing",
         data={
             "message": "Review the prepared listing before final submission.",
-            "listing_output": listing_output,
+            "platform": "depop",
+            "allowed_decisions": ["confirm_submit", "revise", "abort"],
+            "review_state": review_state.model_dump(),
+            "title": listing_output.get("title"),
+            "description": listing_output.get("description"),
+            "suggested_price": listing_output.get("suggested_price"),
+            "category_path": listing_output.get("category_path"),
+            "listing_status": listing_output.get("listing_status"),
+            "ready_for_confirmation": listing_output.get("ready_for_confirmation"),
+            "condition": listing_output.get("listing_preview", {}).get("condition")
+            if isinstance(listing_output.get("listing_preview"), dict)
+            else None,
+            "form_screenshot_url": listing_output.get("form_screenshot_url"),
+            "output": listing_output,
         },
     )
 
@@ -331,6 +345,38 @@ async def run_pipeline(session_id: str, pipeline: str, request: PipelineStartReq
                 },
             )
 
+            if pipeline == "sell" and step_name == "vision_analysis":
+                await publish(
+                    session_id,
+                    "vision_result",
+                    pipeline="sell",
+                    step=step_name,
+                    data={
+                        "brand": validated_output.get("brand"),
+                        "item_name": validated_output.get("detected_item"),
+                        "model": validated_output.get("model"),
+                        "condition": validated_output.get("condition"),
+                        "confidence": validated_output.get("confidence"),
+                        "clean_photo_url": validated_output.get("clean_photo_url"),
+                        "search_query": validated_output.get("search_query"),
+                    },
+                )
+
+            if pipeline == "sell" and step_name == "pricing":
+                await publish(
+                    session_id,
+                    "pricing_result",
+                    pipeline="sell",
+                    step=step_name,
+                    data={
+                        "recommended_price": validated_output.get("recommended_list_price"),
+                        "profit_margin": validated_output.get("expected_profit"),
+                        "median_price": validated_output.get("median_sold_price"),
+                        "trend": validated_output.get("trend"),
+                        "velocity": validated_output.get("velocity"),
+                    },
+                )
+
             # Check for vision_agent low confidence pause condition
             if pipeline == "sell" and step_name == "vision_analysis":
                 confidence_score = validated_output.get("confidence", 1.0)
@@ -356,9 +402,7 @@ async def run_pipeline(session_id: str, pipeline: str, request: PipelineStartReq
                     state="ready_for_confirmation",
                     paused_at=utc_now_iso(),
                 )
-                session = await session_manager.get_session(session_id)
-                if session is not None:
-                    session.sell_listing_review = review_state
+                await session_manager.update_sell_listing_review(session_id, review_state)
                 await session_manager.update_status(session_id, status="paused", result=partial_result)
                 await publish(
                     session_id,
@@ -367,8 +411,18 @@ async def run_pipeline(session_id: str, pipeline: str, request: PipelineStartReq
                     step="depop_listing",
                     data={
                         "platform": "depop",
+                        "allowed_decisions": ["confirm_submit", "revise", "abort"],
+                        "review_state": review_state.model_dump(),
+                        "title": validated_output.get("title"),
+                        "description": validated_output.get("description"),
+                        "suggested_price": validated_output.get("suggested_price"),
+                        "category_path": validated_output.get("category_path"),
                         "listing_status": validated_output.get("listing_status") or "ready_for_confirmation",
                         "ready_for_confirmation": True,
+                        "condition": validated_output.get("listing_preview", {}).get("condition")
+                        if isinstance(validated_output.get("listing_preview"), dict)
+                        else None,
+                        "form_screenshot_url": validated_output.get("form_screenshot_url"),
                         "output": validated_output,
                     },
                 )
@@ -503,7 +557,8 @@ async def handle_sell_listing_decision(
         review.latest_decision = "confirm_submit"
         review.revision_instructions = None
         _update_sell_listing_output(outputs, listing_status="submit_requested", ready_for_confirmation=False)
-        session.sell_listing_review = SellListingReviewState.model_validate(review)
+        review_state = SellListingReviewState.model_validate(review)
+        await session_manager.update_sell_listing_review(session_id, review_state)
         session.error = None
         await session_manager.update_status(session_id, status="running", result=partial_result)
         await publish(
@@ -515,6 +570,13 @@ async def handle_sell_listing_decision(
         )
         await publish(
             session_id,
+            "listing_submission_approved",
+            pipeline="sell",
+            step=step_name,
+            data={"decision": decision, "review_state": review_state.model_dump()},
+        )
+        await publish(
+            session_id,
             "listing_submit_requested",
             pipeline="sell",
             step=step_name,
@@ -523,6 +585,17 @@ async def handle_sell_listing_decision(
         browser_use_result, browser_use_error, _ = await submit_sell_listing()
         if browser_use_result is None:
             await session_manager.update_status(session_id, status="failed", error=browser_use_error, result=partial_result)
+            await session_manager.update_sell_listing_review(
+                session_id,
+                SellListingReviewState.model_validate({**review_state.model_dump(), "state": "failed"}),
+            )
+            await publish(
+                session_id,
+                "listing_submission_failed",
+                pipeline="sell",
+                step=step_name,
+                data={"platform": review.platform, "error": browser_use_error},
+            )
             await publish(
                 session_id,
                 "pipeline_failed",
@@ -534,7 +607,7 @@ async def handle_sell_listing_decision(
 
         _merge_sell_listing_output(outputs, browser_use_result)
         review.state = "submitted"
-        session.sell_listing_review = SellListingReviewState.model_validate(review)
+        await session_manager.clear_sell_listing_review(session_id)
         await session_manager.update_status(session_id, status="completed", result=partial_result, error=None)
         await publish(
             session_id,
@@ -552,7 +625,8 @@ async def handle_sell_listing_decision(
         review.revision_instructions = revision_instructions
         review.revision_count += 1
         _update_sell_listing_output(outputs, listing_status="revision_requested", ready_for_confirmation=False)
-        session.sell_listing_review = SellListingReviewState.model_validate(review)
+        review_state = SellListingReviewState.model_validate(review)
+        await session_manager.update_sell_listing_review(session_id, review_state)
         session.error = None
         await session_manager.update_status(session_id, status="running", result=partial_result)
         await publish(
@@ -570,7 +644,7 @@ async def handle_sell_listing_decision(
             data={
                 "decision": decision,
                 "revision_instructions": revision_instructions,
-                "revision_count": review.revision_count,
+                "revision_count": review_state.revision_count,
             },
         )
         listing_output = outputs.get("depop_listing")
@@ -595,6 +669,10 @@ async def handle_sell_listing_decision(
         )
         if browser_use_result is None:
             await session_manager.update_status(session_id, status="failed", error=browser_use_error, result=partial_result)
+            await session_manager.update_sell_listing_review(
+                session_id,
+                SellListingReviewState.model_validate({**review_state.model_dump(), "state": "failed"}),
+            )
             await publish(
                 session_id,
                 "pipeline_failed",
@@ -606,7 +684,8 @@ async def handle_sell_listing_decision(
 
         _merge_sell_listing_output(outputs, browser_use_result)
         review.state = "ready_for_confirmation"
-        session.sell_listing_review = SellListingReviewState.model_validate(review)
+        review_state = SellListingReviewState.model_validate(review)
+        await session_manager.update_sell_listing_review(session_id, review_state)
         await session_manager.update_status(session_id, status="paused", result=partial_result, error=None)
         await publish(
             session_id,
@@ -626,8 +705,18 @@ async def handle_sell_listing_decision(
             step=step_name,
             data={
                 "platform": review.platform,
+                "allowed_decisions": ["confirm_submit", "revise", "abort"],
+                "review_state": review_state.model_dump(),
+                "title": outputs.get("depop_listing", {}).get("title"),
+                "description": outputs.get("depop_listing", {}).get("description"),
+                "suggested_price": outputs.get("depop_listing", {}).get("suggested_price"),
+                "category_path": outputs.get("depop_listing", {}).get("category_path"),
                 "listing_status": outputs.get("depop_listing", {}).get("listing_status"),
                 "ready_for_confirmation": outputs.get("depop_listing", {}).get("ready_for_confirmation"),
+                "condition": outputs.get("depop_listing", {}).get("listing_preview", {}).get("condition")
+                if isinstance(outputs.get("depop_listing", {}).get("listing_preview"), dict)
+                else None,
+                "form_screenshot_url": outputs.get("depop_listing", {}).get("form_screenshot_url"),
                 "output": outputs.get("depop_listing"),
             },
         )
@@ -638,9 +727,17 @@ async def handle_sell_listing_decision(
         review.latest_decision = "abort"
         review.revision_instructions = None
         _update_sell_listing_output(outputs, listing_status="aborted", ready_for_confirmation=False)
-        session.sell_listing_review = SellListingReviewState.model_validate(review)
+        review_state = SellListingReviewState.model_validate(review)
+        await session_manager.update_sell_listing_review(session_id, review_state)
         session.error = None
         await session_manager.update_status(session_id, status="completed", result=partial_result)
+        await publish(
+            session_id,
+            "listing_submission_aborted",
+            pipeline="sell",
+            step=step_name,
+            data={"decision": decision, "review_state": review_state.model_dump()},
+        )
         await publish(
             session_id,
             "listing_abort_requested",
@@ -652,6 +749,7 @@ async def handle_sell_listing_decision(
         if browser_use_result is not None:
             _merge_sell_listing_output(outputs, browser_use_result)
             await session_manager.update_status(session_id, status="completed", result=partial_result, error=None)
+        await session_manager.clear_sell_listing_review(session_id)
         await publish(
             session_id,
             "listing_aborted",
