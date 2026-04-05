@@ -45,7 +45,25 @@ async def test_sell_listing_decision_endpoint_dispatches_to_orchestrator(monkeyp
     )
 
     assert response.status_code == 200
-    assert response.json() == {"ok": True}
+    assert response.json() == {
+        "status": "accepted",
+        "session_id": session.session_id,
+        "pipeline": "sell",
+        "decision": "confirm_submit",
+        "session_status": "paused",
+        "queued_action": "submit_listing",
+        "review_state": {
+            "state": "ready_for_confirmation",
+            "step": "depop_listing",
+            "platform": "depop",
+            "latest_decision": None,
+            "revision_instructions": None,
+            "revision_count": 0,
+            "paused_at": None,
+            "deadline_at": None,
+        },
+        "revision_instructions": None,
+    }
     await asyncio.wait_for(called.wait(), timeout=1.0)
     assert captured == {
         "session_id": session.session_id,
@@ -79,7 +97,7 @@ async def test_sell_listing_decision_endpoint_requires_paused_review_session() -
 
     response = client.post(
         "/sell/listing-decision",
-        json={"session_id": session.session_id, "decision": "abort"},
+        json={"session_id": session.session_id, "decision": "revise", "revision_instructions": "  Lower the price  "},
     )
 
     assert response.status_code == 409
@@ -102,3 +120,40 @@ async def test_sell_listing_decision_endpoint_rejects_buy_session() -> None:
 
     assert response.status_code == 409
     assert response.json()["detail"] == "Session is not a sell pipeline"
+
+
+@pytest.mark.asyncio
+async def test_sell_listing_decision_endpoint_echoes_normalized_revision_instructions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await session_manager.reset()
+    session = await session_manager.create_session(
+        session_id="sell-revise-session",
+        pipeline="sell",
+        request=PipelineStartRequest(input={"image_urls": [], "notes": "Test"}),
+    )
+    session.status = "paused"
+    session.sell_listing_review = SellListingReviewState(state="ready_for_confirmation")
+
+    async def fake_handle_sell_listing_decision(
+        session_id: str,
+        decision: str,
+        *,
+        revision_instructions: str | None = None,
+    ) -> None:
+        return None
+
+    monkeypatch.setattr("backend.orchestrator.handle_sell_listing_decision", fake_handle_sell_listing_decision)
+
+    response = client.post(
+        "/sell/listing-decision",
+        json={"session_id": session.session_id, "decision": "revise", "revision_instructions": "  Lower the price  "},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "accepted"
+    assert payload["decision"] == "revise"
+    assert payload["queued_action"] == "apply_revision"
+    assert payload["revision_instructions"] == "Lower the price"
+    assert payload["review_state"]["revision_instructions"] is None

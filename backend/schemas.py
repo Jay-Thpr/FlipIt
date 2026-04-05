@@ -46,6 +46,17 @@ class SellListingDecisionRequest(BaseModel):
             self.revision_instructions = self.revision_instructions.strip() or None
 
 
+class SellListingDecisionResponse(BaseModel):
+    status: Literal["accepted"] = "accepted"
+    session_id: str
+    pipeline: Literal["sell"] = "sell"
+    decision: Literal["confirm_submit", "revise", "abort"]
+    session_status: Literal["queued", "running", "paused", "completed", "failed"]
+    queued_action: Literal["submit_listing", "apply_revision", "abort_listing"]
+    review_state: "SellListingReviewState | None" = None
+    revision_instructions: str | None = None
+
+
 class AgentTaskRequest(BaseModel):
     session_id: str
     pipeline: Literal["sell", "buy"]
@@ -337,6 +348,8 @@ class SessionState(BaseModel):
     events: list[SessionEvent] = Field(default_factory=list)
     sell_listing_review: SellListingReviewState | None = None
 
+
+SellListingDecisionResponse.model_rebuild()
 
 AGENT_OUTPUT_MODELS = {
     "vision_agent": VisionAnalysisOutput,

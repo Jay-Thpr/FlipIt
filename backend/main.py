@@ -21,6 +21,7 @@ from backend.schemas import (
     PipelineStartRequest,
     PipelineStartResponse,
     SellListingDecisionRequest,
+    SellListingDecisionResponse,
     SessionEvent,
 )
 from backend.session import session_manager
@@ -109,7 +110,7 @@ async def sell_correct(request: CorrectionRequest) -> dict[str, bool]:
 
 
 @app.post("/sell/listing-decision")
-async def sell_listing_decision(request: SellListingDecisionRequest) -> dict[str, bool]:
+async def sell_listing_decision(request: SellListingDecisionRequest) -> SellListingDecisionResponse:
     """Called by frontend when user confirms, revises, or aborts a paused sell listing review."""
     from backend.orchestrator import handle_sell_listing_decision
 
@@ -128,7 +129,20 @@ async def sell_listing_decision(request: SellListingDecisionRequest) -> dict[str
             revision_instructions=request.revision_instructions,
         )
     )
-    return {"ok": True}
+    review_state = session.sell_listing_review.model_copy() if session.sell_listing_review is not None else None
+    queued_action = {
+        "confirm_submit": "submit_listing",
+        "revise": "apply_revision",
+        "abort": "abort_listing",
+    }[request.decision]
+    return SellListingDecisionResponse(
+        session_id=request.session_id,
+        decision=request.decision,
+        session_status=session.status,
+        queued_action=queued_action,
+        review_state=review_state,
+        revision_instructions=request.revision_instructions,
+    )
 
 
 @app.get("/result/{session_id}")
