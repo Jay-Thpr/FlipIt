@@ -4,7 +4,7 @@
 
 **Repo baseline:** FastAPI app in `backend/`, in-memory sessions, SSE progress, ten agents behind a stable `/task` contract, `AGENT_EXECUTION_MODE` of `local_functions` (default) or `http` for per-process microservices.
 
-**Related documents:** `PROJECT-CONTEXT.md`, `PRD.md`, `API_CONTRACT.md`, `FetchAI-Status.md`, `AGENTS.md`, `CLAUDE.md`, `BROWSER_USE_GUIDE.md`, `BrowserUse-Live-Validation.md`.
+**Related documents:** `PROJECT-CONTEXT.md`, `PRD.md`, `API_CONTRACT.md`, `FetchAI-Status.md`, `FETCH_INTEGRATION.md`, `AGENTVERSE_IMPLEMENTATION_PLAN.md`, `AGENTVERSE_SETUP.md`, `AGENTS.md`, `CLAUDE.md`, `BROWSER_USE_GUIDE.md`, `BrowserUse-Live-Validation.md`.
 
 ---
 
@@ -418,6 +418,8 @@ These protect parallel development.
 **Tasks:**
 
 1. Link `FetchAI-Status.md` from this plan; ensure ASI:One verification steps are copy-paste ready.
+
+2. Execute **`AGENTVERSE_IMPLEMENTATION_PLAN.md`** for Agentverse alignment: canonical slug/port/env table, local `make run-fetch-agents` runbook, doc fixes to `AGENTVERSE_SETUP.md`, and submission URL collection.
 
 ---
 
