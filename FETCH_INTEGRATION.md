@@ -76,28 +76,30 @@ This keeps the mobile backend and the Fetch demo path aligned.
 
 ## Files Added For Fetch
 
-- [backend/fetch_runtime.py](/Users/jt/Desktop/diamondhacks/backend/fetch_runtime.py)
+- [backend/fetch_runtime.py](backend/fetch_runtime.py)
   - Shared bridge from chat requests into the existing backend agent chain.
-- [backend/fetch_agents/builder.py](/Users/jt/Desktop/diamondhacks/backend/fetch_agents/builder.py)
+- [backend/fetch_agents/builder.py](backend/fetch_agents/builder.py)
   - Builds ASI:One-compatible `uAgents` using `chat_protocol_spec`.
-- [backend/fetch_agents/launch.py](/Users/jt/Desktop/diamondhacks/backend/fetch_agents/launch.py)
+- [backend/fetch_agents/launch.py](backend/fetch_agents/launch.py)
   - Launches one Fetch agent by slug.
-- [backend/run_fetch_agents.py](/Users/jt/Desktop/diamondhacks/backend/run_fetch_agents.py)
+- [backend/run_fetch_agents.py](backend/run_fetch_agents.py)
   - Launches all Fetch agents as subprocesses.
-- [tests/test_fetch_runtime.py](/Users/jt/Desktop/diamondhacks/tests/test_fetch_runtime.py)
+- [scripts/fetch_demo.py](scripts/fetch_demo.py)
+  - Spins up a temporary mailbox-enabled client agent, sends a real `ChatMessage`, and prints the final `ChatMessage` response.
+- [tests/test_fetch_runtime.py](tests/test_fetch_runtime.py)
   - Verifies the Fetch runtime bridge and chat-to-agent mapping.
 
 ## Existing Backend Files Updated
 
-- [requirements.txt](/Users/jt/Desktop/diamondhacks/requirements.txt)
+- [requirements.txt](requirements.txt)
   - Added `uagents==0.24.0` and `uagents-core`.
-- [.env.example](/Users/jt/Desktop/diamondhacks/.env.example)
+- [.env.example](.env.example)
   - Added Fetch/Agentverse env vars and agent seed vars.
-- [Makefile](/Users/jt/Desktop/diamondhacks/Makefile)
+- [Makefile](Makefile)
   - Added `run-fetch-agents`.
-- [backend/README.md](/Users/jt/Desktop/diamondhacks/backend/README.md)
+- [backend/README.md](backend/README.md)
   - Added setup notes for Fetch and how it fits with Browser Use.
-- [.gitignore](/Users/jt/Desktop/diamondhacks/.gitignore)
+- [.gitignore](.gitignore)
   - Expanded to ignore local venvs and runtime clutter.
 
 ## What Is Implemented Now
@@ -111,7 +113,7 @@ Each agent slug now has a Fetch-side spec with:
 - seed env var
 - short capability description
 
-These specs live in [backend/fetch_runtime.py](/Users/jt/Desktop/diamondhacks/backend/fetch_runtime.py).
+These specs live in [backend/fetch_runtime.py](backend/fetch_runtime.py).
 
 ### 2. ASI:One-compatible chat protocol wiring
 
@@ -221,7 +223,7 @@ Use a Python `3.12` or `3.13` virtual environment for the Fetch agents.
 make venv-fetch
 ```
 
-This creates `.venv-fetch` with `python3.12` (override with `FETCH_PYTHON=...`) and installs **`uagents`** and **`uagents-core`** only. `make run-fetch-agents` sets `PYTHONPATH` to the repo root so processes can import `backend.*`; the same machine should also have `make install` (`.venv`) for the main app and shared agent code paths.
+This creates `.venv-fetch` with `python3.12` (override with `FETCH_PYTHON=...`) and installs **`uagents`** and **`uagents-core`** only. `make run-fetch-agents` sets `PYTHONPATH` to the repo root so processes can import `backend.*`; the same machine should also have `make install` (`.venv`) for the main app and shared agent code paths. Use `.venv-fetch/bin/python` for the Fetch processes and demo client so the main Python 3.14 app environment does not interfere with `uagents`.
 
 If a Fetch subprocess fails with `ImportError` for a transitive dependency, install that package into `.venv-fetch` (or align versions with `requirements.txt`) and document the one-off fix.
 
@@ -290,13 +292,55 @@ The right model is:
 
 That is why the Fetch path should keep calling the same backend agent logic instead of forking into a separate implementation.
 
+## Fetch Agent Catalog And Recorded Addresses
+
+The backend now exposes `GET /fetch-agents`, sourced from [backend/fetch_runtime.py](backend/fetch_runtime.py).
+
+Each record includes:
+
+- `slug`
+- `name`
+- `port`
+- `agentverse_address`
+- `description`
+
+The `agentverse_address` field is populated from environment variables so the catalog can be updated immediately after live registration without another code change:
+
+- `VISION_AGENT_AGENTVERSE_ADDRESS`
+- `EBAY_SOLD_COMPS_AGENT_AGENTVERSE_ADDRESS`
+- `PRICING_AGENT_AGENTVERSE_ADDRESS`
+- `DEPOP_LISTING_AGENT_AGENTVERSE_ADDRESS`
+- `DEPOP_SEARCH_AGENT_AGENTVERSE_ADDRESS`
+- `EBAY_SEARCH_AGENT_AGENTVERSE_ADDRESS`
+- `MERCARI_SEARCH_AGENT_AGENTVERSE_ADDRESS`
+- `OFFERUP_SEARCH_AGENT_AGENTVERSE_ADDRESS`
+- `RANKING_AGENT_AGENTVERSE_ADDRESS`
+- `NEGOTIATION_AGENT_AGENTVERSE_ADDRESS`
+
+Replace those values with the real `agent1q...` addresses once Eliot registers the agents.
+
+## End-To-End Chat Demo
+
+Use [scripts/fetch_demo.py](scripts/fetch_demo.py) to prove the Agentverse chat protocol path works end to end:
+
+```bash
+.venv-fetch/bin/python scripts/fetch_demo.py \
+  --address agent1q... \
+  --message "Find me a vintage Nike tee under $45"
+```
+
+This script is intentionally separate from `run_fetch_query()` so it exercises the actual mailbox/chat path rather than only the in-process bridge.
+
 ## What Still Needs To Be Done
 
-### 1. Finish mailbox setup
+### 1. Register agents with real seeds and record live addresses
 
-The first live agent starts, but mailbox creation/attachment is not yet complete.
+Code support is in place, but Eliot still needs to:
 
-This is the current immediate blocker for a full Agentverse test.
+- start each agent with its real seed and `AGENTVERSE_API_KEY`
+- confirm it appears on the Agentverse dashboard
+- capture the final `agent1q...` address
+- copy that address into the matching `*_AGENTVERSE_ADDRESS` env var and this document
 
 ### 2. Improve chat input parsing
 
@@ -345,7 +389,6 @@ Right now the Fetch path reuses backend logic successfully, but this contract ca
 
 Still needed:
 
-- mailbox registration success
 - Agentverse discoverability check
 - ASI:One prompt/response validation
 - shared chat URL or demo proof for submission

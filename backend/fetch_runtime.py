@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 from datetime import datetime, timezone
 from dataclasses import dataclass
@@ -18,6 +19,10 @@ class FetchAgentSpec:
     port: int
     seed_env_var: str
     description: str
+
+    @property
+    def agentverse_address_env_var(self) -> str:
+        return f"{self.slug.upper()}_AGENTVERSE_ADDRESS"
 
 
 FETCH_AGENT_SPECS: dict[str, FetchAgentSpec] = {
@@ -107,6 +112,25 @@ BUY_SEARCH_STEPS = tuple(step_name for _, step_name in BUY_SEARCH_AGENT_CHAIN)
 
 def list_fetch_agent_slugs() -> list[str]:
     return list(FETCH_AGENT_SPECS)
+
+
+def get_fetch_agentverse_address(agent_slug: str) -> str | None:
+    spec = FETCH_AGENT_SPECS[agent_slug]
+    value = os.getenv(spec.agentverse_address_env_var, "").strip()
+    return value or None
+
+
+def list_fetch_agent_specs() -> list[dict[str, str | int | None]]:
+    return [
+        {
+            "slug": spec.slug,
+            "name": spec.name,
+            "port": spec.port,
+            "agentverse_address": get_fetch_agentverse_address(spec.slug),
+            "description": spec.description,
+        }
+        for spec in FETCH_AGENT_SPECS.values()
+    ]
 
 
 def extract_urls(text: str) -> list[str]:

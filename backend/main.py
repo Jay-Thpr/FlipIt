@@ -17,7 +17,7 @@ from backend.config import (
     fetch_integration_flags,
     get_agent_execution_mode,
 )
-from backend.fetch_runtime import FETCH_AGENT_SPECS
+from backend.fetch_runtime import list_fetch_agent_specs
 from backend.orchestrator import get_pipeline_steps, run_pipeline
 from backend.schemas import (
     CorrectionRequest,
@@ -124,16 +124,9 @@ async def list_agents() -> dict[str, list[dict[str, str | int]]]:
 
 
 @app.get("/fetch-agents")
-async def list_fetch_agents() -> dict[str, list[dict[str, str | int]]]:
+async def list_fetch_agents() -> dict[str, list[dict[str, str | int | None]]]:
     return {
-        "agents": [
-            {
-                "name": spec.name,
-                "slug": spec.slug,
-                "port": spec.port,
-            }
-            for spec in FETCH_AGENT_SPECS.values()
-        ]
+        "agents": list_fetch_agent_specs(),
     }
 
 

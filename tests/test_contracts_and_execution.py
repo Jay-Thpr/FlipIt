@@ -18,6 +18,7 @@ from backend.schemas import (
     validate_agent_output,
     validate_agent_task_request,
 )
+from backend.fetch_runtime import FETCH_AGENT_SPECS
 from backend.session import session_manager
 
 
@@ -52,7 +53,13 @@ def test_agents_manifest_lists_all_agents(client: TestClient) -> None:
     }
 
 
-def test_fetch_agents_manifest_lists_all_fetch_agents(client: TestClient) -> None:
+def test_fetch_agents_manifest_lists_all_fetch_agents(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for spec in FETCH_AGENT_SPECS.values():
+        monkeypatch.delenv(spec.agentverse_address_env_var, raising=False)
+    monkeypatch.setenv("VISION_AGENT_AGENTVERSE_ADDRESS", "agent1qvisiondemo")
     response = client.get("/fetch-agents")
 
     assert response.status_code == 200
@@ -62,11 +69,15 @@ def test_fetch_agents_manifest_lists_all_fetch_agents(client: TestClient) -> Non
         "name": "VisionAgent",
         "slug": "vision_agent",
         "port": 9201,
+        "agentverse_address": "agent1qvisiondemo",
+        "description": "Identifies a resale item from text or image URLs and summarizes its brand, category, and condition.",
     }
     assert payload["agents"][-1] == {
         "name": "NegotiationAgent",
         "slug": "negotiation_agent",
         "port": 9210,
+        "agentverse_address": None,
+        "description": "Runs the BUY flow through negotiation and returns prepared or sent offers.",
     }
 
 

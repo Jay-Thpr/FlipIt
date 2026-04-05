@@ -149,7 +149,7 @@ make venv-fetch
 5. Start one Fetch agent:
 
 ```bash
-PYTHONPATH=$PWD python -m backend.fetch_agents.launch depop_search_agent
+PYTHONPATH=$PWD .venv-fetch/bin/python -m backend.fetch_agents.launch depop_search_agent
 ```
 
 6. Start all Fetch agents from the dedicated Fetch virtualenv:
@@ -158,16 +158,27 @@ PYTHONPATH=$PWD python -m backend.fetch_agents.launch depop_search_agent
 make run-fetch-agents
 ```
 
+(Same as `PYTHONPATH=$PWD .venv-fetch/bin/python -m backend.run_fetch_agents`.)
+
 - `make run` keeps using `.venv` for the FastAPI app on port `8000`.
 - `make run-fetch-agents` uses `.venv-fetch` for the Fetch `uAgents` on ports `9201-9210`.
 - The per-agent FastAPI apps from `make run-agents` stay on ports `9101-9110`, so all three launch paths can coexist without port overlap.
 
-7. Send a local smoke-test chat payload to a running Fetch agent:
+7. Send a real chat message through Agentverse to a registered Fetch agent:
 
 ```bash
-. .venv/bin/activate && python scripts/fetch_demo.py 9205 "Vintage Nike tee under $45"
+.venv-fetch/bin/python scripts/fetch_demo.py \
+  --address agent1q... \
+  --message "Find me a vintage Nike tee under $45"
 ```
 
+`GET /fetch-agents` mirrors `GET /agents` but returns the Fetch-specific catalog:
+
+- `slug`
+- `name`
+- `port`
+- `agentverse_address` from `<SLUG>_AGENTVERSE_ADDRESS` env vars when recorded
+- `description`
 ### Chat-to-Agent Mapping
 
 - `vision_agent` turns the chat message into item notes and optional image URLs.
