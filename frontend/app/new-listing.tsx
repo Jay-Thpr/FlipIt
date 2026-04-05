@@ -33,7 +33,7 @@ export default function NewListingScreen() {
   const [maxPrice, setMaxPrice] = useState('');
   const [autoAcceptThreshold, setAutoAcceptThreshold] = useState('');
   const [initialPrice, setInitialPrice] = useState('');
-  const [selectedPlatforms, setSelectedPlatforms] = useState<Platform[]>([]);
+  const [selectedPlatforms, setSelectedPlatforms] = useState<Platform[]>([...ALL_PLATFORMS]);
   const [negotiationStyle, setNegotiationStyle] = useState<NegotiationStyle>('moderate');
   const [replyTone, setReplyTone] = useState<ReplyTone>('professional');
   const [aiActive, setAiActive] = useState(true);

@@ -9,7 +9,7 @@ import { Wifi, Bot, Bell, LogOut, ChevronRight, Plus } from 'lucide-react-native
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import { Item } from '../data/mockData';
+import { Item, mockItems } from '../data/mockData';
 import { on } from '../lib/events';
 import ItemCard from '../components/ItemCard';
 import AddNewCard from '../components/AddNewCard';
@@ -92,64 +92,10 @@ export default function HomeScreen() {
   const email = user?.email ?? '';
 
   const refreshData = useCallback(async () => {
-    if (!user) return;
-
-    try {
-      const [itemsResult, tradesResult] = await Promise.all([
-        supabase
-          .from('items')
-          .select(`*, item_platforms(platform), item_photos(id, photo_url, sort_order), market_data(platform, best_buy_price, best_sell_price, volume), conversations(id, username, platform, last_message, last_message_at, unread)`)
-          .eq('user_id', user.id),
-        supabase
-          .from('completed_trades')
-          .select('*')
-          .eq('user_id', user.id)
-          .not('initial_price', 'is', null)
-          .order('completed_at', { ascending: true }),
-      ]);
-
-      // Fetch profile avatar
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('avatar_url, display_name')
-        .eq('id', user.id)
-        .single();
-      if (profileData?.avatar_url) setAvatarUrl(profileData.avatar_url);
-
-      if (itemsResult.data) {
-        // Sort raw data by last_viewed_at descending BEFORE mapping
-        const sorted = [...itemsResult.data].sort((a: any, b: any) => {
-          const aTime = new Date(a.last_viewed_at || 0).getTime();
-          const bTime = new Date(b.last_viewed_at || 0).getTime();
-          return bTime - aTime;
-        });
-        setItems(sorted.map(mapDbItemToItem));
-      }
-
-      if (tradesResult.data) {
-        const chartData: PnLDataPoint[] = tradesResult.data.map((t: any) => {
-          let profit = 0;
-          if (t.type === 'Sold') {
-            profit = (t.price ?? 0) - (t.initial_price ?? 0);
-          } else {
-            profit = (t.initial_price ?? 0) - (t.price ?? 0);
-          }
-          return {
-            date: t.completed_at
-              ? new Date(t.completed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-              : '',
-            isoDate: t.completed_at ?? '',
-            value: profit,
-          };
-        });
-        setPnlData(chartData);
-      }
-    } catch (err) {
-      console.error('Failed to fetch data:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [user]);
+    // Purely local for now — Supabase sync disabled
+    setItems(mockItems);
+    setLoading(false);
+  }, []);
 
   // Initial load
   useFocusEffect(

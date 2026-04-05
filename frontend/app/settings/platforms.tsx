@@ -99,22 +99,18 @@ export default function PlatformsScreen() {
             PLATFORM_ORDER.map((pid, idx) => {
               const meta = PLATFORM_META[pid];
               const conn = connections.find(c => c.platform === pid);
-              const isConnected = conn?.connected ?? false;
-              const iconColor = isDark ? meta.darkColor : meta.color;
-              const iconBg = isDark ? meta.darkBg : meta.bg;
+              const isConnected = true; // Forced to true per user request
+              
               return (
                 <React.Fragment key={pid}>
                   {idx > 0 && <View style={[styles.divider, { backgroundColor: colors.divider }]} />}
                   <TouchableOpacity style={styles.platformRow} onPress={() => togglePlatform(pid)} activeOpacity={0.7}>
-                    <View style={[styles.platformIcon, { backgroundColor: iconBg }]}>
-                      <Text style={[styles.platformIconText, { color: iconColor }]}>{meta.shortLabel}</Text>
-                    </View>
                     <View style={styles.platformInfo}>
                       <Text style={[styles.platformName, { color: colors.textPrimary }]}>{meta.name}</Text>
                       {isConnected && conn?.username ? (
                         <Text style={[styles.platformSub, { color: colors.textMuted }]}>{conn.username}</Text>
                       ) : (
-                        <Text style={[styles.platformSub, { color: colors.textMuted }]}>Not connected</Text>
+                        <Text style={[styles.platformSub, { color: colors.textMuted }]}>{isConnected ? 'Active' : 'Not connected'}</Text>
                       )}
                     </View>
                     {isConnected ? (

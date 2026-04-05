@@ -5,7 +5,7 @@ import { useLocalSearchParams, router } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { supabase } from '../../lib/supabase';
-import { PLATFORM_NAMES } from '../../data/mockData';
+import { PLATFORM_NAMES, mockItems, Item } from '../../data/mockData';
 import type { DbMessage, DbConversation } from '../../lib/types';
 
 interface Message {
@@ -33,87 +33,26 @@ export default function ChatLogScreen() {
     const conversationId = id;
     if (!conversationId) return;
 
-    let cancelled = false;
+    // Purely local for now — Supabase sync disabled
+    let foundConv: any = null;
+    let foundItemName = '';
 
-    async function fetchData() {
-      const { data: conv } = await supabase
-        .from('conversations')
-        .select('*, messages(id, sender, text, created_at)')
-        .eq('id', conversationId)
-        .single();
-
-      if (cancelled || !conv) {
-        if (!cancelled) setLoading(false);
-        return;
+    for (const item of mockItems) {
+      const conv = item.conversations.find(c => c.id === conversationId);
+      if (conv) {
+        foundConv = conv;
+        foundItemName = item.name;
+        break;
       }
-
-      setConversation(conv as DbConversation);
-
-      const dbMessages: DbMessage[] = conv.messages ?? [];
-      setMessages(
-        dbMessages
-          .sort((a: DbMessage, b: DbMessage) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
-          .map((m: DbMessage) => ({
-            id: m.id,
-            sender: m.sender,
-            text: m.text,
-            timestamp: formatTime(m.created_at),
-          }))
-      );
-
-      const resolvedItemId = itemId || conv.item_id;
-      if (resolvedItemId) {
-        const { data: item } = await supabase
-          .from('items')
-          .select('name')
-          .eq('id', resolvedItemId)
-          .single();
-        if (!cancelled && item) {
-          setItemName(item.name);
-        }
-      }
-
-      await supabase
-        .from('conversations')
-        .update({ unread: false })
-        .eq('id', conversationId);
-
-      if (!cancelled) setLoading(false);
     }
 
-    fetchData();
-
-    // Realtime subscription for new messages
-    const channel = supabase
-      .channel(`messages:${conversationId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-          filter: `conversation_id=eq.${conversationId}`,
-        },
-        (payload: any) => {
-          const newMsg = payload.new as DbMessage;
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: newMsg.id,
-              sender: newMsg.sender,
-              text: newMsg.text,
-              timestamp: formatTime(newMsg.created_at),
-            },
-          ]);
-        }
-      )
-      .subscribe();
-
-    return () => {
-      cancelled = true;
-      supabase.removeChannel(channel);
-    };
-  }, [id, itemId]);
+    if (foundConv) {
+      setConversation(foundConv);
+      setItemName(foundItemName);
+      setMessages(foundConv.messages);
+    }
+    setLoading(false);
+  }, [id]);
 
   if (loading) {
     return (

@@ -36,9 +36,22 @@ export default function ItemCard({ item, cardWidth, onPress }: Props) {
       <View style={[styles.imageContainer, { height: imageHeight }]}>
         {hasPhoto ? (
           <Image
-            source={{ uri: item.photos[0] }}
-            style={styles.image}
-            resizeMode="cover"
+            source={
+              item.photos[0].startsWith('http') 
+                ? { uri: item.photos[0] } 
+                : item.photos[0].includes('champagne-tee')
+                  ? require('../assets/champagne-tee.png')
+                  : item.photos[0].includes('sublime')
+                    ? require('../assets/sublime.png')
+                    : item.photos[0].includes('north-face')
+                    ? require('../assets/north-face.png')
+                    : { uri: item.photos[0] }
+            }
+            style={[
+              styles.image,
+              item.photos[0].includes('champagne-tee') && { transform: [{ scale: 0.7 }] }
+            ]}
+            resizeMode="contain"
           />
         ) : (
           <View style={[styles.imagePlaceholder, { backgroundColor: item.imageColor }]}>

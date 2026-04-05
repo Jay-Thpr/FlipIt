@@ -11,7 +11,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { pickImage } from '../../lib/imagePicker';
 import { emit } from '../../lib/events';
-import { PLATFORM_NAMES, MarketData, Conversation } from '../../data/mockData';
+import { PLATFORM_NAMES, MarketData, Conversation, Item, mockItems } from '../../data/mockData';
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -108,23 +108,22 @@ export default function ItemDetailScreen() {
   }, [id]);
 
   async function loadItem() {
-    const { data } = await supabase
-      .from('items')
-      .select(`*, item_platforms(platform), item_photos(id, photo_url, sort_order), market_data(platform, best_buy_price, best_sell_price, volume), conversations(id, username, platform, last_message, last_message_at, unread, messages(id, sender, text, created_at))`)
-      .eq('id', id)
-      .single();
+    // Purely local for now — Supabase sync disabled
+    const localItem: Item | undefined = mockItems.find((i: Item) => i.id === id);
 
-    if (data) {
-      const detail = mapDbToDetail(data);
+    if (localItem) {
+      // Map Item to ItemDetail
+      const detail: ItemDetail = {
+        ...localItem,
+        photos: localItem.photos.map((url: string, i: number) => ({ id: `p${i}`, url, sortOrder: i })),
+        negotiationStyle: localItem.negotiationStyle,
+        replyTone: localItem.replyTone,
+      };
       setItem(detail);
       if (!userToggledRef.current) {
         setAiActive(detail.status === 'active');
       }
       setPhotos(detail.photos);
-      // Mark as viewed
-      supabase.from('items').update({ last_viewed_at: new Date().toISOString() }).eq('id', id).then(({ error }) => {
-        if (error) console.error('Failed to update last_viewed_at:', error.message);
-      });
     }
     setLoading(false);
   }
@@ -331,7 +330,21 @@ export default function ItemDetailScreen() {
               {photos.map((photo, idx) => (
                 <View key={photo.id} style={[styles.photoCard, { backgroundColor: colors.surface }]}>
                   <View style={styles.photoImageWrap}>
-                    <Image source={{ uri: photo.url }} style={styles.photoImage} resizeMode="cover" />
+                    <Image
+                      source={
+                        photo.url.startsWith('http')
+                          ? { uri: photo.url }
+                          : photo.url.includes('champagne-tee')
+                            ? require('../../assets/champagne-tee.png')
+                            : photo.url.includes('sublime')
+                              ? require('../../assets/sublime.png')
+                              : photo.url.includes('north-face')
+                                ? require('../../assets/north-face.png')
+                                : { uri: photo.url }
+                      }
+                      style={styles.photoImage}
+                      resizeMode="contain"
+                    />
                     <View style={styles.photoBadge}>
                       <Text style={styles.photoBadgeText}>{idx + 1}</Text>
                     </View>
