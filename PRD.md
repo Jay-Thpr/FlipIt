@@ -207,7 +207,23 @@ Search agents run sequentially — one platform at a time. Sequential-but-fast: 
 - Pause at submit — do NOT click post
 - Screenshot populated form
 
-**Output:** `{ form_screenshot_url, listing_preview: { title, price, description } }`
+**Output:**
+```python
+{
+    "form_screenshot_b64": str,          # base64 PNG of the populated form
+    "listing_preview": {
+        "title": str,
+        "price": float,
+        "description": str,
+        "condition": str,
+        "clean_photo_url": str,
+    },
+    "draft_url": str | None,             # Depop draft URL if draft was saved; None otherwise
+    "summary": str,
+}
+```
+
+**Draft sync:** Agent attempts to save as draft before stopping. If draft save succeeds, `draft_url` is the web draft URL and the mobile app deep-links to `depop://selling/drafts`. If draft save fails, `draft_url` is `None` and the app falls back to showing the screenshot + opening `depop://sell`.
 
 ---
 
@@ -355,10 +371,25 @@ Dark mode variants defined separately — do not invert light mode values.
 - **Add New card:** same size, `+` icon centered (24pt `--color-primary`), "Add New" label, dashed `--color-border` border. Tapping opens item creation flow (camera for SELL, text input for BUY).
 - Empty state per section: Add New card + "No active agents. Tap + to get started."
 
-**Item Creation — SELL**
-- Full-screen camera viewfinder
-- Tap to capture → SELL pipeline starts
-- Agent activity bottom sheet rises showing pipeline progress in real time
+**Item Creation — SELL** (4 screen states)
+
+**State 1 — Camera Screen:** Full-screen camera viewfinder, "Point at item" helper text, tap to capture.
+
+**State 2 — Agent Feed Screen:** Appears immediately after photo taken.
+- Left/top: agent cards with status + live log lines. Vision card activates first, shows item name + confidence as it resolves. Before/after photo strip appears after VisionAgent.
+- Right/bottom: empty "Analyzing..." state → eBay comp table fades in after EbayResearchAgent → profit margin number + trend badge + velocity chip appear after PricingAgent.
+
+**State 3 — Listing Ready Screen:** Triggered by `listing_ready` SSE event. Full replacement of agent feed. Contents top-to-bottom:
+1. ✓ "Your listing is ready"
+2. Before/after photo row (raw → clean Nano Banana)
+3. Generated title + description
+4. Price + estimated profit
+5. Trend badge + velocity chip
+6. Depop form screenshot (scrollable, shows populated form)
+7. **"Open Depop to Post"** — primary CTA (full width, green). Attempts `depop://selling/drafts` if `draft_url` present, else `depop://sell` / `https://www.depop.com/sell/`.
+8. "Copy listing details" — copies title, description, price, condition to clipboard.
+
+**State 4 — Error State:** Shows which step failed, partial results collected, "Try again" button.
 
 **Item Creation — BUY**
 - Text input: paste link or describe item
@@ -443,6 +474,19 @@ agent_error        { agent_name, attempt, max_attempts, error, category }
 pipeline_complete  { mode, pipeline, outputs }
 pipeline_failed    { error }
 ```
+
+Additional SELL-specific events emitted after each relevant agent completes:
+
+```
+vision_result      { brand, item_name, model, condition, confidence, clean_photo_url, search_query }
+pricing_result     { recommended_price, profit_margin, median_price,
+                     trend: { trend, delta_pct, signal },
+                     velocity: { label, detail } }
+listing_ready      { form_screenshot_b64, listing_preview: { title, price, description, condition, clean_photo_url },
+                     draft_url: str | null }
+```
+
+`listing_ready` triggers the mobile app transition from Agent Feed to the Listing Ready screen.
 
 Frontend updates in real time on each event. No polling. Fallback: poll `/result/{session_id}` if SSE connection drops.
 
