@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections import defaultdict
 from datetime import datetime, timezone
 
 from backend.schemas import PipelineStartRequest, SellListingReviewState, SessionEvent, SessionState
+
+logger = logging.getLogger(__name__)
 
 
 def utc_now_iso() -> str:
@@ -27,7 +30,9 @@ class SessionManager:
         async with self._lock:
             state = SessionState(session_id=session_id, pipeline=pipeline, request=request)
             self._sessions[session_id] = state
-            return state
+            snapshot = state.model_copy(deep=True)
+        await self._persist_session_created(snapshot)
+        return state
 
     async def get_session(self, session_id: str) -> SessionState | None:
         return self._sessions.get(session_id)
@@ -50,7 +55,9 @@ class SessionManager:
                 session.result = result
             if error is not None:
                 session.error = error
-            return session
+            snapshot = session.model_copy(deep=True)
+        await self._persist_session_updated(snapshot)
+        return session
 
     async def update_sell_listing_review(
         self,
@@ -63,7 +70,9 @@ class SessionManager:
                 return None
             session.sell_listing_review = review_state
             session.updated_at = utc_now_iso()
-            return session
+            snapshot = session.model_copy(deep=True)
+        await self._persist_session_updated(snapshot)
+        return session
 
     async def clear_sell_listing_review(self, session_id: str) -> SessionState | None:
         return await self.update_sell_listing_review(session_id, None)
@@ -103,6 +112,8 @@ class SessionManager:
             session.events.append(event)
             session.updated_at = utc_now_iso()
             queues = list(self._subscribers.get(event.session_id, set()))
+            snapshot = session.model_copy(deep=True)
+        await self._persist_event(snapshot, event)
         for queue in queues:
             await queue.put(event)
 
@@ -125,6 +136,33 @@ class SessionManager:
         async with self._lock:
             self._sessions.clear()
             self._subscribers.clear()
+        from backend.run_persistence import reset_run_persistence_manager
+
+        reset_run_persistence_manager()
+
+    async def _persist_session_created(self, session: SessionState) -> None:
+        from backend.run_persistence import get_run_persistence_manager
+
+        try:
+            await get_run_persistence_manager().persist_session_created(session)
+        except Exception:
+            logger.exception("session creation persistence hook failed for %s", session.session_id)
+
+    async def _persist_session_updated(self, session: SessionState) -> None:
+        from backend.run_persistence import get_run_persistence_manager
+
+        try:
+            await get_run_persistence_manager().persist_session_updated(session)
+        except Exception:
+            logger.exception("session update persistence hook failed for %s", session.session_id)
+
+    async def _persist_event(self, session: SessionState, event: SessionEvent) -> None:
+        from backend.run_persistence import get_run_persistence_manager
+
+        try:
+            await get_run_persistence_manager().persist_event(session, event)
+        except Exception:
+            logger.exception("session event persistence hook failed for %s", session.session_id)
 
 
 session_manager = SessionManager()
