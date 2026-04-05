@@ -62,6 +62,10 @@ If escalating, also append:
 4. For each task: call `codex()` with a full task spec → review RESULT block → continue or escalate
 5. When all tasks pass: summarise changed files and test results to user
 
+**Fallback:** If Codex MCP tools are unavailable, implement directly using your own file tools.
+
+---
+
 ## SSE Event Contract
 
 The backend uses underscore-delimited SSE event names:
@@ -132,7 +136,7 @@ This is a Python/FastAPI backend for an autonomous resale agent system. There is
 
 `POST /{pipeline}/start` → creates a `SessionState` → fires `asyncio.create_task(run_pipeline(...))` → returns `{session_id, stream_url, result_url}` immediately.
 
-Client connects to `GET /stream/{session_id}` (SSE) to receive real-time events. The backend uses underscore-delimited SSE event names: `pipeline_started`, `pipeline_complete`, `pipeline_failed`, `agent_started`, `agent_completed`, `agent_error`, and `agent_retrying`.
+Client connects to `GET /stream/{session_id}` (SSE) to receive real-time events. See the SSE Event Contract section in this file for the full list of event names.
 
 ### Schema Contracts (`backend/schemas.py`)
 
