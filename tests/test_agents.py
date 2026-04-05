@@ -4,6 +4,8 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
+import asyncio
+
 from backend.agents.depop_listing_agent import app as depop_listing_app
 from backend.agents.depop_search_agent import app as depop_search_app
 from backend.agents.ebay_search_agent import app as ebay_search_app
@@ -401,3 +403,38 @@ def test_agent_input_registry_contains_expected_contract_keys(slug: str) -> None
     contract = AGENT_INPUT_CONTRACTS[slug]
 
     assert set(contract) == {"pipeline", "step", "input_model"}
+
+
+def _empty_search_output(agent_slug: str, step: str, platform: str) -> dict:
+    return {
+        "agent": agent_slug,
+        "display_name": f"{platform.title()} Search Agent",
+        "summary": f"Found 0 {platform} listings",
+        "results": [],
+        "execution_mode": "fallback",
+        "browser_use_error": None,
+        "browser_use": None,
+    }
+
+
+def test_ranking_agent_empty_candidates_raises_value_error() -> None:
+    from backend.agents.ranking_agent import agent
+    from backend.schemas import AgentTaskRequest
+
+    request = AgentTaskRequest(
+        session_id="test-empty",
+        pipeline="buy",
+        step="ranking",
+        input={
+            "original_input": {"query": "nike hoodie", "budget": 50.0},
+            "previous_outputs": {
+                "depop_search": _empty_search_output("depop_search_agent", "depop_search", "depop"),
+                "ebay_search": _empty_search_output("ebay_search_agent", "ebay_search", "ebay"),
+                "mercari_search": _empty_search_output("mercari_search_agent", "mercari_search", "mercari"),
+                "offerup_search": _empty_search_output("offerup_search_agent", "offerup_search", "offerup"),
+            },
+        },
+    )
+
+    with pytest.raises(ValueError, match="No marketplace listings were found to rank"):
+        asyncio.run(agent.build_output(request))

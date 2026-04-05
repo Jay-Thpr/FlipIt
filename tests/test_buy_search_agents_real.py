@@ -7,6 +7,7 @@ import backend.agents.depop_search_agent as depop_search_module
 import backend.agents.ebay_search_agent as ebay_search_module
 import backend.agents.mercari_search_agent as mercari_search_module
 import backend.agents.offerup_search_agent as offerup_search_module
+from backend.agents.search_support import build_posted_at
 from backend.agents.browser_use_marketplaces import build_marketplace_search_url
 from backend.agents.browser_use_support import BrowserUseRuntimeUnavailable
 from fastapi.testclient import TestClient
@@ -215,7 +216,7 @@ def test_ebay_search_agent_falls_back_when_browser_use_unavailable(monkeypatch) 
     assert result["output"]["browser_use_error"] == "runtime_unavailable"
     assert result["output"]["results"][0]["price"] == 42.53
     assert result["output"]["results"][0]["seller"] == "nike_seller_1"
-    assert result["output"]["results"][0]["posted_at"] == "2026-04-03"
+    assert result["output"]["results"][0]["posted_at"] == build_posted_at("ebay", 1)
     assert result["output"]["browser_use"] == {
         "mode": "fallback",
         "attempted_live_run": False,
