@@ -357,6 +357,40 @@ async def test_failed_agent_marks_session_failed(monkeypatch: pytest.MonkeyPatch
 @pytest.mark.asyncio
 async def test_invalid_agent_output_marks_session_failed(monkeypatch: pytest.MonkeyPatch) -> None:
     async def fake_run_agent_task(agent_slug: str, request: Any) -> AgentTaskResponse:
+        if agent_slug in {
+            "depop_search_agent",
+            "ebay_search_agent",
+            "mercari_search_agent",
+            "offerup_search_agent",
+        }:
+            results = []
+            if agent_slug == "ebay_search_agent":
+                results = [
+                    {
+                        "platform": "ebay",
+                        "title": "One valid listing",
+                        "price": 40.0,
+                        "url": "https://ebay.example/item",
+                        "condition": "good",
+                        "seller": "seller",
+                        "seller_score": 100,
+                        "posted_at": "2026-04-04",
+                    }
+                ]
+            return AgentTaskResponse(
+                session_id=request.session_id,
+                step=request.step,
+                status="completed",
+                output={
+                    "agent": agent_slug,
+                    "display_name": "Broken Search Agent",
+                    "summary": "Search payload",
+                    "results": results,
+                    "execution_mode": "fallback",
+                    "browser_use_error": None,
+                    "browser_use": None,
+                },
+            )
         return AgentTaskResponse(
             session_id=request.session_id,
             step=request.step,

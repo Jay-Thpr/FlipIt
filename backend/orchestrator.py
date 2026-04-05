@@ -2,19 +2,19 @@ from __future__ import annotations
 
 import asyncio
 from copy import deepcopy
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from backend.agents.depop_listing_agent import abort_sell_listing, revise_sell_listing_for_review, submit_sell_listing
 from backend.agent_client import run_agent_task
 from backend.config import get_agent_timeout_seconds, get_buy_agent_max_retries, is_fetch_enabled
-from backend.fetch_runtime import run_fetch_query
+from backend.fetch_runtime import build_buy_no_results_outputs, buy_search_results_are_empty, run_fetch_query
 from backend.schemas import (
     AgentTaskRequest,
     PipelineStartRequest,
     SellListingReviewState,
     SessionEvent,
     normalize_vision_correction,
-    utc_now_iso,
     validate_agent_output,
     validate_agent_task_request,
 )
@@ -27,6 +27,10 @@ class LowConfidencePause(Exception):
 
 class SellListingReviewPause(Exception):
     """Pause sell pipeline while a listing is ready for user confirmation."""
+
+
+SELL_LISTING_REVIEW_TIMEOUT_MINUTES = 15
+SELL_LISTING_MAX_REVISIONS = 2
 
 SELL_STEPS = (
     ("vision_agent", "vision_analysis"),
@@ -76,6 +80,124 @@ async def publish(session_id: str, event_type: str, *, pipeline: str, step: str 
 
 def _get_sell_partial_result(outputs: dict[str, Any]) -> dict[str, Any]:
     return {"pipeline": "sell", "outputs": outputs}
+
+
+def _build_sell_listing_review_state(
+    *,
+    state: str,
+    latest_decision: str | None = None,
+    revision_instructions: str | None = None,
+    revision_count: int = 0,
+) -> SellListingReviewState:
+    paused_at = datetime.now(timezone.utc)
+    return SellListingReviewState(
+        state=state,
+        latest_decision=latest_decision,
+        revision_instructions=revision_instructions,
+        revision_count=revision_count,
+        paused_at=paused_at.isoformat(),
+        deadline_at=(paused_at + timedelta(minutes=SELL_LISTING_REVIEW_TIMEOUT_MINUTES)).isoformat(),
+    )
+
+
+def sell_listing_review_is_expired(review: SellListingReviewState) -> bool:
+    if review.deadline_at is None:
+        return False
+    try:
+        deadline = datetime.fromisoformat(review.deadline_at)
+    except ValueError:
+        return True
+    return deadline <= datetime.now(timezone.utc)
+
+
+def sell_listing_review_reached_revision_limit(review: SellListingReviewState) -> bool:
+    return review.revision_count >= SELL_LISTING_MAX_REVISIONS
+
+
+async def fail_sell_listing_review(
+    session_id: str,
+    *,
+    error: str,
+    event_type: str,
+    event_data: dict[str, Any] | None = None,
+) -> bool:
+    session = await session_manager.get_session(session_id)
+    if session is None or session.pipeline != "sell" or session.sell_listing_review is None:
+        return False
+
+    review = session.sell_listing_review
+    step_name = review.step
+    partial_result = deepcopy(session.result) if session.result else {"pipeline": "sell", "outputs": {}}
+    outputs = partial_result.setdefault("outputs", {})
+    cleanup_result: dict[str, Any] | None = None
+    cleanup_error: str | None = None
+
+    if review.state != "aborted":
+        cleanup_result, cleanup_error, _ = await abort_sell_listing()
+        if cleanup_result is not None:
+            _merge_sell_listing_output(outputs, cleanup_result)
+        if error == "sell_listing_review_timeout":
+            _update_sell_listing_output(outputs, listing_status="expired", ready_for_confirmation=False)
+        elif error == "sell_listing_revision_limit_reached":
+            _update_sell_listing_output(outputs, listing_status="revision_limit_reached", ready_for_confirmation=False)
+        else:
+            _update_sell_listing_output(outputs, listing_status="failed", ready_for_confirmation=False)
+
+    failed_review_state = review.model_copy(update={"state": "failed"})
+    await session_manager.update_status(session_id, status="failed", error=error, result=partial_result)
+    if cleanup_result is not None:
+        await publish(
+            session_id,
+            "listing_review_cleanup_completed",
+            pipeline="sell",
+            step=step_name,
+            data={"platform": review.platform, "output": outputs.get("depop_listing")},
+        )
+    elif cleanup_error is not None:
+        await publish(
+            session_id,
+            "listing_review_cleanup_failed",
+            pipeline="sell",
+            step=step_name,
+            data={"platform": review.platform, "error": cleanup_error},
+        )
+    await publish(
+        session_id,
+        event_type,
+        pipeline="sell",
+        step=step_name,
+        data={
+            **(event_data or {}),
+            "platform": review.platform,
+            "review_state": failed_review_state.model_dump(),
+            "error": error,
+        },
+    )
+    await publish(
+        session_id,
+        "pipeline_failed",
+        pipeline="sell",
+        step=step_name,
+        data={"mode": "sell", "error": error, "partial_result": partial_result},
+    )
+    await session_manager.clear_sell_listing_review(session_id)
+    return True
+
+
+async def expire_sell_listing_review_if_needed(session_id: str) -> bool:
+    session = await session_manager.get_session(session_id)
+    if session is None or session.pipeline != "sell":
+        return False
+    review = session.sell_listing_review
+    if session.status != "paused" or review is None:
+        return False
+    if not sell_listing_review_is_expired(review):
+        return False
+    return await fail_sell_listing_review(
+        session_id,
+        error="sell_listing_review_timeout",
+        event_type="listing_review_expired",
+    )
 
 
 def _update_sell_listing_output(
@@ -183,10 +305,7 @@ async def pause_sell_listing_for_review(session_id: str, listing_output: dict[st
 
     outputs = deepcopy(session.result.get("outputs", {})) if session.result else {}
     outputs["depop_listing"] = listing_output
-    review_state = SellListingReviewState(
-        state="ready_for_confirmation",
-        paused_at=utc_now_iso(),
-    )
+    review_state = _build_sell_listing_review_state(state="ready_for_confirmation")
     await session_manager.update_sell_listing_review(session_id, review_state)
     await session_manager.update_status(
         session_id,
@@ -309,6 +428,23 @@ async def run_pipeline(session_id: str, pipeline: str, request: PipelineStartReq
     try:
         if pipeline == "buy":
             await _run_buy_search_parallel(session_id, request, context, outputs)
+            if buy_search_results_are_empty(outputs):
+                outputs.update(build_buy_no_results_outputs(buy_input=request.input, search_outputs=outputs))
+                result = {"pipeline": pipeline, "outputs": outputs}
+                await session_manager.update_status(session_id, status="completed", result=result)
+                await publish(
+                    session_id,
+                    "buy_no_results",
+                    pipeline="buy",
+                    data={
+                        "mode": "buy",
+                        "query": request.input.get("query"),
+                        "budget": request.input.get("budget"),
+                        "result": result,
+                    },
+                )
+                await publish(session_id, "pipeline_complete", pipeline="buy", data={"mode": pipeline, **result})
+                return
             steps = BUY_STEPS[len(BUY_SEARCH_STEPS) :]
         else:
             steps = SELL_STEPS
@@ -406,10 +542,7 @@ async def run_pipeline(session_id: str, pipeline: str, request: PipelineStartReq
                     raise LowConfidencePause
 
             if pipeline == "sell" and step_name == "depop_listing" and validated_output.get("ready_for_confirmation"):
-                review_state = SellListingReviewState(
-                    state="ready_for_confirmation",
-                    paused_at=utc_now_iso(),
-                )
+                review_state = _build_sell_listing_review_state(state="ready_for_confirmation")
                 await session_manager.update_sell_listing_review(session_id, review_state)
                 await session_manager.update_status(session_id, status="paused", result=partial_result)
                 await publish(
@@ -552,6 +685,14 @@ async def handle_sell_listing_decision(
     partial_result = deepcopy(session.result) if session.result else {"pipeline": "sell", "outputs": {}}
     outputs = partial_result.setdefault("outputs", {})
 
+    if sell_listing_review_is_expired(review):
+        await fail_sell_listing_review(
+            session_id,
+            error="sell_listing_review_timeout",
+            event_type="listing_review_expired",
+        )
+        return
+
     await publish(
         session_id,
         "listing_decision_received",
@@ -628,6 +769,20 @@ async def handle_sell_listing_decision(
         return
 
     if decision == "revise":
+        if sell_listing_review_reached_revision_limit(review):
+            review.latest_decision = "revise"
+            review.revision_instructions = revision_instructions
+            await fail_sell_listing_review(
+                session_id,
+                error="sell_listing_revision_limit_reached",
+                event_type="listing_revision_limit_reached",
+                event_data={
+                    "decision": decision,
+                    "revision_count": review.revision_count,
+                    "max_revisions": SELL_LISTING_MAX_REVISIONS,
+                },
+            )
+            return
         review.state = "applying_revision"
         review.latest_decision = "revise"
         review.revision_instructions = revision_instructions

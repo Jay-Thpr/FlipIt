@@ -251,3 +251,50 @@ async def test_handle_sell_listing_decision_abort_completes_session(monkeypatch:
         "listing_aborted",
         "pipeline_complete",
     ]
+
+
+@pytest.mark.asyncio
+async def test_fail_sell_listing_review_expires_and_cleans_up_listing(monkeypatch: pytest.MonkeyPatch) -> None:
+    await session_manager.reset()
+    session = await session_manager.create_session(
+        session_id="sell-review-expired-session",
+        pipeline="sell",
+        request=PipelineStartRequest(input={"image_urls": [], "notes": "Test"}),
+    )
+    session.status = "paused"
+    session.result = {"pipeline": "sell", "outputs": {"depop_listing": _listing_output(ready_for_confirmation=True, listing_status="ready_for_confirmation")}}
+    session.sell_listing_review = SellListingReviewState(
+        state="ready_for_confirmation",
+        deadline_at="2026-04-04T11:59:00+00:00",
+    )
+
+    async def fake_abort_sell_listing() -> tuple[dict[str, Any], None, bool]:
+        return (
+            {
+                "listing_status": "aborted",
+                "ready_for_confirmation": False,
+                "draft_status": "aborted",
+                "form_screenshot_url": None,
+            },
+            None,
+            True,
+        )
+
+    monkeypatch.setattr(orchestrator, "abort_sell_listing", fake_abort_sell_listing)
+
+    expired = await orchestrator.expire_sell_listing_review_if_needed(session.session_id)
+
+    updated = await session_manager.get_session(session.session_id)
+    assert expired is True
+    assert updated is not None
+    assert updated.status == "failed"
+    assert updated.error == "sell_listing_review_timeout"
+    assert updated.sell_listing_review is None
+    depop_listing = updated.result["outputs"]["depop_listing"]
+    assert depop_listing["listing_status"] == "expired"
+    assert depop_listing["ready_for_confirmation"] is False
+    assert [event.event_type for event in updated.events][-4:] == [
+        "listing_review_cleanup_completed",
+        "listing_review_expired",
+        "pipeline_failed",
+    ][-3:]

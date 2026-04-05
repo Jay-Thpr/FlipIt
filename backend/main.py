@@ -127,7 +127,13 @@ async def sell_correct(request: CorrectionRequest) -> dict[str, bool]:
 @app.post("/sell/listing-decision")
 async def sell_listing_decision(request: SellListingDecisionRequest) -> SellListingDecisionResponse:
     """Called by frontend when user confirms, revises, or aborts a paused sell listing review."""
-    from backend.orchestrator import handle_sell_listing_decision
+    from backend.orchestrator import (
+        fail_sell_listing_review,
+        handle_sell_listing_decision,
+        SELL_LISTING_MAX_REVISIONS,
+        sell_listing_review_is_expired,
+        sell_listing_review_reached_revision_limit,
+    )
 
     session = await session_manager.get_session(request.session_id)
     if session is None:
@@ -136,6 +142,25 @@ async def sell_listing_decision(request: SellListingDecisionRequest) -> SellList
         raise HTTPException(status_code=409, detail="Session is not a sell pipeline")
     if session.status != "paused" or session.sell_listing_review is None:
         raise HTTPException(status_code=409, detail="Session is not awaiting a sell listing decision")
+    if sell_listing_review_is_expired(session.sell_listing_review):
+        await fail_sell_listing_review(
+            request.session_id,
+            error="sell_listing_review_timeout",
+            event_type="listing_review_expired",
+        )
+        raise HTTPException(status_code=409, detail="Session sell listing review has expired")
+    if request.decision == "revise" and sell_listing_review_reached_revision_limit(session.sell_listing_review):
+        await fail_sell_listing_review(
+            request.session_id,
+            error="sell_listing_revision_limit_reached",
+            event_type="listing_revision_limit_reached",
+            event_data={
+                "decision": request.decision,
+                "revision_count": session.sell_listing_review.revision_count,
+                "max_revisions": SELL_LISTING_MAX_REVISIONS,
+            },
+        )
+        raise HTTPException(status_code=409, detail="Session sell listing revision limit has been reached")
 
     asyncio.create_task(
         handle_sell_listing_decision(
@@ -162,6 +187,9 @@ async def sell_listing_decision(request: SellListingDecisionRequest) -> SellList
 
 @app.get("/result/{session_id}")
 async def get_result(session_id: str) -> dict:
+    from backend.orchestrator import expire_sell_listing_review_if_needed
+
+    await expire_sell_listing_review_if_needed(session_id)
     session = await session_manager.get_session(session_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -192,6 +220,9 @@ async def post_internal_event(
 
 @app.get("/stream/{session_id}")
 async def stream(session_id: str) -> StreamingResponse:
+    from backend.orchestrator import expire_sell_listing_review_if_needed
+
+    await expire_sell_listing_review_if_needed(session_id)
     session = await session_manager.get_session(session_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -200,6 +231,8 @@ async def stream(session_id: str) -> StreamingResponse:
 
 
 async def iter_session_events(session_id: str):
+    from backend.orchestrator import expire_sell_listing_review_if_needed
+
     session = await session_manager.get_session(session_id)
     if session is None:
         return
@@ -212,6 +245,7 @@ async def iter_session_events(session_id: str):
                 return
         while True:
             try:
+                await expire_sell_listing_review_if_needed(session_id)
                 event = await asyncio.wait_for(queue.get(), timeout=KEEPALIVE_INTERVAL)
                 yield format_sse(event)
                 if event.event_type in {"pipeline_complete", "pipeline_failed"}:
