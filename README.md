@@ -136,11 +136,12 @@ flowchart TD
         R --> N[NegotiationAgent]
     end
 
+    API -->|verify ownership + read runs| DB[(Supabase)]
     API --> SM[SessionManager]
-    SM --> DB[(Supabase)]
+    SM -->|persist events + results| DB
 
     ASI -->|Mailbox| Agents[10 uAgents on Agentverse]
-    Agents -.->|same logic| API
+    Agents -->|HTTP - delegates to pipeline| API
 ```
 
 ### Key design decisions
