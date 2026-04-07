@@ -123,23 +123,21 @@ flowchart TD
     API --> BuyPipeline
 
     subgraph SellPipeline [Sell Pipeline]
-        V[VisionAgent\nGemini Vision + Nano Banana]
-        V --> E[EbayResearchAgent\nBrowser Use]
-        E --> P[PricingAgent\nGemini]
-        P --> D[DepopListingAgent\nBrowser Use]
+        V[VisionAgent] --> E[EbayResearchAgent]
+        E --> P[PricingAgent]
+        P --> D[DepopListingAgent]
     end
 
     subgraph BuyPipeline [Buy Pipeline]
-        DS[DepopSearchAgent]
-        ES[EbaySearchAgent]
-        MS[MercariSearchAgent]
-        OS[OfferUpSearchAgent]
-        DS & ES & MS & OS --> R[RankingAgent\nGemini]
-        R --> N[NegotiationAgent\nBrowser Use + Gemini]
+        DS[DepopSearchAgent] --> R[RankingAgent]
+        ES[EbaySearchAgent] --> R
+        MS[MercariSearchAgent] --> R
+        OS[OfferUpSearchAgent] --> R
+        R --> N[NegotiationAgent]
     end
 
-    API --> SM[SessionManager\nin-memory + SSE pub/sub]
-    SM --> DB[(Supabase\nPostgres + Auth)]
+    API --> SM[SessionManager]
+    SM --> DB[(Supabase)]
 
     ASI -->|Mailbox| Agents[10 uAgents on Agentverse]
     Agents -.->|same logic| API
