@@ -15,6 +15,8 @@ make check            # test + compile
 make ci               # matches CI flow (same as check)
 make run              # start backend via uvicorn (port 8000)
 make run-agents       # start agent HTTP microservices (ports 9101–9110)
+make verify-browser   # run browser_use_runtime_audit (quick smoke test)
+make run-fetch-agent AGENT=<name>  # start a single uAgent (requires env loaded: set -a && source .env && set +a)
 ```
 
 Single test file: `. .venv/bin/activate && python -m pytest tests/test_pipelines.py -q`
@@ -113,6 +115,14 @@ Defined in `supabase_schema.sql`. Key tables: `profiles`, `user_settings`, `plat
 
 Backend repository layer: `backend/repositories/` (items, agent_runs, conversations, messages, completed_trades, market_data).
 
+### Background Scheduler (`backend/scheduler.py`)
+
+`scheduler_loop()` starts automatically in `main.py` lifespan. Polls Supabase every `SCHEDULER_INTERVAL` seconds (default 300) for active items without a recent run and fires pipelines. Tracks in-flight item IDs to prevent duplicate concurrent runs.
+
+### AI Analyze Endpoint (`backend/ai_generate.py`)
+
+`POST /ai/analyze-item` — uses Gemini Vision (via `NANO_BANANA_API_KEY`) to analyze a product photo and optionally generate professional listing photos. Returns `{name, description, condition}` plus generated image URLs if requested.
+
 ### Fetch.ai Agent Layer
 
 `backend/fetch_agents/` — uAgents-based wrappers exposing buy search over Fetch.ai network. Requires Python 3.12/3.13 (uagents 0.24.0 incompatible with 3.14). Enabled via `FETCH_ENABLED=true`. Separate venv: `make venv-fetch` + `make run-fetch-agents`.
@@ -158,6 +168,8 @@ Render (`render.yaml`): single web service, builds with `pip install -r requirem
 | `SUPABASE_SERVICE_ROLE_KEY` | *(none)* | Supabase service role key |
 | `SUPABASE_JWT_SECRET` | *(none)* | JWT verification secret |
 | `ALLOWED_ORIGINS` | `*` | CORS origins (comma-separated) |
+| `NANO_BANANA_API_KEY` | *(none)* | Gemini API key for `ai_generate.py` (analyze + photo gen) |
+| `SCHEDULER_INTERVAL` | `300` | Seconds between scheduler polling cycles |
 
 ## Codex Orchestrator (optional)
 
